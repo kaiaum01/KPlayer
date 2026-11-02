@@ -1,0 +1,15 @@
+CORREÇÃO DO ACTIONS — KPLAYER PC
+
+Este pacote contém somente a correção do workflow Windows. Ele precisa dos
+arquivos da versão PC já presentes na raiz do repositório, especialmente
+kplayer_pc.py, requirements.txt e tests/test_playlists.py.
+
+Copie .github/workflows/windows.yml para o mesmo caminho do repositório e
+substitua apenas o windows.yml existente. Não substitua a pasta .github inteira,
+pois os workflows do R36S devem ser preservados. Faça commit e push da alteração.
+No GitHub, abra Actions > Compilar KPlayer PC para Windows > Run workflow.
+Ao terminar, baixe o artefato KPlayer-PC-Windows-x64.
+
+O programa gerado precisa do VLC 64 bits instalado no computador. Este pacote
+não contém o executável compilado. A compilação corrigida ainda precisa ser
+executada e verificada no GitHub Actions.

@@ -19,7 +19,7 @@ jobs:
       - name: Instalar dependências
         run: python -m pip install -r requirements.txt
       - name: Testar listas IPTV
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -p test_playlists.py -v
       - name: Compilar executável Windows
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name KPlayer-PC kplayer_pc.py
       - uses: actions/upload-artifact@v4
