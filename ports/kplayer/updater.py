@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import signal
 import shutil
 import stat
 import sys
@@ -22,6 +23,16 @@ ALLOWED = ("kplayer/kplayer", "kplayer/kplayer.gptk",
            "kplayer/lib/libvlc.so.5", "kplayer/lib/libvlccore.so.9",
            "kplayer/fonts/Interface.ttf", "kplayer/fonts/Bold.ttf")
 MAX_DOWNLOAD = 32 * 1024 * 1024
+JOURNAL = ".kplayer-update-transaction.json"
+
+
+class UpdateCancelled(Exception):
+    pass
+
+
+def cancel_update(signum, frame):
+    del signum, frame
+    raise UpdateCancelled("Atualização cancelada ou tempo limite atingido")
 
 
 class HTTPSOnly(urllib.request.HTTPRedirectHandler):
@@ -115,9 +126,75 @@ def validate_archive(blob, checksum, tag):
     return result
 
 
+def sync_dir(path):
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def sync_file(path):
+    with open(path, "rb") as f:
+        os.fsync(f.fileno())
+
+
+def recover_transaction(ports):
+    """Idempotently restore a fully prepared backup; never consume it."""
+    ports = Path(ports)
+    journal = ports / "kplayer" / JOURNAL
+    if journal.is_symlink():
+        raise ValueError("Registro de atualização é link simbólico")
+    if not journal.exists():
+        return False
+    if journal.stat().st_size > 2048:
+        raise ValueError("Registro de atualização inválido")
+    data = json.loads(journal.read_text(encoding="utf-8"))
+    name = data.get("backup", "")
+    if not isinstance(name, str) or not re.fullmatch(r"\.kplayer-backup-[a-z0-9_]{8}", name):
+        raise ValueError("Nome de backup inválido")
+    if type(data.get("version_exists")) is not bool:
+        raise ValueError("Registro de versão inválido")
+    backup = ports / name
+    if backup.is_symlink() or not backup.is_dir():
+        raise ValueError("Backup indisponível")
+    paths = list(ALLOWED) + (["kplayer/installed-version.txt"] if data["version_exists"] else [])
+    for path in paths:
+        source = backup / path
+        target = ports / path
+        if any(p.is_symlink() for p in (source, source.parent, source.parent.parent,
+                                        target, target.parent, target.parent.parent)):
+            raise ValueError("Caminho da restauração contém link simbólico")
+        if not source.is_file() or not target.parent.is_dir():
+            raise ValueError("Backup incompleto")
+    for path in paths:
+        target = ports / path
+        fd, temp = tempfile.mkstemp(prefix=".kplayer-restore-", dir=target.parent)
+        os.close(fd)
+        try:
+            shutil.copy2(backup / path, temp)
+            sync_file(temp)
+            os.replace(temp, target)
+            sync_dir(target.parent)
+        finally:
+            if os.path.exists(temp):
+                os.unlink(temp)
+    version_path = ports / "kplayer/installed-version.txt"
+    if not data["version_exists"]:
+        if version_path.is_symlink():
+            raise ValueError("Arquivo de versão é link simbólico")
+        version_path.unlink(missing_ok=True)
+        sync_dir(version_path.parent)
+    journal.unlink()
+    sync_dir(journal.parent)
+    return True
+
+
 def install_files(files, tag, ports):
     # Only known application files; never touch user media, preferences or radios.
     ports = Path(ports)
+    if (ports / "kplayer" / JOURNAL).exists():
+        raise ValueError("Há uma atualização interrompida; restaure antes de continuar")
     for name in ALLOWED:
         path = ports / name
         if any(part.is_symlink() for part in (path, path.parent, path.parent.parent)):
@@ -127,6 +204,13 @@ def install_files(files, tag, ports):
     backup = Path(tempfile.mkdtemp(prefix=".kplayer-backup-", dir=ports))
     staged = Path(tempfile.mkdtemp(prefix=".kplayer-stage-", dir=ports))
     replaced = []
+    version_path = ports / "kplayer" / "installed-version.txt"
+    if version_path.is_symlink():
+        raise ValueError("Arquivo de versão é link simbólico")
+    old_version = version_path.read_bytes() if version_path.exists() else None
+    version_touched = False
+    journal = ports / "kplayer" / JOURNAL
+    journal_written = False
     try:
         for name in ALLOWED:
             target = ports / name
@@ -137,15 +221,45 @@ def install_files(files, tag, ports):
             backup_file = backup / name
             backup_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(target, backup_file)
+            sync_file(destination)
+            sync_file(backup_file)
+            sync_dir(backup_file.parent)
+        if old_version is not None:
+            old_version_file = backup / "kplayer/installed-version.txt"
+            old_version_file.write_bytes(old_version)
+            sync_file(old_version_file)
+        sync_dir(backup / "kplayer")
+        sync_dir(backup)
+        sync_dir(ports)
+        marker_temp = staged / "journal.json"
+        marker_temp.write_text(json.dumps({"backup": backup.name, "version_exists": old_version is not None}), encoding="utf-8")
+        sync_file(marker_temp)
+        # Mark as prepared before renaming: cancellation can happen immediately after it.
+        journal_written = True
+        os.replace(marker_temp, journal)
+        sync_dir(journal.parent)
         for name in ALLOWED:
-            os.replace(staged / name, ports / name)
             replaced.append(name)
+            os.replace(staged / name, ports / name)
+            sync_dir((ports / name).parent)
         temp_version = staged / "installed-version.txt"
         temp_version.write_text(tag + "\n", encoding="ascii")
-        os.replace(temp_version, ports / "kplayer" / "installed-version.txt")
-    except Exception:
-        for name in reversed(replaced):
-            os.replace(backup / name, ports / name)
+        sync_file(temp_version)
+        version_touched = True
+        os.replace(temp_version, version_path)
+        sync_dir(version_path.parent)
+        journal.unlink()
+        sync_dir(journal.parent)
+        journal_written = False
+    except BaseException:
+        # Do not let a second cancellation interrupt the rollback.
+        previous_handler = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        try:
+            if journal_written and journal.exists():
+                recover_transaction(ports)
+        finally:
+            signal.signal(signal.SIGTERM, previous_handler)
         raise
     finally:
         shutil.rmtree(staged, ignore_errors=True)
@@ -154,6 +268,9 @@ def install_files(files, tag, ports):
 
 def main():
     try:
+        if len(sys.argv) == 2 and sys.argv[1] == "recover":
+            print("RECOVERED" if recover_transaction(PORTS) else "NO_TRANSACTION")
+            return 0
         installed = VERSION.read_text(encoding="ascii").strip() if VERSION.exists() else "1.0.0"
         found = get_release(installed)
         if not found:
@@ -182,4 +299,5 @@ def main():
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, cancel_update)
     raise SystemExit(main())

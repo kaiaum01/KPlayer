@@ -24,8 +24,9 @@ como se pudesse ser atualizada por este mecanismo.
 
 Em caso de exceção durante a substituição, tenta restaurar os arquivos alterados.
 Backups ficam em .kplayer-backup-* dentro de ports; não são removidos
-automaticamente. Faça backup próprio antes de testar. Falhas de energia não têm
-recuperação automática. SHA-256 verifica integridade, mas não é uma assinatura;
+automaticamente. Faça backup próprio antes de testar. O novo lançador tenta
+restaurar uma atualização interrompida antes de iniciar; a recuperação após
+corte real de energia ainda não foi testada no R36S. SHA-256 verifica integridade, mas não é uma assinatura;
 a segurança também depende de HTTPS e da conta/repositório do mantenedor.
 
 Testado localmente com arquivos simulados no Linux x86-64. O workflow ARM64 e

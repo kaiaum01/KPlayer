@@ -103,7 +103,7 @@ static void *network_location_worker(void *unused) {
 
   static const char request[] =
       "GET /json/?fields=status,message,city,region,countryCode,offset "
-      "HTTP/1.0\r\nHost: ip-api.com\r\nUser-Agent: KPlayer/0.7.1\r\n"
+      "HTTP/1.0\r\nHost: ip-api.com\r\nUser-Agent: KPlayer/1.0.0\r\n"
       "Connection: close\r\n\r\n";
   size_t sent = 0;
   while (sent < sizeof(request) - 1) {
@@ -161,7 +161,7 @@ static void network_location_snapshot(char *location, size_t location_size,
                                       bool *valid, int *utc_offset) {
   pthread_mutex_lock(&network_location_mutex);
   snprintf(location, location_size, "%s", network_location_text);
-  *valid = network_location_valid;
+  *valid = network_location_valid && network_location_enabled;
   *utc_offset = network_utc_offset;
   pthread_mutex_unlock(&network_location_mutex);
 }

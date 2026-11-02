@@ -4,6 +4,8 @@ static void play_path(const char *path);
 static bool active = false, playing_audio = false, playing_radio = false,
             preview_mode = false;
 static int dash_focus = 0, return_mode = 3, queue_count = 0, queue_index = 0;
+static bool shuffle_seen[MAX_FILES];
+static int shuffle_seen_count;
 static char *queue_paths[MAX_FILES];
 static char current_path[PATH_MAX], title[512], artist[512], album[512];
 static SDL_Texture *cover_texture;
@@ -53,20 +55,32 @@ static long long duration_ms(void) {
          : active     ? libvlc_media_player_get_length(player)
                       : 0;
 }
-static uint64_t media_hash(void) {
+static uint64_t media_hash_path(const char *path) {
   uint64_t h = 14695981039346656037ULL;
-  for (const unsigned char *p = (const unsigned char *)current_path; *p; p++) {
+  for (const unsigned char *p = (const unsigned char *)path; *p; p++) {
     h ^= *p;
     h *= 1099511628211ULL;
   }
   return h;
 }
-static bool is_favorite(void) {
-  uint64_t h = media_hash();
+static int favorite_index_for_path(const char *path) {
+  char canonical[PATH_MAX], cwd[PATH_MAX];
+  const char *resolved = realpath(path, canonical);
+  uint64_t raw = media_hash_path(path);
+  uint64_t absolute = resolved ? media_hash_path(resolved) : raw;
+  uint64_t relative = absolute;
+  if (resolved && getcwd(cwd, sizeof(cwd))) {
+    size_t n = strlen(cwd);
+    if (!strncmp(resolved, cwd, n) && resolved[n] == '/')
+      relative = media_hash_path(resolved + n + 1);
+  }
   for (int i = 0; i < favorite_count; i++)
-    if (favorites[i] == h)
-      return true;
-  return false;
+    if (favorites[i] == raw || favorites[i] == absolute || favorites[i] == relative) return i;
+  return -1;
+}
+static bool is_favorite_path(const char *path) { return favorite_index_for_path(path) >= 0; }
+static bool is_favorite(void) {
+  return is_favorite_path(current_path);
 }
 static void load_favorites(void) {
   FILE *f = fopen("favorites.cfg", "r");
@@ -80,12 +94,11 @@ static void load_favorites(void) {
 static void toggle_favorite(void) {
   if (!current_path[0])
     return;
-  uint64_t h = media_hash();
-  int i;
-  for (i = 0; i < favorite_count; i++)
-    if (favorites[i] == h)
-      break;
-  if (i < favorite_count) {
+  char canonical[PATH_MAX];
+  const char *resolved = realpath(current_path, canonical);
+  uint64_t h = media_hash_path(resolved ? resolved : current_path);
+  int i = favorite_index_for_path(current_path);
+  if (i >= 0) {
     memmove(favorites + i, favorites + i + 1,
             (favorite_count - i - 1) * sizeof(*favorites));
     favorite_count--;
@@ -327,6 +340,8 @@ static void clear_queue(void) {
     free(queue_paths[i]);
   queue_count = 0;
   queue_index = 0;
+  memset(shuffle_seen, 0, sizeof(shuffle_seen));
+  shuffle_seen_count = 0;
 }
 static void build_queue(void) {
   clear_queue();
@@ -344,11 +359,38 @@ static void build_queue(void) {
       queue_count++;
   }
 }
+static bool queue_advance(int direction, bool natural) {
+  if (queue_count <= 0 || queue_index < 0 || queue_index >= queue_count) return false;
+  if (natural && repeat_mode == 1) return true;
+  if (shuffle_enabled && playing_audio && direction > 0) {
+    if (!shuffle_seen[queue_index]) {
+      shuffle_seen[queue_index] = true;
+      shuffle_seen_count++;
+    }
+    int left = queue_count - shuffle_seen_count;
+    if (!left) {
+      if (repeat_mode != 2) return false;
+      memset(shuffle_seen, 0, sizeof(shuffle_seen));
+      shuffle_seen_count = 0;
+      if (queue_count > 1) { shuffle_seen[queue_index] = true; shuffle_seen_count = 1; }
+      left = queue_count - shuffle_seen_count;
+    }
+    int chosen = rand() % left;
+    for (int i = 0; i < queue_count; i++) {
+      if (!shuffle_seen[i] && chosen-- == 0) { queue_index = i; return true; }
+    }
+    return false;
+  }
+  int next = queue_index + direction;
+  if (next < 0 || next >= queue_count) {
+    if (repeat_mode != 2) return false;
+    next = next < 0 ? queue_count - 1 : 0;
+  }
+  queue_index = next;
+  return true;
+}
 static void next_media(int direction) {
-  if (!queue_count)
-    return;
-  queue_index = (queue_index + direction + queue_count) % queue_count;
-  play_path(queue_paths[queue_index]);
+  if (queue_advance(direction, false)) play_path(queue_paths[queue_index]);
 }
 static int battery_percent = -1;
 static char clock_text[16] = "--:--", disk_text[64] = "",

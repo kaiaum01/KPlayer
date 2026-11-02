@@ -137,6 +137,17 @@ int main(void) {
   renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
   assert(renderer);
   assert(load_font());
+  snprintf(radio_current_station.url, sizeof(radio_current_station.url), "%s", "http://example.invalid/stream");
+  radio_cancel_retries();
+  for (int i = 1; i <= 3; i++) {
+    radio_schedule_retry();
+    assert(radio_retry_waiting && radio_retry_count == i);
+  }
+  radio_schedule_retry();
+  assert(!radio_retry_waiting && radio_retry_count == 3);
+  radio_cancel_retries();
+  assert(!radio_retry_waiting && radio_retry_count == 0);
+  radio_current_station.url[0] = 0;
   /* The uploaded MP3 is external test data, never bundled with the release. */
   const char *sample = getenv("KPLAYER_TEST_MP3");
   if (sample) {
@@ -339,6 +350,27 @@ int main(void) {
   assert(automatic_view && total == 1 &&
          !strcmp(items[0].name, "Grande.flac") && items[0].size >= 60 * 1024 &&
          !strcmp(items[0].path, automatic_track));
+  favorites[0] = media_hash_path(automatic_track);
+  favorite_count = 1;
+  option = 13;
+  change_option(1);
+  assert(favorites_view && mode == 0 && total == 1 &&
+         !strcmp(items[0].path, automatic_track));
+  favorites[0] = media_hash_path("/unrelated.mp3");
+  scan_automatic_media();
+  assert(favorites_view && total == 0);
+  favorites_view = false;
+  favorite_count = 0;
+  char playlist[340];
+  snprintf(playlist, sizeof(playlist), "%s/lista.m3u", nested);
+  FILE *pl = fopen(playlist, "wb");
+  assert(pl);
+  fputs("#EXTM3U\nGrande.flac\nhttps://example.org/stream\nmissing.mp3\n", pl);
+  fclose(pl);
+  assert(load_local_playlist(playlist));
+  assert(queue_count == 1 && !strcmp(queue_paths[0], automatic_track));
+  clear_queue();
+  assert(!unlink(playlist));
   automatic_roots[0] = auto0;
   automatic_roots[1] = auto1;
   automatic_roots[2] = auto2;
@@ -381,6 +413,18 @@ int main(void) {
   key(SDLK_DOWN, false);
   assert(option == 10);
   key(SDLK_DOWN, false);
+  assert(option == 11);
+  key(SDLK_DOWN, false);
+  assert(option == 12);
+  key(SDLK_DOWN, false);
+  assert(option == 13);
+  key(SDLK_DOWN, false);
+  assert(option == 14);
+  key(SDLK_DOWN, false);
+  assert(option == 15);
+  key(SDLK_DOWN, false);
+  assert(option == 16);
+  key(SDLK_DOWN, false);
   assert(option == 0);
   option = 8;
   running = 1;
@@ -389,6 +433,27 @@ int main(void) {
   running = 1;
   mode = 4;
   clear_queue();
+  queue_count = 3;
+  queue_index = 2;
+  playing_audio = true;
+  repeat_mode = 0;
+  shuffle_enabled = false;
+  assert(!queue_advance(1, true));
+  repeat_mode = 2;
+  assert(queue_advance(1, true) && queue_index == 0);
+  repeat_mode = 1;
+  assert(queue_advance(1, true) && queue_index == 0);
+  repeat_mode = 0;
+  shuffle_enabled = true;
+  memset(shuffle_seen, 0, sizeof(shuffle_seen));
+  shuffle_seen_count = 0;
+  assert(queue_advance(1, true));
+  assert(queue_advance(1, true));
+  assert(!queue_advance(1, true));
+  queue_count = 0;
+  queue_index = 0;
+  shuffle_enabled = false;
+  repeat_mode = 0;
   clear_music_entries();
   music_folder[0] = 0;
   audio_panel = 0;

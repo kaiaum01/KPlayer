@@ -9,4 +9,8 @@
 /ports/kplayer/settings.tmp
 /ports/kplayer/preferences.cfg
 /ports/kplayer/favorites.cfg
+/ports/kplayer/resume.cfg
+/ports/kplayer/resume.tmp
 /output/
+*.bmp
+.*.tar.xz.*

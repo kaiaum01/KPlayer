@@ -24,8 +24,13 @@ Estas imagens foram renderizadas a partir das telas do programa em um computador
 - Busca de mídias em `kplayer/midias`, `/roms` e `/roms2`, além de navegação por pastas e indicador de carregamento.
 - Metadados, capa, fila, próxima faixa e letras locais `.lrc` ou embutidas quando suportadas. Não baixa letras da internet.
 - Rádio online via Radio Browser e aba **Rádio do Usuário** para listas próprias.
+- A rádio tenta reconectar até três vezes após falha ou término e mostra a música atual quando a emissora envia metadados compatíveis. A libVLC pode continuar bloqueada durante uma conexão; valide no aparelho.
 - Sete temas, interface em português brasileiro, inglês e espanhol, tela de boas-vindas e termos de uso.
 - Controles de reprodução, proporção e faixas de áudio/legendas quando disponíveis.
+- Em Opções, selecione repetição desligada, da faixa ou da fila, e ative o modo aleatório para músicas. Sem repetir a fila, a reprodução para ao terminar o ciclo; L1 volta sequencialmente e R1 avança.
+- Em Opções, marque a faixa atual em **Favoritar faixa** e abra **Minhas favoritas** para ver as músicas encontradas. A lista usa a busca automática e seus limites; mover um arquivo pode perder a marcação.
+- Em Arquivos, filtro Todos, abra playlists M3U/M3U8 locais de músicas; caminhos podem ser absolutos ou relativos à playlist. Streams e listas aninhadas não são importados.
+- Em Opções, **Retomar mídia** abre o último arquivo e tenta restaurar sua posição (não restaura a fila); o timer de sono para a reprodução e o equalizador oferece presets da libVLC quando disponíveis. Timer e preset não persistem após sair.
 - Verificação experimental de atualização do GitHub ao iniciar, com confirmação antes da instalação.
 
 ## Requisitos
@@ -70,11 +75,11 @@ Para rádios próprias, coloque arquivos `.pls`, `.asx`, `.m3u` ou `.m3u8` em `p
 
 Ao abrir, o KPlayer consulta a última release pública. Se detectar um pacote mais novo compatível, pergunta se deseja atualizar. Escolher **Não**, não encontrar atualização ou falhar a consulta permite iniciar o app. Ao escolher **Sim**, aguarde a instalação e o reinício; em caso de falha, use B para continuar. O lançador e o próprio atualizador não são substituídos por esse mecanismo.
 
-A atualização exige uma release pública compatível, com ZIP e checksum correspondentes. O checksum verifica integridade, mas **não é assinatura digital**. Uma interrupção de energia durante a troca não tem recuperação automática. Teste primeiro em uma cópia do cartão e leia [as limitações](ATUALIZADOR-EXPERIMENTAL.md) e [como publicar uma versão](PUBLICACAO-1.0.0.md).
+A atualização exige uma release pública compatível, com ZIP e checksum correspondentes. O checksum verifica integridade, mas **não é assinatura digital**. O novo lançador tenta recuperar a instalação após uma interrupção, mas a recuperação após queda real de energia ainda não foi testada no aparelho. Teste primeiro em uma cópia do cartão e leia [as limitações](ATUALIZADOR-EXPERIMENTAL.md) e [como publicar uma versão](PUBLICACAO-1.0.0.md).
 
 ## Privacidade e problemas
 
-O catálogo e as transmissões de rádio acessam serviços de terceiros. A consulta de localização aproximada usa o endereço IP público e pode usar HTTP; rádios podem usar HTTP ou HTTPS. Disponibilidade, privacidade e termos dependem dos provedores. Evite reproduzir conteúdo para o qual você não tenha autorização.
+O catálogo e as transmissões de rádio acessam serviços de terceiros. A localização aproximada por IP começa desativada e pode ser ligada em Opções; quando ativa, envia o IP ao provedor via HTTP sem criptografia. Rádios podem usar HTTP ou HTTPS. Disponibilidade, privacidade e termos dependem dos provedores. Evite reproduzir conteúdo para o qual você não tenha autorização.
 
 - **Não abre:** verifique PortMaster, permissões, plugins do sistema e `ports/kplayer/log.txt`.
 - **Não encontra mídia:** confira os caminhos, a extensão, o limite de 50 KiB e tente a navegação manual.

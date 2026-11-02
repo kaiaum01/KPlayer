@@ -19,6 +19,7 @@ Uma execução manual cria um artefato para teste, não uma release publicada.
 
 Exige Python 3 e acesso HTTPS ao GitHub no dispositivo. O instalador valida o
 checksum e preserva arquivos pessoais; ele troca apenas os arquivos listados no
-manifesto. O checksum não é uma assinatura digital. Interrupção de energia
-durante a troca não tem recuperação automática. Teste em uma cópia do cartão SD.
+manifesto. O checksum não é uma assinatura digital. O novo lançador tenta a
+recuperação após interrupção; queda real de energia ainda não foi testada no
+aparelho. Teste em uma cópia do cartão SD.
 O lançador e o próprio atualizador não são substituídos automaticamente.

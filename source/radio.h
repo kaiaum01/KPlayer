@@ -472,6 +472,51 @@ static pthread_mutex_t radio_play_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool radio_play_busy, radio_play_finished, radio_play_success;
 static bool radio_play_queued;
 static RadioStation radio_play_target, radio_play_result, radio_play_next;
+static RadioStation radio_current_station;
+static bool radio_retry_waiting;
+static int radio_retry_count;
+static uint32_t radio_retry_at, radio_nowplaying_next, radio_stable_since;
+static char radio_nowplaying[256];
+static bool radio_play_is_busy(void);
+static void radio_cancel_retries(void) {
+  radio_retry_waiting = false;
+  radio_retry_count = 0;
+  radio_stable_since = 0;
+}
+
+static void radio_schedule_retry(void) {
+  radio_stable_since = 0;
+  if (!radio_current_station.url[0] || radio_retry_count >= 3) {
+    radio_retry_waiting = false;
+    notify(tr("Rádio indisponível"));
+    return;
+  }
+  radio_retry_waiting = true;
+  radio_retry_at = SDL_GetTicks() + (uint32_t)(3000u << radio_retry_count);
+  radio_retry_count++;
+  notify(tr("Tentando reconectar rádio..."));
+}
+static void radio_note_playing(void) {
+  uint32_t now = SDL_GetTicks();
+  if (!radio_retry_count) return;
+  if (!radio_stable_since) radio_stable_since = now ? now : 1;
+  else if ((uint32_t)(now - radio_stable_since) >= 30000u) {
+    radio_retry_count = 0;
+    radio_stable_since = 0;
+  }
+}
+
+static void radio_update_nowplaying(void) {
+  if (!active || !playing_radio || radio_play_is_busy() ||
+      (int32_t)(SDL_GetTicks() - radio_nowplaying_next) < 0) return;
+  radio_nowplaying_next = SDL_GetTicks() + 5000;
+  libvlc_media_t *media = libvlc_media_player_get_media(player);
+  if (!media) return;
+  char *value = libvlc_media_get_meta(media, libvlc_meta_NowPlaying);
+  snprintf(radio_nowplaying, sizeof(radio_nowplaying), "%s", value ? value : "");
+  if (value) libvlc_free(value);
+  libvlc_media_release(media);
+}
 
 static bool radio_play_is_busy(void) {
   pthread_mutex_lock(&radio_play_mutex);
@@ -541,7 +586,10 @@ static void radio_poll_play(void) {
   radio_play_queued = false;
   pthread_mutex_unlock(&radio_play_mutex);
   if (queued) { radio_start_async(next); return; }
-  if (!success) { notify(tr("Falha ao iniciar. Consulte log.txt")); return; }
+  if (!success) { radio_current_station = station; radio_schedule_retry(); return; }
+  radio_current_station = station;
+  radio_nowplaying[0] = 0;
+  radio_nowplaying_next = 0;
   snprintf(current_path, sizeof(current_path), "%s", station.url);
   snprintf(media_name, sizeof(media_name), "%s", station.name);
   snprintf(title, sizeof(title), "%s", station.name);
@@ -566,6 +614,7 @@ static void radio_play_selected(void) {
   }
   station = radio_stations[radio_selected];
   pthread_mutex_unlock(&radio_mutex);
+  radio_cancel_retries();
   pthread_mutex_lock(&radio_play_mutex);
   if (radio_play_busy || radio_play_finished) {
     radio_play_next = station;
@@ -580,6 +629,14 @@ static void radio_play_selected(void) {
   }
   radio_start_async(station);
   mode = 7;
+}
+
+static void radio_retry_tick(void) {
+  if (radio_retry_waiting && !radio_play_is_busy() &&
+      (int32_t)(SDL_GetTicks() - radio_retry_at) >= 0) {
+    radio_retry_waiting = false;
+    radio_start_async(radio_current_station);
+  }
 }
 
 static void draw_radio(void) {
@@ -629,7 +686,8 @@ static void draw_radio(void) {
            140, 10, playing_radio ? accent : muted);
   if (featured.name[0]) {
     centered(featured.name, 28, 226, 200, 17, textc);
-    centered(featured.tags[0] ? featured.tags : tr("Estação online"), 28,
+    centered(playing_radio && radio_nowplaying[0] ? radio_nowplaying :
+             (featured.tags[0] ? featured.tags : tr("Estação online")), 28,
              252, 200, 11, muted);
     centered(featured.country[0] ? featured.country : tr("Internet"), 28, 272,
              200, 11, muted);
@@ -653,6 +711,7 @@ static void draw_radio(void) {
   media_ui_skip(170, control_y, true);
   rounded(48, 390, 160, 22, 6, elevated);
   const char *play_status = tr("B  Ouvir estação");
+  if (radio_retry_waiting) play_status = tr("Reconectando...");
   if (radio_play_is_busy()) play_status = "Conectando...";
   else if (playing_radio && active) {
     libvlc_state_t state = libvlc_media_player_get_state(player);
@@ -711,6 +770,7 @@ static void draw_radio(void) {
 
 static void radio_key(SDL_Keycode key, bool repeat) {
   if (key == SDLK_BACKSPACE && !repeat) {
+    radio_cancel_retries();
     mode = 3;
     return;
   }

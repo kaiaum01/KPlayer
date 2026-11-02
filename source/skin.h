@@ -172,7 +172,8 @@ static void draw_menu(void) {
   draw_header(tr("BIBLIOTECA"));
   rounded(14, 46, 612, 68, 9, panel);
   icon(2, 28, 59, 22, accent);
-  label(locations_view   ? tr("Escolha o local das suas mídias")
+  label(favorites_view   ? tr("Minhas favoritas")
+        : locations_view   ? tr("Escolha o local das suas mídias")
         : automatic_view ? tr("Busca automática: midias, /roms e /roms2")
                          : folder,
         62, 59, 15, textc, 548);

@@ -10,6 +10,7 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <glob.h>
 #include <limits.h>
 #include <math.h>
@@ -65,6 +66,39 @@ static int selected = 0, offset = 0, total = 0, mode = 3, option = 0;
 static bool paused = false, show_osd = true, menu_dirty = true,
             options_from_video = false;
 static bool loop_video = false;
+static bool favorites_view = false;
+static bool is_favorite_path(const char *path);
+static void radio_cancel_retries(void);
+/* 0 = off, 1 = repeat current item, 2 = repeat queue. */
+static int repeat_mode = 0;
+static bool shuffle_enabled = false;
+static long long resume_pending_ms = -1;
+static uint32_t resume_deadline;
+static uint32_t sleep_end;
+static int sleep_choice;
+static int eq_choice;
+static unsigned (*eq_count_fn)(void);
+static const char *(*eq_name_fn)(unsigned);
+static libvlc_equalizer_t *(*eq_new_fn)(unsigned);
+static void (*eq_release_fn)(libvlc_equalizer_t *);
+static int (*eq_apply_fn)(libvlc_media_player_t *, libvlc_equalizer_t *);
+static void load_equalizer_api(void) {
+  *(void **)(&eq_count_fn) = dlsym(RTLD_DEFAULT, "libvlc_audio_equalizer_get_preset_count");
+  *(void **)(&eq_name_fn) = dlsym(RTLD_DEFAULT, "libvlc_audio_equalizer_get_preset_name");
+  *(void **)(&eq_new_fn) = dlsym(RTLD_DEFAULT, "libvlc_audio_equalizer_new_from_preset");
+  *(void **)(&eq_release_fn) = dlsym(RTLD_DEFAULT, "libvlc_audio_equalizer_release");
+  *(void **)(&eq_apply_fn) = dlsym(RTLD_DEFAULT, "libvlc_media_player_set_equalizer");
+}
+static bool apply_equalizer(void) {
+  if (!player || !eq_apply_fn) return false;
+  if (eq_choice == 0) return eq_apply_fn(player, NULL) == 0;
+  if (!eq_new_fn || !eq_release_fn || !eq_count_fn || (unsigned)eq_choice > eq_count_fn()) return false;
+  libvlc_equalizer_t *eq = eq_new_fn((unsigned)eq_choice - 1);
+  if (!eq) return false;
+  int rc = eq_apply_fn(player, eq);
+  eq_release_fn(eq);
+  return rc == 0;
+}
 static uint32_t osd_until = 0, note_until = 0;
 static float rate = 1.0f;
 static int fit = 0;
@@ -252,7 +286,15 @@ static void label(const char *s, int x, int y, int size, SDL_Color c,
 /* Indeterminate: there is no known total until traversal has finished.  SDL
  * remains on the main thread; refresh periodically while entries are read. */
 static uint32_t loading_last_frame;
+static bool scan_cancelled;
 static void loading_screen(const char *message, int found, bool force) {
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) {
+    if (event.type == SDL_QUIT) { scan_cancelled = true; running = 0; }
+    else if (event.type == SDL_KEYDOWN && !event.key.repeat &&
+             (event.key.keysym.sym == SDLK_BACKSPACE || event.key.keysym.sym == SDLK_ESCAPE))
+      scan_cancelled = true;
+  }
   if (!renderer || !fontdata || !bolddata || !p_SDL_GetTicks) return;
   uint32_t tick = SDL_GetTicks();
   if (!force && tick - loading_last_frame < 80) return;
@@ -274,6 +316,7 @@ static void loading_screen(const char *message, int found, bool force) {
   snprintf(count_text, sizeof(count_text), "%s: %d", tr("Arquivos encontrados"), found);
   int count_x = (W - (int)measure(count_text, 13)) / 2;
   label(count_text, count_x, 278, 13, muted, 410);
+  label(tr("A Cancelar busca"), 240, 306, 13, muted, 240);
   SDL_RenderPresent(renderer);
 }
 static void notify(const char *message) {
@@ -308,6 +351,10 @@ static bool audio_file(const char *s) {
                !strcasecmp(p, ".m4a") || !strcasecmp(p, ".aac") ||
                !strcasecmp(p, ".opus"));
 }
+static bool playlist_file(const char *s) {
+  const char *ext = strrchr(s, '.');
+  return ext && (!strcasecmp(ext, ".m3u") || !strcasecmp(ext, ".m3u8"));
+}
 static int sort_items(const void *a, const void *b) {
   const Item *x = a, *y = b;
   if (x->dir != y->dir)
@@ -327,6 +374,7 @@ static void scan(void) {
     refresh_locations();
     return;
   }
+  scan_cancelled = false;
   folder_error[0] = 0;
   loading_screen("Carregando arquivos", 0, true);
   clear_items();
@@ -344,6 +392,7 @@ static void scan(void) {
   bool capped = false;
   while ((e = readdir(d))) {
     loading_screen("Carregando arquivos", total, false);
+    if (scan_cancelled) break;
     if (e->d_name[0] == '.')
       continue;
     char path[PATH_MAX];
@@ -354,7 +403,7 @@ static void scan(void) {
     if (stat(path, &st))
       continue;
     bool dir = S_ISDIR(st.st_mode);
-    if (!dir && (!S_ISREG(st.st_mode) || !supported(e->d_name)))
+    if (!dir && (!S_ISREG(st.st_mode) || (!supported(e->d_name) && !(category == 0 && playlist_file(e->d_name)))))
       continue;
     if (!dir && ((category == 1 && !audio_file(e->d_name)) ||
                  (category == 2 && audio_file(e->d_name))))
@@ -375,6 +424,8 @@ static void scan(void) {
   qsort(items, total, sizeof(*items), sort_items);
   if (capped)
     notify(tr("Limite de 4096 itens: organize em subpastas"));
+  else if (scan_cancelled)
+    notify(tr("Busca cancelada"));
   menu_dirty = true;
 }
 static bool automatic_has_path(const char *path) {
@@ -384,7 +435,7 @@ static bool automatic_has_path(const char *path) {
   return false;
 }
 static void automatic_scan_tree(const char *base, int depth, bool *capped) {
-  if (depth > 32 || total >= MAX_FILES) {
+  if (scan_cancelled || depth > 32 || total >= MAX_FILES) {
     *capped = total >= MAX_FILES;
     return;
   }
@@ -395,6 +446,7 @@ static void automatic_scan_tree(const char *base, int depth, bool *capped) {
   while ((e = readdir(d)) && total < MAX_FILES) {
     loading_screen(category == 1 ? "Carregando músicas" : "Carregando vídeos",
                    total, false);
+    if (scan_cancelled) break;
     if (e->d_name[0] == '.')
       continue;
     char path[PATH_MAX];
@@ -410,7 +462,8 @@ static void automatic_scan_tree(const char *base, int depth, bool *capped) {
     }
     if (!S_ISREG(st.st_mode) || st.st_size < 50 * 1024 ||
         !supported(e->d_name) || (category == 1 && !audio_file(e->d_name)) ||
-        (category == 2 && audio_file(e->d_name)) || automatic_has_path(path))
+        (category == 2 && audio_file(e->d_name)) || automatic_has_path(path) ||
+        (favorites_view && !is_favorite_path(path)))
       continue;
     char *name = strdup(e->d_name), *stored_path = strdup(path);
     if (!name || !stored_path) {
@@ -426,6 +479,7 @@ static void automatic_scan_tree(const char *base, int depth, bool *capped) {
   closedir(d);
 }
 static void scan_automatic_media(void) {
+  scan_cancelled = false;
   loading_screen(category == 1 ? "Carregando músicas" : "Carregando vídeos",
                  0, true);
   clear_items();
@@ -435,17 +489,19 @@ static void scan_automatic_media(void) {
   locations_view = false;
   bool capped = false;
   for (size_t i = 0;
-       i < sizeof(automatic_roots) / sizeof(*automatic_roots) && !capped; i++) {
+       i < sizeof(automatic_roots) / sizeof(*automatic_roots) && !capped && !scan_cancelled; i++) {
     char resolved[PATH_MAX];
     if (realpath(automatic_roots[i], resolved))
       automatic_scan_tree(resolved, 0, &capped);
   }
   qsort(items, total, sizeof(*items), sort_items);
-  if (!total)
+  if (!total && !scan_cancelled)
     snprintf(folder_error, sizeof(folder_error), "%s",
-             tr("Nenhuma mídia acima de 50 KB encontrada"));
+             tr(favorites_view ? "Nenhuma favorita encontrada" : "Nenhuma mídia acima de 50 KB encontrada"));
   if (capped)
     notify(tr("Limite de 4096 itens: organize em subpastas"));
+  else if (scan_cancelled)
+    notify(tr("Busca cancelada"));
   mode = 0;
   menu_dirty = true;
 }
@@ -506,7 +562,9 @@ static void unlock_video(void *opaque, void *picture, void *const *planes) {
 // Browser uses the media state above.
 #include "music_browser.h"
 
+static void save_resume(void);
 static void stop_media(void) {
+  if (player && active && !preview_mode && resume_pending_ms < 0) save_resume();
   active = false;
   playing_radio = false;
   if (player)
@@ -524,6 +582,8 @@ static void stop_media(void) {
   menu_dirty = true;
 }
 static void play_path(const char *path) {
+  radio_cancel_retries();
+  resume_pending_ms = -1;
   char saved[PATH_MAX];
   snprintf(saved, sizeof(saved), "%s", path);
   libvlc_media_t *m = libvlc_media_new_path(engine, saved);
@@ -559,10 +619,87 @@ static void play_path(const char *path) {
   meta_pending = true;
   meta_deadline = SDL_GetTicks() + 8000;
   meta_next = 0;
-  libvlc_media_player_set_rate(player, rate);
+  libvlc_media_player_set_rate(player, playing_audio ? 1.0f : rate);
   mode = playing_audio ? 4 : 1;
   osd_until = SDL_GetTicks() + 3000;
   show_osd = true;
+}
+static void save_resume(void) {
+  if (!active || playing_radio || !current_path[0] || strchr(current_path, '\n') || strchr(current_path, '\r')) return;
+  long long pos = now_ms();
+  if (pos < 0) return;
+  char full[PATH_MAX];
+  if (!realpath(current_path, full)) return;
+  FILE *f = fopen("resume.tmp", "w");
+  if (!f) return;
+  bool ok = fprintf(f, "%lld\n%s\n", pos, full) > 0;
+  if (fclose(f) == 0 && ok) rename("resume.tmp", "resume.cfg");
+}
+static void resume_last(void) {
+  FILE *f = fopen("resume.cfg", "r");
+  if (!f) { notify(tr("Nenhuma mídia para retomar")); return; }
+  char line[PATH_MAX + 4], position[40], *end;
+  bool ok = fgets(position, sizeof(position), f) && fgets(line, sizeof(line), f);
+  fclose(f);
+  if (!ok || !strchr(position, '\n') || !strchr(line, '\n')) { notify(tr("Nenhuma mídia para retomar")); return; }
+  long long ms = strtoll(position, &end, 10);
+  if (end == position || *end != '\n' || ms < 0 || ms > 604800000LL) { notify(tr("Nenhuma mídia para retomar")); return; }
+  line[strcspn(line, "\r\n")] = 0;
+  struct stat st;
+  if (line[0] != '/' || !supported(line) || stat(line, &st) || !S_ISREG(st.st_mode)) {
+    notify(tr("Nenhuma mídia para retomar")); return;
+  }
+  char *path = strdup(line);
+  if (!path) return;
+  clear_queue();
+  queue_paths[0] = path;
+  queue_count = 1;
+  queue_index = queue_selected = 0;
+  play_path(path);
+  if (active && !strcmp(current_path, path)) {
+    resume_pending_ms = ms;
+    resume_deadline = SDL_GetTicks() + 15000;
+  }
+}
+/* Local M3U entries only: reject streams and nested playlists. */
+static bool load_local_playlist(const char *filename) {
+  struct stat st;
+  if (stat(filename, &st) || !S_ISREG(st.st_mode) || st.st_size > 1024 * 1024) return false;
+  FILE *f = fopen(filename, "rb");
+  if (!f) return false;
+  char directory[PATH_MAX], line[PATH_MAX + 4], candidate[PATH_MAX], resolved[PATH_MAX];
+  if (!realpath(filename, directory)) { fclose(f); return false; }
+  char *slash = strrchr(directory, '/');
+  if (!slash) { fclose(f); return false; }
+  if (slash == directory) slash[1] = 0; else *slash = 0;
+  char *paths[MAX_FILES];
+  int count = 0;
+  while (count < MAX_FILES && fgets(line, sizeof(line), f)) {
+    size_t n = strlen(line);
+    if (n && line[n - 1] != '\n' && !feof(f)) {
+      int ch; while ((ch = fgetc(f)) != '\n' && ch != EOF) {}
+      continue;
+    }
+    while (n && (line[n - 1] == '\r' || line[n - 1] == '\n')) line[--n] = 0;
+    char *entry = line;
+    if (count == 0 && n >= 3 && !memcmp(entry, "\xef\xbb\xbf", 3)) entry += 3;
+    while (*entry == ' ' || *entry == '\t') entry++;
+    if (!*entry || *entry == '#' || strstr(entry, "://")) continue;
+    int len = entry[0] == '/' ? snprintf(candidate, sizeof(candidate), "%s", entry)
+                               : snprintf(candidate, sizeof(candidate), "%s/%s", directory, entry);
+    if (len < 0 || len >= (int)sizeof(candidate) || !realpath(candidate, resolved) ||
+        !audio_file(resolved) || stat(resolved, &st) || !S_ISREG(st.st_mode)) continue;
+    paths[count] = strdup(resolved);
+    if (!paths[count]) break;
+    count++;
+  }
+  fclose(f);
+  if (!count) return false;
+  clear_queue();
+  for (int i = 0; i < count; i++) queue_paths[i] = paths[i];
+  queue_count = count;
+  queue_index = queue_selected = 0;
+  return true;
 }
 static void start_media(void) {
   if (!total)
@@ -574,12 +711,18 @@ static void start_media(void) {
     enter_folder(path);
     return;
   }
+  if (playlist_file(path)) {
+    if (load_local_playlist(path)) play_path(queue_paths[0]);
+    else notify(tr("Playlist vazia ou inválida"));
+    return;
+  }
   build_queue();
   play_path(path);
 }
 static void parent_folder(void) {
   if (automatic_view) {
     automatic_view = false;
+    favorites_view = false;
     mode = 3;
     return;
   }
@@ -633,22 +776,64 @@ static void save_settings(void);
 /* Update operations run off the SDL thread. Output is one fixed status line. */
 static pthread_mutex_t update_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool update_busy = false;
+static bool update_cancel_requested = false;
 static int update_status_code = 0; /* 0 idle, 1 new, 2 latest, 3 done, 4 error */
 static char update_tag[32];
+extern char **environ;
 static void *update_worker(void *argument) {
   bool installing = (intptr_t)argument != 0;
-  char cmd[160], tag[32];
+  char tag[32];
   pthread_mutex_lock(&update_mutex);
   snprintf(tag, sizeof(tag), "%s", update_tag);
   pthread_mutex_unlock(&update_mutex);
-  if (installing)
-    snprintf(cmd, sizeof(cmd), "python3 ./updater.py install %.30s 2>>log.txt", tag);
-  else
-    snprintf(cmd, sizeof(cmd), "python3 ./updater.py check 2>>log.txt");
-  FILE *f = popen(cmd, "r");
+  int pipes[2], status = -1;
   char line[80] = {0};
-  if (f && !fgets(line, sizeof(line), f)) line[0] = 0;
-  int status = f ? pclose(f) : -1;
+  size_t used = 0;
+  if (pipe(pipes) == 0) {
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addclose(&actions, pipes[0]);
+    posix_spawn_file_actions_addclose(&actions, pipes[1]);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "log.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    char *argv[] = {"python3", "./updater.py", installing ? "install" : "check", installing ? tag : NULL, NULL};
+    pid_t pid;
+    int spawned = posix_spawnp(&pid, "python3", &actions, NULL, argv, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    close(pipes[1]);
+    if (!spawned) {
+      int flags = fcntl(pipes[0], F_GETFL, 0);
+      if (flags >= 0) fcntl(pipes[0], F_SETFL, flags | O_NONBLOCK);
+      struct timespec start, now;
+      clock_gettime(CLOCK_MONOTONIC, &start);
+      bool signalled = false;
+      for (;;) {
+        if (used + 1 < sizeof(line)) {
+          ssize_t n = read(pipes[0], line + used, sizeof(line) - used - 1);
+          if (n > 0) used += (size_t)n;
+        }
+        pid_t done = waitpid(pid, &status, WNOHANG);
+        if (done == pid) break;
+        if (done < 0 && errno != EINTR) { status = -1; break; }
+        pthread_mutex_lock(&update_mutex);
+        bool cancel = update_cancel_requested;
+        pthread_mutex_unlock(&update_mutex);
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        if (!signalled && (cancel || now.tv_sec - start.tv_sec >= 90)) {
+          kill(pid, SIGTERM);
+          signalled = true;
+        }
+        struct timespec pause = {0, 50000000};
+        nanosleep(&pause, NULL);
+      }
+      if (used + 1 < sizeof(line)) {
+        ssize_t n = read(pipes[0], line + used, sizeof(line) - used - 1);
+        if (n > 0) used += (size_t)n;
+      }
+      line[used] = 0;
+    }
+    close(pipes[0]);
+  }
   pthread_mutex_lock(&update_mutex);
   if (status == 0 && !strncmp(line, "NEW v", 5)) {
     size_t n = strcspn(line + 4, "\r\n");
@@ -676,6 +861,7 @@ static void update_start(void) {
   pthread_mutex_lock(&update_mutex);
   if (update_busy) { pthread_mutex_unlock(&update_mutex); return; }
   bool install = update_status_code == 1;
+  update_cancel_requested = false;
   update_busy = true;
   pthread_mutex_unlock(&update_mutex);
   pthread_t worker;
@@ -686,6 +872,11 @@ static void update_start(void) {
     update_busy = false; update_status_code = 4;
     pthread_mutex_unlock(&update_mutex);
   }
+}
+static void update_cancel(void) {
+  pthread_mutex_lock(&update_mutex);
+  if (update_busy) update_cancel_requested = true;
+  pthread_mutex_unlock(&update_mutex);
 }
 /* Runs before the main menu; failed/offline checks never prevent startup. */
 static bool startup_update(void) {
@@ -706,8 +897,13 @@ static bool startup_update(void) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT && !busy) return false;
-      if (e.type != SDL_KEYDOWN || e.key.repeat || busy) continue;
+      if (e.type == SDL_QUIT && busy) { update_cancel(); continue; }
+      if (e.type != SDL_KEYDOWN || e.key.repeat) continue;
       SDL_Keycode k = e.key.keysym.sym;
+      if (busy) {
+        if (k == SDLK_BACKSPACE || k == SDLK_ESCAPE) update_cancel();
+        continue;
+      }
       if (installing) {
         if (k == SDLK_RETURN || k == SDLK_BACKSPACE || k == SDLK_ESCAPE)
           return false;
@@ -728,6 +924,7 @@ static bool startup_update(void) {
     if (busy) {
       label(tr(installing ? "Baixando e instalando..." : "Procurando atualizações..."), 68, 192, 24, textc, 505);
       label(tr("Aguarde..."), 68, 245, 18, muted, 500);
+      label(tr("A Cancelar"), 68, 280, 16, muted, 500);
     } else if (installing) {
       label(tr("Não foi possível atualizar"), 68, 175, 24, textc, 500);
       label(tr("Erro; consulte log.txt"), 68, 225, 18, muted, 500);
@@ -772,11 +969,12 @@ static void draw_options(void) {
   label(tr("Opções"), 24, 52, 25, textc, 500);
   const char *names[] = {
       tr("Velocidade"),    tr("Formato da imagem"), tr("Faixa de áudio"),
-      tr("Legendas"),      tr("Repetir mídia"),     tr("Idioma"),
+      tr("Legendas"),      tr("Modo de repetição"), tr("Idioma"),
       tr("Termos de uso"), tr("Favoritar faixa"),   tr("Sair do KPlayer"),
-      tr("Tema"), tr("Atualização")};
-  for (int i = 0; i < 11; i++) {
-    int y = 85 + i * 29;
+      tr("Tema"), tr("Atualização"), tr("Localização por IP"), tr("Aleatório"), tr("Minhas favoritas"), tr("Retomar mídia"), tr("Timer de sono"), tr("Equalizador")};
+  int first = option > 11 ? option - 11 : 0;
+  for (int i = first; i < 17 && i < first + 12; i++) {
+    int y = 85 + (i - first) * 29;
     rounded(24, y, 592, 27, 8, i == option ? elevated : panel);
     label(names[i], 40, y + 8, 18, i == option ? accent : textc, 280);
     char value[256];
@@ -799,7 +997,7 @@ static void draw_options(void) {
       break;
     case 4:
       snprintf(value, sizeof(value), "%s",
-               loop_video ? tr("Ativada") : tr("Desativada"));
+               repeat_mode == 1 ? tr("Repetir faixa") : repeat_mode == 2 ? tr("Repetir fila") : tr("Desativada"));
       break;
     case 5:
       snprintf(value, sizeof(value), "%s", language_names[language]);
@@ -826,12 +1024,29 @@ static void draw_options(void) {
       else snprintf(value, sizeof(value), "%s", tr("B Verificar"));
       pthread_mutex_unlock(&update_mutex);
       break;
+    case 11:
+      snprintf(value, sizeof(value), "%s", tr(network_location_enabled ? "Ativada" : "Desativada"));
+      break;
+    case 12:
+      snprintf(value, sizeof(value), "%s", tr(shuffle_enabled ? "Ativada" : "Desativada"));
+      break;
+    case 15: {
+      const int minutes[] = {0, 15, 30, 60, 90, 120};
+      if (sleep_choice) snprintf(value, sizeof(value), "%d min", minutes[sleep_choice]);
+      else snprintf(value, sizeof(value), "%s", tr("Desativada"));
+      break;
+    }
+    case 16:
+      if (eq_choice && eq_name_fn) {
+        const char *name = eq_name_fn((unsigned)eq_choice - 1);
+        snprintf(value, sizeof(value), "%s", name ? name : "-");
+      } else snprintf(value, sizeof(value), "%s", tr("Desativada"));
+      break;
     default:
       snprintf(value, sizeof(value), "%s", tr("Abrir"));
     }
     label(value, 344, y + 8, 17, muted, 253);
   }
-  label(tr("Esquerda/direita ou B para alterar"), 24, 413, 13, muted, 590);
   footer(tr("A Voltar    SELECT Fechar opções"));
 }
 static void cycle_track(bool subtitle, int dir) {
@@ -863,7 +1078,7 @@ static void change_option(int dir) {
       newrate = 2;
     if (newrate > 2)
       newrate = .5f;
-    if (!options_from_video ||
+    if (!options_from_video || playing_audio ||
         libvlc_media_player_set_rate(player, newrate) == 0)
       rate = newrate;
     break;
@@ -877,7 +1092,9 @@ static void change_option(int dir) {
       cycle_track(option == 3, dir);
     break;
   case 4:
-    loop_video = !loop_video;
+    repeat_mode = (repeat_mode + dir + 3) % 3;
+    loop_video = repeat_mode == 1;
+    save_settings();
     break;
   case 5: {
     int old = language;
@@ -908,6 +1125,40 @@ static void change_option(int dir) {
   case 10:
     update_start();
     break;
+  case 11:
+    network_location_enabled = !network_location_enabled;
+    if (network_location_enabled) network_location_start();
+    save_settings();
+    break;
+  case 12:
+    shuffle_enabled = !shuffle_enabled;
+    memset(shuffle_seen, 0, sizeof(shuffle_seen));
+    shuffle_seen_count = 0;
+    save_settings();
+    break;
+  case 13:
+    favorites_view = true;
+    category = 1;
+    scan_automatic_media();
+    break;
+  case 14:
+    resume_last();
+    break;
+  case 15: {
+    const int minutes[] = {0, 15, 30, 60, 90, 120};
+    sleep_choice = (sleep_choice + dir + 6) % 6;
+    sleep_end = sleep_choice ? SDL_GetTicks() + (uint32_t)minutes[sleep_choice] * 60000u : 0;
+    break;
+  }
+  case 16:
+    if (eq_count_fn && eq_new_fn && eq_release_fn && eq_apply_fn && eq_name_fn) {
+      unsigned count = eq_count_fn();
+      if (count > 100) count = 100;
+      int previous = eq_choice;
+      eq_choice = (eq_choice + dir + (int)count + 1) % ((int)count + 1);
+      if (!apply_equalizer()) { eq_choice = previous; notify(tr("Equalizador indisponível")); }
+    } else notify(tr("Equalizador indisponível"));
+    break;
   }
   menu_dirty = true;
 }
@@ -935,6 +1186,7 @@ static void open_options(void) {
 }
 static void key(SDL_Keycode k, bool repeat) {
   if (update_is_busy()) {
+    if (!repeat && (k == SDLK_BACKSPACE || k == SDLK_ESCAPE)) update_cancel();
     if (!repeat) notify(tr("Aguarde..."));
     return;
   }
@@ -986,9 +1238,9 @@ static void key(SDL_Keycode k, bool repeat) {
     if ((k == SDLK_BACKSPACE || k == SDLK_m) && !repeat)
       mode = return_mode;
     else if (k == SDLK_UP)
-      option = (option + 10) % 11;
+      option = (option + 16) % 17;
     else if (k == SDLK_DOWN)
-      option = (option + 1) % 11;
+      option = (option + 1) % 17;
     else if (k == SDLK_LEFT && option != 10)
       change_option(-1);
     else if ((k == SDLK_RIGHT && option != 10) || (k == SDLK_RETURN && !repeat))
@@ -1001,6 +1253,7 @@ static void key(SDL_Keycode k, bool repeat) {
     else if (k == SDLK_RIGHT || k == SDLK_DOWN)
       dash_focus = (dash_focus + 1) % 4;
     else if (k == SDLK_RETURN && !repeat) {
+      favorites_view = false;
       category = dash_focus == 0 ? 1 : dash_focus == 1 ? 2 : 0;
       if (dash_focus < 2)
         scan_automatic_media();
@@ -1045,6 +1298,7 @@ static void key(SDL_Keycode k, bool repeat) {
     else if (k == SDLK_BACKSPACE && !repeat) {
       parent_folder();
     } else if (k == SDLK_LEFT || k == SDLK_RIGHT) {
+      favorites_view = false;
       category = (category + (k == SDLK_LEFT ? 2 : 1)) % 3;
       if (automatic_view)
         scan_automatic_media();
@@ -1072,6 +1326,8 @@ static void key(SDL_Keycode k, bool repeat) {
     else if (k == SDLK_RETURN && !repeat) {
       if (audio_panel == 1 && queue_count) {
         queue_index = queue_selected;
+        memset(shuffle_seen, 0, sizeof(shuffle_seen));
+        shuffle_seen_count = 0;
         play_path(queue_paths[queue_index]);
       } else if (audio_panel == 2)
         play_music_entry();
@@ -1159,8 +1415,8 @@ static void save_settings(void) {
   FILE *f = fopen("settings.tmp", "w");
   if (!f)
     return;
-  fprintf(f, "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\n", fit,
-          loop_video, rate, theme_index);
+  fprintf(f, "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\nlocation %d\nrepeat %d\nshuffle %d\n", fit,
+          loop_video, rate, theme_index, network_location_enabled ? 1 : 0, repeat_mode, shuffle_enabled ? 1 : 0);
   if (fclose(f) == 0)
     rename("settings.tmp", "settings.cfg");
 }
@@ -1169,13 +1425,16 @@ static void load_settings(void) {
   if (!f)
     return;
   char line[160];
-  int legacy_setting, ft, loop, saved_theme = 0;
+  int legacy_setting, ft, loop, saved_theme = 0, saved_location = 0, saved_repeat = -1, saved_shuffle = 0;
   float r;
   bool valid = false;
   if (fgets(line, sizeof(line), f)) {
     if (!strcmp(line, "KPLAYER_SETTINGS 2\n")) {
       valid = fscanf(f, "fit %d\nloop %d\nrate %f", &ft, &loop, &r) == 3;
       if (valid && fscanf(f, "\ntheme %d", &saved_theme) != 1) saved_theme = 0;
+      if (valid && fscanf(f, "\nlocation %d", &saved_location) != 1) saved_location = 0;
+      if (valid && fscanf(f, "\nrepeat %d", &saved_repeat) != 1) saved_repeat = -1;
+      if (valid && fscanf(f, "\nshuffle %d", &saved_shuffle) != 1) saved_shuffle = 0;
     } else
       valid = sscanf(line, "%d %d %d %f", &legacy_setting, &ft, &loop, &r) == 4;
   }
@@ -1183,8 +1442,12 @@ static void load_settings(void) {
       r <= 2) {
     fit = ft;
     loop_video = loop;
+    repeat_mode = saved_repeat >= 0 && saved_repeat <= 2 ? saved_repeat : loop;
+    loop_video = repeat_mode == 1;
+    shuffle_enabled = saved_shuffle == 1;
     rate = r;
     apply_theme(saved_theme);
+    network_location_enabled = saved_location == 1;
   }
   fclose(f);
 }
@@ -1200,6 +1463,7 @@ static bool screenshot(const char *path) {
   return ok;
 }
 int main(int argc, char **argv) {
+  srand((unsigned)time(NULL));
   bool preview = argc > 1 && !strncmp(argv[1], "--preview", 9),
        check = argc > 1 && !strcmp(argv[1], "--check");
   signal(SIGINT, stop_signal);
@@ -1338,6 +1602,7 @@ int main(int argc, char **argv) {
     SDL_Quit();
     return 1;
   }
+  load_equalizer_api();
   libvlc_video_set_callbacks(player, lock_video, unlock_video, NULL, NULL);
   libvlc_video_set_format_callbacks(player, format_video, cleanup_video);
   load_preferences();
@@ -1347,7 +1612,6 @@ int main(int argc, char **argv) {
   bool restart_after_update = startup_update();
   if (restart_after_update) running = 0;
   else {
-    network_location_enabled = true;
     network_location_start();
     mkdir(root, 0755);
     snprintf(folder, sizeof(folder), "%s", root);
@@ -1355,21 +1619,43 @@ int main(int argc, char **argv) {
   }
   while (running) {
     uint32_t frame = SDL_GetTicks();
+    if (sleep_choice && (int32_t)(frame - sleep_end) >= 0) {
+      sleep_choice = 0;
+      sleep_end = 0;
+      if (active) { save_resume(); stop_media(); mode = 3; }
+    }
+    static uint32_t resume_next_save;
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) {
-        if (!radio_play_is_busy() && !update_is_busy()) running = 0;
+        if (update_is_busy()) update_cancel();
+        else if (!radio_play_is_busy()) running = 0;
       }
       else if (e.type == SDL_KEYDOWN)
         key(e.key.keysym.sym, e.key.repeat != 0);
     }
     radio_poll_play();
+    radio_retry_tick();
     if (active) {
+      if (playing_radio) radio_update_nowplaying();
+      if (resume_pending_ms >= 0) {
+        if ((int32_t)(SDL_GetTicks() - resume_deadline) >= 0) resume_pending_ms = -1;
+        else if (libvlc_media_player_is_seekable(player)) {
+          libvlc_media_player_set_time(player, resume_pending_ms);
+          resume_pending_ms = -1;
+        }
+      }
+      if (!playing_radio && resume_pending_ms < 0 && (int32_t)(frame - resume_next_save) >= 0) {
+        save_resume();
+        resume_next_save = frame + 10000;
+      }
       update_metadata();
       libvlc_state_t state = libvlc_media_player_get_state(player);
+      if (playing_radio && state == libvlc_Playing) radio_note_playing();
+      else if (playing_radio) radio_stable_since = 0;
       if (state == libvlc_Error) {
         bool was_radio = playing_radio;
-        if (was_radio) { active = false; playing_radio = false; paused = false; }
+        if (was_radio) { active = false; playing_radio = false; paused = false; radio_schedule_retry(); }
         else stop_media();
         notify(tr("Falha na reprodução. Consulte log.txt"));
         if (was_radio)
@@ -1377,12 +1663,14 @@ int main(int argc, char **argv) {
       } else if (state == libvlc_Ended) {
         if (playing_radio) {
           active = false;
+          playing_radio = false;
           paused = false;
+          radio_schedule_retry();
           mode = 7;
-        } else if (loop_video) {
+        } else if (repeat_mode == 1) {
           play_path(current_path);
-        } else if (playing_audio && queue_index + 1 < queue_count)
-          next_media(1);
+        } else if (playing_audio && queue_advance(1, true))
+          play_path(queue_paths[queue_index]);
         else {
           stop_media();
           mode = 3;
@@ -1407,10 +1695,13 @@ int main(int argc, char **argv) {
       draw_menu();
     SDL_RenderPresent(renderer);
     uint32_t elapsed = SDL_GetTicks() - frame;
-    if (elapsed < 33)
-      SDL_Delay(33 - elapsed);
+    /* Keep video at ~30 FPS; static screens and audio need fewer redraws. */
+    uint32_t frame_ms = (active && !playing_audio && !playing_radio) ? 33 : 100;
+    if (elapsed < frame_ms)
+      SDL_Delay(frame_ms - elapsed);
   }
   save_settings();
+  save_resume();
   stop_media();
   libvlc_media_player_release(player);
   libvlc_release(engine);

@@ -30,6 +30,6 @@ O workflow de build padrão usa a versão 1.0.0 para um artefato de teste. Uma e
 2. O workflow de release usa a tag para nomear o ZIP e o checksum e criar um rascunho; confirme que os arquivos são `KPlayer-v1.0.1-R36S.zip` e `KPlayer-v1.0.1-R36S.zip.sha256`, que o manifesto corresponde à tag e que o app inicia no aparelho.
 3. Publique a release como estável. Depois, um aparelho com o novo atualizador instalado e internet pode detectar a versão mais recente. Uma versão igual ou inferior à instalada não gera uma oferta.
 
-Cada pacote deve vir do workflow compatível deste projeto. O atualizador modifica somente arquivos previstos no manifesto e **não atualiza o próprio script nem o lançador**. O checksum não é assinatura. Sem energia durante a instalação, a recuperação não é automática; preserve backups.
+Cada pacote deve vir do workflow compatível deste projeto. O atualizador modifica somente arquivos previstos no manifesto e **não atualiza o próprio script nem o lançador**. O checksum não é assinatura. O novo lançador tenta restaurar uma atualização interrompida, mas a recuperação após corte real de energia ainda não foi testada no aparelho; preserve backups.
 
 O GitHub pode limitar ações conforme permissões do repositório. Se o workflow não puder criar o rascunho, confira as permissões de Actions e anexe os arquivos do artefato manualmente; não compartilhe tokens ou credenciais.

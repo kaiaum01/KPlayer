@@ -33,6 +33,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+# Never execute a potentially half-installed binary before recovery.
+if [ -e "$GAMEDIR/.kplayer-update-transaction.json" ] || [ -L "$GAMEDIR/.kplayer-update-transaction.json" ]; then
+    if ! command -v python3 >/dev/null 2>&1 || ! python3 ./updater.py recover; then
+        printf 'Falha ao recuperar atualização; preserve o cartão e consulte log.txt.\n'
+        exit 1
+    fi
+fi
 chmod +x ./kplayer
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &

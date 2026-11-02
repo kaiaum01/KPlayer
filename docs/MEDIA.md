@@ -12,7 +12,7 @@ For external artwork, use the media basename plus `.jpg`/`.png`, or `cover.jpg`,
 
 Use UTF-8 `Song.lrc` / `Song.LRC` alongside `Song.mp3`, with `[mm:ss.xx]` timestamps. Multiple timestamps and `[offset:milliseconds]` are accepted. Valid external LRC lines take precedence over embedded lyrics. Embedded USLT containing timestamps synchronizes too; plain embedded text can be scrolled. Lyrics are not downloaded from the internet.
 
-The queue is a snapshot of media of the same type in the selected folder. Browsing alone preserves it. Playing a track through the music Folder pane rebuilds the queue from that folder. Music advances through the queue until its end; Repeat media repeats the current file. A favorite is a persistent mark; no favorites filter is provided yet.
+The queue is a snapshot of media of the same type in the selected folder. Browsing alone preserves it. Playing a track through the music Folder pane rebuilds the queue. Settings offer repeat off, current track or queue and a shuffle option for music. When shuffle is on, R1 advances through unvisited tracks and L1 moves sequentially. The My favorites entry scans the automatic roots for marked audio files, with the same scan limits; moving a file can lose its mark.
 
 ## Português
 
@@ -26,7 +26,7 @@ Capas externas: mesmo nome da mídia com `.jpg`/`.png`, ou `cover.jpg`, `cover.p
 
 Letras: `Musica.lrc` / `Musica.LRC` UTF-8 ao lado de `Musica.mp3`, com tempos `[mm:ss.xx]`. Aceita múltiplos tempos e `[offset:milissegundos]`. Linhas válidas no LRC externo têm prioridade. USLT embutido com tempos também sincroniza; texto simples permite rolagem. As letras não são baixadas da internet.
 
-A fila preserva os arquivos do mesmo tipo da pasta selecionada. Explorar outras pastas não a altera. Tocar pelo painel Pasta refaz a fila com as músicas daquela pasta. A reprodução avança até o fim da fila; Repetir mídia repete o arquivo atual. Favorita é uma marca salva, ainda sem filtro próprio.
+A fila preserva os arquivos do mesmo tipo da pasta selecionada. Explorar outras pastas não a altera. Tocar pelo painel Pasta refaz a fila. Em Opções, escolha repetição desligada, da faixa ou da fila e ative o aleatório para música. Com aleatório, R1 avança entre faixas ainda não visitadas e L1 volta sequencialmente. Minhas favoritas procura arquivos de áudio marcados nas pastas da busca automática, com os mesmos limites; mover o arquivo pode perder a marcação.
 
 ## Transport metadata / Metadados da barra
 

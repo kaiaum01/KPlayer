@@ -28,7 +28,14 @@ jobs:
       - name: Instalar compilador ARM64
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu libsdl2-2.0-0
+      - name: Testar interface e metadados com sanitizadores
+        run: |
+          mkdir -p output
+          gcc -O1 -g -fsanitize=address,undefined -I source/include tests/test_native.c -o output/test-native -ldl -lpthread -lm
+          gcc -O1 -g -fsanitize=address,undefined tests/test_tags.c -o output/test-tags
+          ASAN_OPTIONS=detect_leaks=0 output/test-tags
+          (cd ports/kplayer && SDL_VIDEODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
       - name: Compilar frontend para R36S
         run: |
           aarch64-linux-gnu-gcc -O2 -std=gnu11 -Wall -Wextra -Werror \

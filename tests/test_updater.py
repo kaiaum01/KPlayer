@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import tempfile
 import unittest
 import zipfile
@@ -79,6 +80,69 @@ class Tests(unittest.TestCase):
             u.install_files(files, "v1.0.1", base)
             self.assertEqual(personal.read_bytes(), b"pessoal")
             self.assertEqual((base / "kplayer/installed-version.txt").read_text().strip(), "v1.0.1")
+
+    def test_cancel_after_replacement_restores_version(self):
+        blob, checksum = package()
+        files = u.validate_archive(blob, checksum, "v1.0.1")
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            for name in u.ALLOWED:
+                path = base / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"old")
+            ver = base / "kplayer/installed-version.txt"
+            ver.write_text("1.0.0\n")
+            original = u.os.replace
+            fired = [False]
+            def cancel_after_move(src, dst):
+                original(src, dst)
+                if str(dst).endswith("installed-version.txt") and not fired[0]:
+                    fired[0] = True
+                    raise u.UpdateCancelled("test")
+            with patch.object(u.os, "replace", side_effect=cancel_after_move):
+                with self.assertRaises(u.UpdateCancelled):
+                    u.install_files(files, "v1.0.1", base)
+            self.assertEqual(ver.read_text(), "1.0.0\n")
+            for name in u.ALLOWED:
+                self.assertEqual((base / name).read_bytes(), b"old")
+
+    def test_crash_recovery_and_repeat(self):
+        blob, checksum = package()
+        files = u.validate_archive(blob, checksum, "v1.0.1")
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            for name in u.ALLOWED:
+                path = base / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"old")
+            ver = base / "kplayer/installed-version.txt"
+            ver.write_text("1.0.0\n")
+            pid = os.fork()
+            if pid == 0:
+                original = u.os.replace
+                def crash_during_install(src, dst):
+                    original(src, dst)
+                    if str(dst).endswith("kplayer/kplayer"):
+                        os._exit(77)
+                u.os.replace = crash_during_install
+                u.install_files(files, "v1.0.1", base)
+                os._exit(0)
+            _, status = os.waitpid(pid, 0)
+            self.assertEqual(os.waitstatus_to_exitcode(status), 77)
+            self.assertTrue((base / "kplayer" / u.JOURNAL).exists())
+            self.assertTrue(u.recover_transaction(base))
+            self.assertFalse(u.recover_transaction(base))
+            self.assertEqual(ver.read_text(), "1.0.0\n")
+            for name in u.ALLOWED:
+                self.assertEqual((base / name).read_bytes(), b"old")
+
+    def test_reject_unsafe_recovery_marker(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            (base / "kplayer").mkdir()
+            (base / "kplayer" / u.JOURNAL).write_text(json.dumps({"backup":"../x", "version_exists":False}))
+            with self.assertRaises(ValueError):
+                u.recover_transaction(base)
 
 
 if __name__ == "__main__":

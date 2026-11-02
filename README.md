@@ -24,8 +24,13 @@ These are actual application screens rendered on a computer with demo data, not 
 - Media scan in `kplayer/midias`, `/roms` and `/roms2`, manual browsing and a loading indicator.
 - Metadata, artwork, queue, next track and supported local LRC or embedded lyrics. Lyrics are not downloaded.
 - Radio Browser directory and a User Radio section for personal playlists.
+- Radio attempts up to three reconnects after a failure or stream end and shows current-track metadata when provided. A blocked libVLC connection can still delay switching; test on device.
 - Seven themes; Brazilian Portuguese, English and Spanish; first-run welcome and usage notices.
 - Video playback options and available audio/subtitle tracks.
+- Settings provide repeat off, track or queue and shuffle for music. Without queue repeat, playback stops after the cycle; L1 goes back sequentially and R1 advances.
+- In Settings, mark the current song with **Favorite track** and open **My favorites** to browse matching songs. The automatic scan and its limits apply; moving a file can lose the mark.
+- Open local M3U/M3U8 music playlists in Files, All filter. Entries can be absolute or relative file paths; streams and nested playlists are not imported.
+- Settings can resume the last file and its position (not its old queue), set a timer that stops playback, or select an available libVLC equalizer preset. The timer and preset do not persist after exit.
 - Experimental GitHub release check at startup, with consent before installation.
 
 ## Requirements and installation
@@ -63,11 +68,11 @@ Place `.pls`, `.asx`, `.m3u` or `.m3u8` files in `ports/kplayer/radios_usuario/`
 
 At startup the app checks the latest public release. If a newer compatible package is found, it asks before installing. Selecting **No**, no update being available or a failed check allows normal startup. Selecting **Yes** installs and restarts; press B to continue after installation failure. The launcher and updater script themselves are not updated automatically.
 
-The release must include a compatible ZIP and checksum. SHA-256 checks integrity, **not a digital signature**. Power loss during replacement has no automatic recovery. Test on a copied SD card first; see [limitations](ATUALIZADOR-EXPERIMENTAL.md) and the [publishing guide](PUBLICACAO-1.0.0.md).
+The release must include a compatible ZIP and checksum. SHA-256 checks integrity, **not a digital signature**. The new launcher attempts recovery after interruption; actual power-loss recovery has not been tested on a device. Test on a copied SD card first; see [limitations](ATUALIZADOR-EXPERIMENTAL.md) and the [publishing guide](PUBLICACAO-1.0.0.md).
 
 ## Privacy and troubleshooting
 
-Radio directories, streams and the approximate-location lookup contact third-party services. The location service uses the public IP and may use HTTP; radio streams can use HTTP or HTTPS. Provider availability, privacy and terms vary.
+Radio directories and streams contact third-party services. Approximate IP location is disabled by default and can be enabled in Settings; when enabled, it sends the public IP to the provider over unencrypted HTTP. Radio streams can use HTTP or HTTPS. Provider availability, privacy and terms vary.
 
 If the app does not start, check PortMaster, system plugins and `ports/kplayer/log.txt`. If media is missing, check paths, extensions, the size limit and the manual browser. For a radio failure, try another station and check connectivity. An update requires a newer public compatible release, Python 3 and internet; drafts and prereleases are not used. The synchronous scanning indicator may pause while the card is busy. Remove personal data from logs before sharing them.
 
