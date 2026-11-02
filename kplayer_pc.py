@@ -1,5 +1,6 @@
 """KPlayer PC experimental: local media and direct HTTP(S) IPTV via libVLC."""
 import os
+import json
 import queue
 import sys
 import threading
@@ -13,6 +14,8 @@ FREE_TV = "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8"
 MAX_BYTES = 4 * 1024 * 1024
 DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "KPlayerPC"
 CACHE = DATA / "free-tv.m3u8"
+REI_CACHE = DATA / "rei-canais.json"
+REI_URL = "https://api.reidoscanais.my/channels"
 DLL_HANDLES = []
 
 
@@ -36,6 +39,43 @@ def parse_m3u(data):
     return result[:5000]
 
 
+def parse_rei(data):
+    if len(data) > MAX_BYTES:
+        raise ValueError("Resposta muito grande")
+    payload = json.loads(data)
+    if not isinstance(payload, dict) or payload.get("success") is not True or not isinstance(payload.get("data"), list):
+        raise ValueError("Resposta da API inválida")
+    items = []
+    for channel in payload["data"][:2048]:
+        if not isinstance(channel, dict) or not isinstance(channel.get("name"), str): continue
+        name = channel["name"].strip()[:120]
+        if not name: continue
+        url = ""
+        embeds = channel.get("embeds")
+        for embed in embeds if isinstance(embeds, list) else []:
+            candidate = embed.get("embed_url") if isinstance(embed, dict) else None
+            if not isinstance(candidate, str) or len(candidate) > 1024 or any(c.isspace() for c in candidate): continue
+            try: parts = urlsplit(candidate)
+            except ValueError: continue
+            if parts.scheme in ("http", "https") and parts.netloc and parts.path.lower().endswith((".m3u8", ".mpd", ".ts")):
+                url = candidate; break
+        items.append((name, url))
+    return items
+
+
+def download_rei():
+    request = urllib.request.Request(REI_URL, headers={"User-Agent": "KPlayer-PC/1.0.4"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        if urlsplit(response.geturl()).scheme != "https": raise ValueError("Redirecionamento inseguro")
+        data = response.read(MAX_BYTES + 1)
+    channels = parse_rei(data)
+    if not channels: raise ValueError("Catálogo vazio")
+    DATA.mkdir(parents=True, exist_ok=True)
+    tmp = REI_CACHE.with_suffix(".tmp")
+    tmp.write_bytes(data); os.replace(tmp, REI_CACHE)
+    return channels
+
+
 def download_playlist(url=FREE_TV):
     request = urllib.request.Request(url, headers={"User-Agent": "KPlayer-PC/1.0.4"})
     with urllib.request.urlopen(request, timeout=20) as response:
@@ -55,16 +95,17 @@ def download_playlist(url=FREE_TV):
 def load_vlc():
     if sys.platform != "win32":
         raise RuntimeError("Esta edição foi preparada para Windows.")
-    candidates = [Path(os.environ.get("PROGRAMFILES", "")) / "VideoLAN" / "VLC",
-                  Path(os.environ.get("PROGRAMFILES(X86)", "")) / "VideoLAN" / "VLC"]
+    base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    candidates = [base / "vlc"]
     for folder in candidates:
-        if (folder / "libvlc.dll").is_file():
+        if (folder / "libvlc.dll").is_file() and (folder / "libvlccore.dll").is_file() and (folder / "plugins").is_dir():
             os.environ["PYTHON_VLC_LIB_PATH"] = str(folder / "libvlc.dll")
             os.environ["PYTHON_VLC_MODULE_PATH"] = str(folder / "plugins")
+            os.environ["VLC_PLUGIN_PATH"] = str(folder / "plugins")
             DLL_HANDLES.append(os.add_dll_directory(str(folder)))
             break
     else:
-        raise RuntimeError("VLC não encontrado. Instale o VLC 64 bits da VideoLAN e abra novamente.")
+        raise RuntimeError("Os arquivos do VLC incluídos com o KPlayer não foram encontrados. Extraia todo o ZIP e mantenha a pasta vlc junto ao executável.")
     import vlc
     return vlc
 
@@ -74,13 +115,15 @@ class App:
         self.root, self.vlc = root, vlc
         self.instance = vlc.Instance("--no-video-title-show")
         if not self.instance:
-            raise RuntimeError("Não foi possível iniciar o VLC. Verifique a instalação 64 bits.")
+            raise RuntimeError("Não foi possível iniciar o VLC incluído. Verifique se todos os arquivos foram extraídos.")
         self.player = self.instance.media_player_new()
         self.media = None
         self.channels, self.visible = [], []
         self.events = queue.Queue()
         self.fetching = False
         self.user = []
+        self.rei = []
+        self.source = tk.StringVar(value="Free-TV + listas próprias")
         root.title("KPlayer PC • 1.0.4 experimental")
         root.geometry("1100x700")
         root.minsize(760, 500)
@@ -97,13 +140,15 @@ class App:
         main = ttk.Frame(root, padding=(12, 0)); main.pack(fill="both", expand=True)
         side = ttk.Frame(main, width=300); side.pack(side="left", fill="y", padx=(0, 12)); side.pack_propagate(False)
         ttk.Label(side, text="CANAIS IPTV", font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        source = ttk.Combobox(side, textvariable=self.source, state="readonly", values=("Free-TV + listas próprias", "Rei dos Canais (experimental)"))
+        source.pack(fill="x", pady=(6, 0)); source.bind("<<ComboboxSelected>>", self.source_changed)
         self.search = tk.StringVar(); self.search.trace_add("write", lambda *_: self.refresh_list())
         ttk.Entry(side, textvariable=self.search).pack(fill="x", pady=7)
         self.listbox = tk.Listbox(side, bg="#20242d", fg="white", selectbackground="#287b61", borderwidth=0, font=("Segoe UI", 10), activestyle="none")
         self.listbox.pack(fill="both", expand=True)
         self.listbox.bind("<Double-Button-1>", self.play_channel)
         self.listbox.bind("<Return>", self.play_channel)
-        ttk.Button(side, text="Atualizar Free-TV", command=self.fetch).pack(fill="x", pady=7)
+        ttk.Button(side, text="Atualizar fonte", command=self.fetch).pack(fill="x", pady=7)
         panel = ttk.Frame(main); panel.pack(side="left", fill="both", expand=True)
         self.canvas = tk.Frame(panel, bg="black"); self.canvas.pack(fill="both", expand=True)
         self.title = ttk.Label(panel, text="Selecione um arquivo ou canal", font=("Segoe UI", 13, "bold")); self.title.pack(anchor="w", pady=(10, 2))
@@ -118,20 +163,29 @@ class App:
         if CACHE.is_file():
             try: self.channels = parse_m3u(CACHE.read_bytes())
             except (OSError, ValueError): pass
+        if REI_CACHE.is_file():
+            try: self.rei = parse_rei(REI_CACHE.read_bytes())
+            except (OSError, ValueError): pass
         self.refresh_list(); self.fetch(); self.tick()
 
     def refresh_list(self):
         query = self.search.get().casefold()
-        self.visible = [(n, u) for n, u in self.user + self.channels if query in n.casefold()]
+        data = self.rei if self.source.get().startswith("Rei") else self.user + self.channels
+        self.visible = [(n, u) for n, u in data if query in n.casefold()]
         self.listbox.delete(0, "end")
-        for name, _ in self.visible: self.listbox.insert("end", name)
+        for name, url in self.visible: self.listbox.insert("end", name + ("  [WEB]" if not url else ""))
+
+    def source_changed(self, _event=None):
+        self.refresh_list()
+        if self.source.get().startswith("Rei") and not self.rei: self.fetch()
 
     def fetch(self):
         if self.fetching: return
+        is_rei = self.source.get().startswith("Rei")
         self.fetching = True; self.status.config(text="Atualizando canais em segundo plano...")
         def worker():
-            try: self.events.put((True, download_playlist()))
-            except Exception as exc: self.events.put((False, str(exc)))
+            try: self.events.put((is_rei, True, download_rei() if is_rei else download_playlist()))
+            except Exception as exc: self.events.put((is_rei, False, str(exc)))
         threading.Thread(target=worker, daemon=True).start()
 
     def import_list(self):
@@ -152,6 +206,9 @@ class App:
         selection = self.listbox.curselection()
         if selection:
             name, url = self.visible[selection[0]]
+            if not url:
+                self.status.config(text="Canal sem fluxo direto compatível (link WEB).")
+                return
             self.play(url, name)
 
     def play(self, location, name, local=False):
@@ -166,11 +223,13 @@ class App:
     def tick(self):
         try:
             while True:
-                ok, payload = self.events.get_nowait(); self.fetching = False
+                is_rei, ok, payload = self.events.get_nowait(); self.fetching = False
                 if ok:
-                    self.channels = payload; self.refresh_list()
-                    self.status.config(text=f"Free-TV atualizada: {len(payload)} canais")
-                else: self.status.config(text="Free-TV indisponível; usando lista salva, se houver")
+                    if is_rei: self.rei = payload
+                    else: self.channels = payload
+                    self.refresh_list()
+                    self.status.config(text=f"Catálogo atualizado: {len(payload)} canais")
+                else: self.status.config(text="Fonte indisponível; usando lista salva, se houver")
         except queue.Empty: pass
         def fmt(ms):
             if ms < 0: return "--:--"
@@ -184,6 +243,16 @@ class App:
 
 
 def main():
+    if "--smoke-test" in sys.argv:
+        vlc = load_vlc()
+        instance = vlc.Instance("--no-video-title-show")
+        if not instance:
+            raise RuntimeError("Não foi possível iniciar libVLC")
+        player = instance.media_player_new()
+        if not player:
+            raise RuntimeError("Não foi possível criar o player")
+        player.release(); instance.release()
+        return
     root = tk.Tk()
     try:
         vlc = load_vlc(); App(root, vlc)
@@ -192,4 +261,9 @@ def main():
     root.mainloop()
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    if "--smoke-test" in sys.argv:
+        try: main()
+        except Exception: sys.exit(1)
+    else:
+        main()

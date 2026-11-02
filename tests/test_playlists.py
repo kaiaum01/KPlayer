@@ -1,5 +1,5 @@
 import unittest
-from kplayer_pc import MAX_BYTES, parse_m3u
+from kplayer_pc import MAX_BYTES, parse_m3u, parse_rei
 
 
 class PlaylistTests(unittest.TestCase):
@@ -15,6 +15,10 @@ class PlaylistTests(unittest.TestCase):
 
     def test_invalid_url_does_not_abort_catalog(self):
         self.assertEqual(parse_m3u(b'#EXTM3U\nhttp://[bad\nhttps://example.org/live\n'), [("Canal 1", "https://example.org/live")])
+
+    def test_rei_distinguishes_web_and_stream(self):
+        data = b'{"success":true,"data":[{"name":"Web","embeds":[{"embed_url":"https://example.org/player"}]},{"name":"Direto","embeds":[{"embed_url":"https://example.org/live.m3u8?x=1"}]}]}'
+        self.assertEqual(parse_rei(data), [("Web", ""), ("Direto", "https://example.org/live.m3u8?x=1")])
 
 
 if __name__ == '__main__': unittest.main()

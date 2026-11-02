@@ -20,10 +20,38 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Testar listas IPTV
         run: python -m unittest discover -s tests -p test_playlists.py -v
+      - name: Baixar VLC oficial e verificar integridade
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://download.videolan.org/pub/videolan/vlc/3.0.23/win64/vlc-3.0.23-win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile vlc.zip
+          $expected = '992d19dbd0b8a7cde9167d2f7780b1ef6f92acc8a71acfa736101a21f35181e1'
+          if ((Get-FileHash vlc.zip -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Checksum do VLC não corresponde ao esperado.' }
+          Expand-Archive vlc.zip -DestinationPath vlc-extracted
       - name: Compilar executável Windows
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name KPlayer-PC kplayer_pc.py
+        run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name KPlayer-PC kplayer_pc.py
+      - name: Incluir VLC portátil e licenças
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vlc = Get-ChildItem vlc-extracted -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'libvlc.dll') } | Select-Object -First 1
+          if (-not $vlc) { throw 'Pasta VLC não encontrada no ZIP.' }
+          Copy-Item $vlc.FullName dist/KPlayer-PC/vlc -Recurse
+          Copy-Item LICENSE dist/KPlayer-PC/LICENSE-KPLAYER.txt
+          Copy-Item README.md dist/KPlayer-PC/README-KPLAYER.md
+          if (!(Test-Path dist/KPlayer-PC/vlc/plugins) -or !(Test-Path dist/KPlayer-PC/vlc/libvlccore.dll)) { throw 'VLC incompleto.' }
+      - name: Testar inicialização do VLC incluído
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location $env:RUNNER_TEMP
+          try {
+            $process = Start-Process -FilePath "$env:GITHUB_WORKSPACE/dist/KPlayer-PC/KPlayer-PC.exe" -ArgumentList '--smoke-test' -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "Teste VLC falhou: $($process.ExitCode)" }
+          } finally { Pop-Location }
       - uses: actions/upload-artifact@v4
         with:
-          name: KPlayer-PC-Windows-x64
-          path: dist/KPlayer-PC.exe
+          name: KPlayer-PC-Windows-x64-Portable
+          path: dist/KPlayer-PC/
           if-no-files-found: error
