@@ -1,10 +1,10 @@
 #!/bin/bash
-# K PLAYER 1.0.0 - dArkOS / Debian 13 ARM64 / PortMaster
+# K PLAYER - dArkOS / Debian 13 ARM64 / PortMaster
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)" || exit 1
 GAMEDIR="$script_dir/kplayer"
 cd "$GAMEDIR" || exit 1
 exec > "$GAMEDIR/log.txt" 2>&1
-printf 'K PLAYER nativo 1.0.0\n'
+printf 'K PLAYER nativo\n'
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 controlfolder=""
 for candidate in /opt/system/Tools/PortMaster /opt/tools/PortMaster "$XDG_DATA_HOME/PortMaster" "$script_dir/PortMaster" /roms/ports/PortMaster; do

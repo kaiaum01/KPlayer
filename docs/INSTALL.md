@@ -1,10 +1,10 @@
-# Instalação / Installation — KPlayer 1.0.0
+# Instalação / Installation — KPlayer 1.0.4
 
 ## Português
 
 1. No GitHub execute **Actions → Compilar KPlayer R36S → Run workflow**.
 2. Quando terminar com sucesso, baixe o artefato e extraia
-   `KPlayer-v1.0.0-R36S.zip`.
+   `KPlayer-v1.0.4-R36S.zip`.
 3. Copie `KPlayer.sh` e `kplayer/` lado a lado para `ports/` no cartão.
 4. Abra Ports → KPlayer. Escolha o idioma e confirme com B.
 5. Suas músicas e vídeos podem ficar em `ports/kplayer/midias/`; suas listas
@@ -23,7 +23,7 @@ erro, procure `ports/kplayer/log.txt`.
 ## English
 
 Run the R36S GitHub Actions workflow, download its artifact, extract
-`KPlayer-v1.0.0-R36S.zip` and copy `KPlayer.sh` and `kplayer/` to
+`KPlayer-v1.0.4-R36S.zip` and copy `KPlayer.sh` and `kplayer/` to
 `ports/`. Select language with B. R36S ARM64 with dArkOS/PortMaster, SDL2,
 ALSA and matching VLC plugins are required. Back up media, radio playlists and
 settings before updating. Auto-update is experimental and requires Python 3.

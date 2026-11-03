@@ -1,6 +1,6 @@
 # Revisão prioritária — trabalho parcial
 
-Este pacote parte do KPlayer 1.0.0 de documentação, não de uma instalação
+Este pacote 1.0.3 parte da versão de desenvolvimento, não de uma instalação
 extraída do console nem necessariamente do último commit do GitHub.
 
 ## Alterações
@@ -37,6 +37,11 @@ extraída do console nem necessariamente do último commit do GitHub.
   esperas progressivas após falha ou término. Selecionar outra estação cancela
   a espera; uma chamada libVLC bloqueada pode continuar atrasando a troca.
   A transmissão, metadados e recuperação ainda exigem teste de rede no R36S.
+- Categoria Favoritas na rádio; X adiciona ou remove a estação selecionada.
+  Nomes e URLs são guardados em `radio-favorites.tsv`; streams podem mudar.
+- `source/version.h` define a versão do binário e do pacote; o empacotador
+  rejeita tags que não correspondam a ela. As instalações antigas precisam de
+  atualização manual do lançador e atualizador para receber alterações neles.
 - Na consulta e na instalação, A solicita cancelamento e o subprocesso recebe
   SIGTERM; há solicitação de cancelamento após 90 segundos. Se possível, o
   instalador restaura os arquivos e a versão anterior quando recebe o sinal.
@@ -50,10 +55,10 @@ extraída do console nem necessariamente do último commit do GitHub.
 
 ## Ainda não implementado
 
-Validação no aparelho da recuperação do atualizador, limite de backups, fonte única de
-versão, atualização do lançador/updater, cache do índice,
+Validação no aparelho da recuperação do atualizador, limite de backups,
+atualização do lançador/updater, cache do índice,
 identificação de favoritos após mover arquivos, apagar a tela, restauração da
-fila anterior, equalizador com bandas ajustáveis, favoritos de rádio e outros
+fila anterior, equalizador com bandas ajustáveis e outros
 ajustes de rádio. O atualizador continua experimental;
 não use como versão final sem testar recuperação e compatibilidade no aparelho.
 

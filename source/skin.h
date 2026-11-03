@@ -50,7 +50,7 @@ static void draw_header(const char *section) {
   rect(0, 0, 640, 32, panel);
   rounded(14, 12, 7, 7, 3, accent);
   label("K PLAYER", 28, 8, 15, textc, 85);
-  label("1.0.0", 113, 10, 11, dim, 34);
+  label(KPLAYER_VERSION, 113, 10, 11, dim, 34);
   label(top_location, 154, 10, 11, muted, 120);
   rounded(280, 6, 128, 20, 5, elevated);
   centered(section, 280, 9, 128, 12, muted);
@@ -117,6 +117,30 @@ static void footer(const char *s) {
     centered(status_note, 40, 405, 560, 13, accent);
   }
 }
+/* Same controller badges as the music transport, arranged in equal cells. */
+static void media_ui_button_circle(const char *name, int cx, int cy);
+static void media_ui_button_pill(const char *name, int x, int y, int width);
+typedef struct { const char *key; const char *action; } FooterHint;
+static void footer_hints(const FooterHint *hints, int count) {
+  rect(0, 436, 640, 44, panel);
+  int cell = 616 / count;
+  for (int i = 0; i < count; i++) {
+    int x = 12 + i * cell;
+    int width = (int)strlen(hints[i].key) == 1 ? 18 :
+                (int)ceil(measure(hints[i].key, 9)) + 12;
+    if (width < 18) width = 18;
+    if (strlen(hints[i].key) == 1)
+      media_ui_button_circle(hints[i].key, x + 9, 458);
+    else
+      media_ui_button_pill(hints[i].key, x, 449, width);
+    label(tr(hints[i].action), x + width + 4, 452, 11, muted,
+          cell - width - 7);
+  }
+  if (SDL_GetTicks() < note_until) {
+    rounded(30, 397, 580, 32, 7, elevated);
+    centered(status_note, 40, 405, 560, 13, accent);
+  }
+}
 static void progress(int x, int y, int w) {
   long long len = duration_ms(), t = now_ms();
   double p = len > 0 ? fmax(0, fmin(1, (double)t / len)) : 0;
@@ -134,25 +158,24 @@ static void draw_home(void) {
   rounded(457, 72, 167, 26, 7, elevated);
   centered(disk_text, 463, 79, 155, 12, muted);
   const char *names[] = {tr("Músicas"), tr("Vídeos"), tr("Arquivos"),
-                         tr("Rádio Online")},
+                         tr("Rádio Online"), tr("IPTV"), tr("Futebol")},
              *desc[] = {tr("Sua trilha sonora,"), tr("Cinema na palma"),
-                        tr("Explore as pastas"), tr("Estações do mundo")},
+                        tr("Explore as pastas"), tr("Estações do mundo"), tr("Canais ao vivo"), tr("Jogos ao vivo")},
              *desc2[] = {tr("com letras em sincronia."), tr("da sua mão."),
-                         tr("do seu cartão SD."), tr("ao vivo pela internet.")},
+                         tr("do seu cartão SD."), tr("ao vivo pela internet."), "", ""},
              *tags[] = {tr("LRC Sync"), tr("Ocultar auto."),
-                        tr("Mídias locais"), tr("Radio Browser")};
-  SDL_Color colors[] = {accent, accent, accent, accent};
-  for (int i = 0; i < 4; i++) {
-    int x = 16 + (i % 2) * 312, y = 126 + (i / 2) * 106;
-    rounded(x, y, 296, 96, 10, i == dash_focus ? accent : elevated);
-    rounded(x + 2, y + 2, 292, 92, 8,
+                        tr("Mídias locais"), tr("Radio Browser"), tr("TV Online"), "Golazo"};
+  SDL_Color colors[] = {accent, accent, accent, accent, accent, accent};
+  for (int i = 0; i < 6; i++) {
+    int x = 16 + (i % 3) * 208, y = 126 + (i / 3) * 106;
+    rounded(x, y, 192, 96, 10, i == dash_focus ? accent : elevated);
+    rounded(x + 2, y + 2, 188, 92, 8,
             i == dash_focus ? elevated : panel);
-    icon(i == 3 ? 2 : i, x + 14, y + 17, 32, colors[i]);
-    label(tags[i], x + 56, y + 13, 11, colors[i], 112);
-    label(names[i], x + 56, y + 33, 19, textc, 222);
-    label(desc[i], x + 56, y + 60, 11, muted, 105);
-    label(desc2[i], x + 163, y + 60, 11, muted, 115);
-    label(">", x + 272, y + 38, 17, colors[i], 14);
+    icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 12, y + 17, 28, colors[i]);
+    label(tags[i], x + 50, y + 13, 10, colors[i], 130);
+    label(names[i], x + 50, y + 33, 16, textc, 136);
+    label(desc[i], x + 12, y + 63, 10, muted, 170);
+    (void)desc2;
   }
   rounded(16, 350, 608, 74, 10, panel);
   art(28, 367, 40);
@@ -163,8 +186,9 @@ static void draw_home(void) {
   label("|<", 492, 380, 16, muted, 25);
   play_button(530, 367, 40);
   label(">|", 586, 380, 16, muted, 25);
-  footer(tr("Direcional Navegar   B Abrir   X Player   Y/SELECT Opções   START "
-            "Pausa"));
+  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Abrir"},
+      {"X", "Player"}, {"Y/SELECT", "Opções"}, {"START", "Pausa"}};
+  footer_hints(hints, 5);
 }
 static void draw_menu(void) {
   color(bg);

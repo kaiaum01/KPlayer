@@ -1,9 +1,9 @@
 # Build and test / Compilação e testes
 
-## R36S 1.0.0: GitHub Actions
+## R36S 1.0.4: GitHub Actions
 
 The workflow **Compilar KPlayer R36S** cross-compiles the C/SDL2 frontend with
-`gcc-aarch64-linux-gnu`, then produces `KPlayer-v1.0.0-R36S.zip` and its
+`gcc-aarch64-linux-gnu`, then produces `KPlayer-v1.0.4-R36S.zip` and its
 SHA-256 checksum as an Actions artifact. It uses the existing bundled libVLC
 core libraries and requires target-system plugins; it does not rebuild VLC.
 This workflow and the new 1.0.0 binary have not been tested on R36S.

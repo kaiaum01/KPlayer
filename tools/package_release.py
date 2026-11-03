@@ -8,7 +8,14 @@ import re
 import zipfile
 
 BASE = Path(__file__).resolve().parents[1]
-VERSION = os.environ.get("KPLAYER_VERSION", "1.0.0").removeprefix("v")
+version_header = (BASE / "source/version.h").read_text(encoding="utf-8")
+match = re.search(r'^#define KPLAYER_VERSION "(\d+\.\d+\.\d+)"$', version_header, re.M)
+if not match:
+    raise SystemExit("source/version.h has no valid KPLAYER_VERSION")
+VERSION = match.group(1)
+requested = (os.environ.get("KPLAYER_VERSION") or VERSION).removeprefix("v")
+if requested != VERSION:
+    raise SystemExit(f"Tag version {requested} differs from source/version.h ({VERSION})")
 if not re.fullmatch(r"\d+\.\d+\.\d+", VERSION):
     raise SystemExit("KPLAYER_VERSION must be X.Y.Z or vX.Y.Z")
 release = BASE / "releases"
@@ -18,10 +25,11 @@ runtime = BASE / "ports" / "kplayer"
 files = [
     BASE / "ports" / "KPlayer.sh",
     runtime / "kplayer", runtime / "kplayer.gptk",
-    runtime / "updater.py",
+    runtime / "updater.py", runtime / "football_fetch.py", runtime / "golazo",
     runtime / "fonts" / "Interface.ttf", runtime / "fonts" / "Bold.ttf",
     runtime / "lib" / "libvlc.so.5", runtime / "lib" / "libvlccore.so.9",
     runtime / "midias" / "README.txt",
+    runtime / "iptv" / "README.txt",
     runtime / "radios_usuario" / "README.txt",
     runtime / "radios_usuario" / "Radio_Ilha_107_1.pls",
     runtime / "radios_usuario" / "Radio Massa.pls",
@@ -41,6 +49,7 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out
     out.write(BASE / "docs" / "INSTALL.md", "README_INSTALL.md")
     out.write(BASE / "LICENSE", "LICENSE")
     out.writestr("kplayer/installed-version.txt", VERSION + "\n")
+    out.writestr("kplayer/app-version.txt", VERSION + "\n")
     out.writestr("kplayer/update-manifest.json", json.dumps({
         "schema": 1, "version": VERSION,
         "update_files": ["kplayer/kplayer", "kplayer/kplayer.gptk",

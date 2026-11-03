@@ -41,6 +41,7 @@
 #include "vendor/stb_truetype.h"
 
 #include "i18n.h"
+#include "version.h"
 #include "network_location.h"
 
 #define W 640
@@ -72,6 +73,7 @@ static void radio_cancel_retries(void);
 /* 0 = off, 1 = repeat current item, 2 = repeat queue. */
 static int repeat_mode = 0;
 static bool shuffle_enabled = false;
+static bool playing_iptv = false;
 static long long resume_pending_ms = -1;
 static uint32_t resume_deadline;
 static uint32_t sleep_end;
@@ -567,6 +569,7 @@ static void stop_media(void) {
   if (player && active && !preview_mode && resume_pending_ms < 0) save_resume();
   active = false;
   playing_radio = false;
+  playing_iptv = false;
   if (player)
     libvlc_media_player_stop(player);
   pthread_mutex_lock(&video.mutex);
@@ -771,6 +774,8 @@ static void apply_theme(int index) {
 static void save_settings(void);
 // Online radio uses the same skin primitives and libVLC player.
 #include "radio.h"
+#include "iptv.h"
+#include "football.h"
 // First-run screens use the skin drawing helpers.
 #include "onboarding.h"
 /* Update operations run off the SDL thread. Output is one fixed status line. */
@@ -962,6 +967,20 @@ static void track_label(bool subtitle, char *out, size_t n) {
     }
   libvlc_track_description_list_release(list);
 }
+/* Stable action IDs are kept separate from their presentation order. */
+static const int option_groups[][8] = {
+  {0, 1, 2, 3, 4, 12, 16, -1},
+  {7, 13, 14, 17, -1, -1, -1, -1},
+  {5, 9, 11, 10, 15, 6, 8, -1}
+};
+static const int option_group_counts[] = {7, 4, 7};
+static const char *option_group_names[] = {"Reprodução", "Biblioteca", "Geral"};
+static int option_group_for(int id) {
+  for (int g = 0; g < 3; g++)
+    for (int n = 0; n < option_group_counts[g]; n++)
+      if (option_groups[g][n] == id) return g;
+  return 0;
+}
 static void draw_options(void) {
   color(bg);
   SDL_RenderClear(renderer);
@@ -971,12 +990,19 @@ static void draw_options(void) {
       tr("Velocidade"),    tr("Formato da imagem"), tr("Faixa de áudio"),
       tr("Legendas"),      tr("Modo de repetição"), tr("Idioma"),
       tr("Termos de uso"), tr("Favoritar faixa"),   tr("Sair do KPlayer"),
-      tr("Tema"), tr("Atualização"), tr("Localização por IP"), tr("Aleatório"), tr("Minhas favoritas"), tr("Retomar mídia"), tr("Timer de sono"), tr("Equalizador")};
-  int first = option > 11 ? option - 11 : 0;
-  for (int i = first; i < 17 && i < first + 12; i++) {
-    int y = 85 + (i - first) * 29;
-    rounded(24, y, 592, 27, 8, i == option ? elevated : panel);
-    label(names[i], 40, y + 8, 18, i == option ? accent : textc, 280);
+      tr("Tema"), tr("Atualização"), tr("Localização por IP"), tr("Aleatório"), tr("Minhas favoritas"), tr("Retomar mídia"), tr("Timer de sono"), tr("Equalizador"), tr("IPTV")};
+  int group = option_group_for(option);
+  for (int g = 0; g < 3; g++) {
+    int x = 24 + g * 199;
+    rounded(x, 85, 194, 32, 7, g == group ? accent : panel);
+    centered(tr(option_group_names[g]), x + 5, 93, 184, 14,
+             g == group ? bg : muted);
+  }
+  for (int row = 0; row < option_group_counts[group]; row++) {
+    int i = option_groups[group][row];
+    int y = 129 + row * 42;
+    rounded(24, y, 592, 37, 8, i == option ? elevated : panel);
+    label(names[i], 40, y + 10, 18, i == option ? accent : textc, 280);
     char value[256];
     switch (i) {
     case 0:
@@ -1045,9 +1071,12 @@ static void draw_options(void) {
     default:
       snprintf(value, sizeof(value), "%s", tr("Abrir"));
     }
-    label(value, 344, y + 8, 17, muted, 253);
+    label(value, 344, y + 10, 17, muted, 253);
   }
-  footer(tr("A Voltar    SELECT Fechar opções"));
+  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Alterar"},
+                              {"X", "Categorias"}, {"A", "Voltar"},
+                              {"SELECT", "Fechar"}};
+  footer_hints(hints, 5);
 }
 static void cycle_track(bool subtitle, int dir) {
   libvlc_track_description_t *list =
@@ -1159,6 +1188,9 @@ static void change_option(int dir) {
       if (!apply_equalizer()) { eq_choice = previous; notify(tr("Equalizador indisponível")); }
     } else notify(tr("Equalizador indisponível"));
     break;
+  case 17:
+    iptv_open();
+    break;
   }
   menu_dirty = true;
 }
@@ -1191,6 +1223,7 @@ static void key(SDL_Keycode k, bool repeat) {
     return;
   }
   if (radio_play_is_busy()) {
+    if (mode == 8 && !repeat) { iptv_key(k); return; }
     if (mode == 7 && k != SDLK_ESCAPE && k != SDLK_F1 && k != SDLK_TAB)
       radio_key(k, repeat);
     else if (!repeat)
@@ -1235,12 +1268,16 @@ static void key(SDL_Keycode k, bool repeat) {
     return;
   }
   if (mode == 2) {
+    int group = option_group_for(option), row = 0;
+    while (row < option_group_counts[group] && option_groups[group][row] != option) row++;
     if ((k == SDLK_BACKSPACE || k == SDLK_m) && !repeat)
       mode = return_mode;
     else if (k == SDLK_UP)
-      option = (option + 16) % 17;
+      option = option_groups[group][(row + option_group_counts[group] - 1) % option_group_counts[group]];
     else if (k == SDLK_DOWN)
-      option = (option + 1) % 17;
+      option = option_groups[group][(row + 1) % option_group_counts[group]];
+    else if (k == SDLK_SPACE && !repeat)
+      option = option_groups[(group + 1) % 3][0];
     else if (k == SDLK_LEFT && option != 10)
       change_option(-1);
     else if ((k == SDLK_RIGHT && option != 10) || (k == SDLK_RETURN && !repeat))
@@ -1249,9 +1286,9 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (mode == 3) {
     if (k == SDLK_LEFT || k == SDLK_UP)
-      dash_focus = (dash_focus + 3) % 4;
+      dash_focus = (dash_focus + 5) % 6;
     else if (k == SDLK_RIGHT || k == SDLK_DOWN)
-      dash_focus = (dash_focus + 1) % 4;
+      dash_focus = (dash_focus + 1) % 6;
     else if (k == SDLK_RETURN && !repeat) {
       favorites_view = false;
       category = dash_focus == 0 ? 1 : dash_focus == 1 ? 2 : 0;
@@ -1259,8 +1296,12 @@ static void key(SDL_Keycode k, bool repeat) {
         scan_automatic_media();
       else if (dash_focus == 2)
         show_locations();
-      else
+      else if (dash_focus == 3)
         radio_open();
+      else if (dash_focus == 4)
+        iptv_open();
+      else
+        football_open();
     } else if (k == SDLK_SPACE && !repeat && active)
       mode = playing_audio ? 4 : 1;
     else if (k == SDLK_m && !repeat)
@@ -1269,6 +1310,14 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (mode == 7) {
     radio_key(k, repeat);
+    return;
+  }
+  if (mode == 8) {
+    if (!repeat) iptv_key(k);
+    return;
+  }
+  if (mode == 9) {
+    if (!repeat) football_key(k);
     return;
   }
   if (mode == 0) {
@@ -1357,9 +1406,10 @@ static void key(SDL_Keycode k, bool repeat) {
     return;
   }
   if (k == SDLK_BACKSPACE && !repeat) {
+    bool was_iptv = playing_iptv;
     if (mode == 1)
       stop_media();
-    mode = 3;
+    mode = was_iptv ? 8 : 3;
     return;
   }
   if (k == SDLK_RETURN && !repeat)
@@ -1374,8 +1424,12 @@ static void key(SDL_Keycode k, bool repeat) {
       toggle_favorite();
     else
       open_options();
-  } else if ((k == SDLK_q || k == SDLK_e) && !repeat)
-    next_media(k == SDLK_q ? -1 : 1);
+  } else if ((k == SDLK_q || k == SDLK_e) && !repeat) {
+    if (playing_iptv && iptv_count) {
+      iptv_selected = (iptv_selected + (k == SDLK_q ? iptv_count - 1 : 1)) % iptv_count;
+      iptv_play_selected();
+    } else next_media(k == SDLK_q ? -1 : 1);
+  }
   else if (k == SDLK_LEFT || k == SDLK_RIGHT)
     seek_media(k == SDLK_LEFT ? -10000 : 10000);
   else if (k == SDLK_PAGEUP || k == SDLK_PAGEDOWN)
@@ -1474,7 +1528,7 @@ int main(int argc, char **argv) {
   if (!preview && !load_vlc())
     return 1;
   if (check) {
-    printf("K PLAYER 1.0.0 | SDL2 carregada | VLC %s\n", libvlc_get_version());
+    printf("K PLAYER %s | SDL2 carregada | VLC %s\n", KPLAYER_VERSION, libvlc_get_version());
     return 0;
   }
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER) < 0) {
@@ -1595,7 +1649,7 @@ int main(int argc, char **argv) {
     SDL_Quit();
     return 1;
   }
-  libvlc_set_user_agent(engine, "K PLAYER 1.0.0", "KPLAYER/1.0.0");
+  libvlc_set_user_agent(engine, "K PLAYER " KPLAYER_VERSION, "KPLAYER/" KPLAYER_VERSION);
   player = libvlc_media_player_new(engine);
   if (!player) {
     libvlc_release(engine);
@@ -1654,12 +1708,14 @@ int main(int argc, char **argv) {
       if (playing_radio && state == libvlc_Playing) radio_note_playing();
       else if (playing_radio) radio_stable_since = 0;
       if (state == libvlc_Error) {
+        bool was_iptv = playing_iptv;
         bool was_radio = playing_radio;
         if (was_radio) { active = false; playing_radio = false; paused = false; radio_schedule_retry(); }
         else stop_media();
         notify(tr("Falha na reprodução. Consulte log.txt"));
         if (was_radio)
           mode = 7;
+        else if (was_iptv) mode = 8;
       } else if (state == libvlc_Ended) {
         if (playing_radio) {
           active = false;
@@ -1667,6 +1723,9 @@ int main(int argc, char **argv) {
           paused = false;
           radio_schedule_retry();
           mode = 7;
+        } else if (playing_iptv) {
+          stop_media();
+          mode = 8;
         } else if (repeat_mode == 1) {
           play_path(current_path);
         } else if (playing_audio && queue_advance(1, true))
@@ -1691,6 +1750,10 @@ int main(int argc, char **argv) {
       draw_terms();
     else if (mode == 7)
       draw_radio();
+    else if (mode == 9)
+      draw_football();
+    else if (mode == 8)
+      draw_iptv();
     else
       draw_menu();
     SDL_RenderPresent(renderer);

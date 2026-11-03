@@ -19,6 +19,7 @@ API = "https://api.github.com/repos/" + REPO + "/releases/latest"
 GAME = Path(__file__).resolve().parent
 PORTS = GAME.parent
 VERSION = GAME / "installed-version.txt"
+APP_VERSION = GAME / "app-version.txt"
 ALLOWED = ("kplayer/kplayer", "kplayer/kplayer.gptk",
            "kplayer/lib/libvlc.so.5", "kplayer/lib/libvlccore.so.9",
            "kplayer/fonts/Interface.ttf", "kplayer/fonts/Bold.ttf")
@@ -45,7 +46,12 @@ class HTTPSOnly(urllib.request.HTTPRedirectHandler):
 def get(url, limit):
     if not url.startswith("https://"):
         raise ValueError("Endereço inseguro")
-    req = urllib.request.Request(url, headers={"User-Agent": "KPlayer/1.0.0",
+    current = VERSION if VERSION.exists() else APP_VERSION
+    try:
+        agent_version = ".".join(map(str, version(current.read_text(encoding="ascii").strip())))
+    except (OSError, ValueError):
+        agent_version = "unknown"
+    req = urllib.request.Request(url, headers={"User-Agent": "KPlayer/" + agent_version,
                                                "Accept": "application/vnd.github+json"})
     with urllib.request.build_opener(HTTPSOnly()).open(req, timeout=15) as response:
         data = response.read(limit + 1)
@@ -271,7 +277,9 @@ def main():
         if len(sys.argv) == 2 and sys.argv[1] == "recover":
             print("RECOVERED" if recover_transaction(PORTS) else "NO_TRANSACTION")
             return 0
-        installed = VERSION.read_text(encoding="ascii").strip() if VERSION.exists() else "1.0.0"
+        installed = (VERSION.read_text(encoding="ascii").strip() if VERSION.exists()
+                     else APP_VERSION.read_text(encoding="ascii").strip() if APP_VERSION.exists()
+                     else "1.0.0")
         found = get_release(installed)
         if not found:
             print("LATEST")

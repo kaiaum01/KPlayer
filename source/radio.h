@@ -11,6 +11,7 @@ typedef struct {
   char codec[24];
   char favicon[1024];
   int bitrate;
+  bool is_iptv;
 } RadioStation;
 
 static RadioStation radio_stations[RADIO_MAX_STATIONS];
@@ -19,7 +20,63 @@ static int radio_count = 0, radio_selected = 0, radio_filter = 0;
 static bool radio_loading = false;
 static char radio_error[128];
 static const char *radio_filter_names[] = {"Brasil", "Mais ouvidas", "Pop",
-                                           "Rock", "Notícias", "Rádio do Usuário"};
+                                           "Rock", "Notícias", "Rádio do Usuário", "Favoritas"};
+
+/* The favorites file is independent of user-created playlists. */
+static int radio_load_favorites(RadioStation *out, int max) {
+  FILE *f = fopen("radio-favorites.tsv", "r");
+  if (!f) return 0;
+  char line[1600];
+  int count = 0;
+  while (count < max && fgets(line, sizeof(line), f)) {
+    if (!strchr(line, '\n') && !feof(f)) {
+      int c; while ((c = fgetc(f)) != '\n' && c != EOF) {}
+      continue;
+    }
+    line[strcspn(line, "\r\n")] = 0;
+    char *tab = strchr(line, '\t');
+    if (!tab) continue;
+    *tab++ = 0;
+    size_t name_len = strlen(line), url_len = strlen(tab);
+    if (!line[0] || strchr(tab, '\t') || name_len >= sizeof(out[0].name) ||
+        url_len >= sizeof(out[0].url) ||
+        (strncmp(tab, "http://", 7) && strncmp(tab, "https://", 8))) continue;
+    memset(&out[count], 0, sizeof(out[count]));
+    memcpy(out[count].name, line, name_len + 1);
+    memcpy(out[count].url, tab, url_len + 1);
+    snprintf(out[count].codec, sizeof(out[count].codec), "STREAM");
+    count++;
+  }
+  fclose(f);
+  return count;
+}
+
+static bool radio_toggle_favorite(const RadioStation *station) {
+  if (!station || !station->name[0] || !station->url[0] ||
+      strpbrk(station->url, "\r\n\t")) return false;
+  RadioStation list[RADIO_MAX_STATIONS];
+  int count = radio_load_favorites(list, RADIO_MAX_STATIONS), index = -1;
+  for (int i = 0; i < count; i++) if (!strcmp(list[i].url, station->url)) { index = i; break; }
+  if (index >= 0) {
+    memmove(&list[index], &list[index + 1], (size_t)(count - index - 1) * sizeof(list[0]));
+    count--;
+  } else {
+    if (count >= RADIO_MAX_STATIONS) return false;
+    list[count++] = *station;
+  }
+  FILE *f = fopen("radio-favorites.tmp", "w");
+  if (!f) return false;
+  bool ok = true;
+  for (int i = 0; i < count; i++) {
+    char name[sizeof(list[i].name)];
+    snprintf(name, sizeof(name), "%s", list[i].name);
+    for (char *s = name; *s; s++) if (*s == '\t' || *s == '\r' || *s == '\n') *s = ' ';
+    if (fprintf(f, "%s\t%s\n", name, list[i].url) < 0) ok = false;
+  }
+  if (fclose(f)) ok = false;
+  if (ok && rename("radio-favorites.tmp", "radio-favorites.tsv") == 0) return true;
+  return false;
+}
 
 /* The optional curl executable downloads one logo at a time off the UI thread.
  * SDL texture creation and destruction remain on the rendering thread. */
@@ -255,7 +312,7 @@ static bool radio_http_get(const char *path, char **body_out) {
     char request[1024];
     int request_size = snprintf(
         request, sizeof(request),
-        "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: KPlayer/1.0.0 "
+        "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: KPlayer/" KPLAYER_VERSION " "
         "(PortMaster; R36S)\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
         path, hosts[host_i]);
     if (request_size <= 0 || request_size >= (int)sizeof(request)) {
@@ -383,7 +440,9 @@ static void *radio_catalog_worker(void *argument) {
   char *body = NULL;
   RadioStation found[RADIO_MAX_STATIONS];
   int count = 0;
-  if (filter == 5) {
+  if (filter == 6) {
+    count = radio_load_favorites(found, RADIO_MAX_STATIONS);
+  } else if (filter == 5) {
     count = radio_read_user_folder("radios_usuario", found, RADIO_MAX_STATIONS);
   } else if (radio_http_get(radio_path_for_filter(filter), &body)) {
     count = radio_parse_stations(body, found, RADIO_MAX_STATIONS);
@@ -396,7 +455,7 @@ static void *radio_catalog_worker(void *argument) {
     if (count)
       memcpy(radio_stations, found, (size_t)count * sizeof(*found));
     snprintf(radio_error, sizeof(radio_error), "%s",
-             count ? "" : filter == 5 ? "Nenhuma rádio do usuário" : "Sem conexão ou nenhuma estação encontrada");
+             count ? "" : filter == 6 ? "Nenhuma rádio favorita" : filter == 5 ? "Nenhuma rádio do usuário" : "Sem conexão ou nenhuma estação encontrada");
     radio_loading = false;
     pthread_mutex_unlock(&radio_mutex);
     return NULL;
@@ -552,6 +611,7 @@ static void *radio_play_worker(void *unused) {
 static void radio_start_async(RadioStation station) {
   active = false;
   playing_radio = false;
+  playing_iptv = false;
   paused = false;
   pthread_mutex_lock(&video.mutex);
   video.ready = false;
@@ -586,7 +646,11 @@ static void radio_poll_play(void) {
   radio_play_queued = false;
   pthread_mutex_unlock(&radio_play_mutex);
   if (queued) { radio_start_async(next); return; }
-  if (!success) { radio_current_station = station; radio_schedule_retry(); return; }
+  if (!success) {
+    if (station.is_iptv) { notify(tr("Não foi possível abrir o canal")); mode = 8; }
+    else { radio_current_station = station; radio_schedule_retry(); }
+    return;
+  }
   radio_current_station = station;
   radio_nowplaying[0] = 0;
   radio_nowplaying_next = 0;
@@ -600,9 +664,12 @@ static void radio_poll_play(void) {
   media_sample_rate = media_channels = 0;
   media_bitrate_kbps = station.bitrate > 0 ? (unsigned)station.bitrate : 0;
   lyric_count = plain_count = 0;
-  active = playing_audio = playing_radio = true;
+  active = true;
+  playing_audio = playing_radio = !station.is_iptv;
+  playing_iptv = station.is_iptv;
+  if (station.is_iptv) { mode = 1; show_osd = true; osd_until = SDL_GetTicks() + 3000; }
   paused = false;
-  radio_register_click(station.uuid);
+  if (!station.is_iptv) radio_register_click(station.uuid);
 }
 
 static void radio_play_selected(void) {
@@ -720,15 +787,15 @@ static void draw_radio(void) {
   centered(play_status, 52, 396, 152, 10, playing_radio ? accent : muted);
 
   rounded(252, 46, 372, 384, 10, panel);
-  label(tr(radio_filter == 5 ? "Rádio do Usuário" : "Estações"), 264, 57, 16, textc, 235);
+  label(tr(radio_filter == 5 ? "Rádio do Usuário" : radio_filter == 6 ? "Favoritas" : "Estações"), 264, 57, 16, textc, 235);
   char station_count[48];
   snprintf(station_count, sizeof(station_count), "%d %s", count,
            tr("estações"));
   label(station_count, 516, 62, 11, muted, 96);
-  for (int i = 0; i < 6; i++) {
-    int x = 264 + i * 58;
-    rounded(x, 82, 55, 23, 5, i == radio_filter ? accent : elevated);
-    centered(tr(radio_filter_names[i]), x + 1, 88, 53, i == 5 ? 7 : 9,
+  for (int i = 0; i < 7; i++) {
+    int x = 264 + i * 49;
+    rounded(x, 82, 46, 23, 5, i == radio_filter ? accent : elevated);
+    centered(tr(radio_filter_names[i]), x + 1, 88, 44, i == 5 ? 6 : 8,
              i == radio_filter ? bg : muted);
   }
   if (loading) {
@@ -764,8 +831,10 @@ static void draw_radio(void) {
       label(bitrate, 526, y + 27, 10, muted, 76);
     }
   }
-  footer(tr("Cima/Baixo Estação   Esq/Dir Categoria   B Ouvir/Pausar   A "
-            "Início   Y Atualizar   SELECT Opções"));
+  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Ouvir"},
+      {"X", "Favorita"}, {"Y", "Atualizar"}, {"A", "Início"},
+      {"SELECT", "Opções"}};
+  footer_hints(hints, 6);
 }
 
 static void radio_key(SDL_Keycode key, bool repeat) {
@@ -783,10 +852,18 @@ static void radio_key(SDL_Keycode key, bool repeat) {
   pthread_mutex_unlock(&radio_mutex);
   if ((key == SDLK_LEFT || key == SDLK_RIGHT) && !repeat) {
     pthread_mutex_lock(&radio_mutex);
-    radio_filter = (radio_filter + (key == SDLK_LEFT ? 5 : 1)) % 6;
+    radio_filter = (radio_filter + (key == SDLK_LEFT ? 6 : 1)) % 7;
     radio_count = radio_selected = 0;
     pthread_mutex_unlock(&radio_mutex);
     radio_refresh();
+  } else if (key == SDLK_SPACE && !repeat && count) {
+    pthread_mutex_lock(&radio_mutex);
+    RadioStation station = radio_stations[radio_selected];
+    pthread_mutex_unlock(&radio_mutex);
+    if (radio_toggle_favorite(&station)) {
+      notify(tr("Favorita atualizada"));
+      if (radio_filter == 6) radio_refresh();
+    } else notify(tr("Não foi possível salvar. Verifique o cartão."));
   } else if (key == SDLK_RETURN && !repeat)
     radio_play_selected();
   else if (key == SDLK_m && !repeat)

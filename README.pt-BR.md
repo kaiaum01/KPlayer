@@ -1,10 +1,10 @@
-# KPlayer 1.0.0
+# KPlayer 1.0.4
 
 Um player de músicas, vídeos e rádios online para dispositivos portáteis, pensado para **R36S com dArkOS e PortMaster**. A interface é feita em C e SDL2, com reprodução baseada na libVLC, e foi desenhada para telas de 640 × 480 e botões físicos.
 
 [English](README.md) · [Como instalar](docs/INSTALL.md) · [Controles](docs/CONTROLS.md) · [Mídias e letras](docs/MEDIA.md) · [Licenças e créditos](THIRD_PARTY.md) · [Publicar no GitHub](PUBLICACAO-1.0.0.md)
 
-> **Estado do projeto:** versão 1.0.0 candidata, com atualização automática experimental. A correção anterior do rádio foi relatada como funcional no aparelho, mas este pacote, seus temas, indicador de carregamento e atualizador ainda precisam de teste físico. O código Android é experimental e não faz parte do port R36S.
+> **Estado do projeto:** versão 1.0.4 experimental, com atualização automática experimental. Esta integração IPTV ainda precisa de teste físico no aparelho. O código Android é experimental e não faz parte do port R36S.
 
 ## Prévia
 
@@ -20,10 +20,13 @@ Estas imagens foram renderizadas a partir das telas do programa em um computador
 
 ## O que o KPlayer oferece
 
+- **Futebol experimental:** abra **Futebol** na tela inicial para consultar jogos ao vivo, placares e competições disponíveis no Golazo. Use o direcional para navegar, **Y** para atualizar e **A** para voltar. Precisa de internet; a disponibilidade de ligas e jogos depende da fonte do Golazo. Não transmite partidas. Se a atualização falhar, dados antigos são identificados como possivelmente desatualizados.
 - Reprodução local de músicas e vídeos, com codecs e plugins disponibilizados pelo sistema.
 - Busca de mídias em `kplayer/midias`, `/roms` e `/roms2`, além de navegação por pastas e indicador de carregamento.
 - Metadados, capa, fila, próxima faixa e letras locais `.lrc` ou embutidas quando suportadas. Não baixa letras da internet.
 - Rádio online via Radio Browser e aba **Rádio do Usuário** para listas próprias.
+- **IPTV experimental:** abra **IPTV** na tela inicial ou em **Opções → Biblioteca → IPTV**; pressione **X** para alternar entre Brasil, Mundo e listas próprias. A lista mostra nome, categoria, ID e logo do canal selecionado quando disponíveis. Logos JPEG/PNG são baixados em segundo plano usando `curl`; imagens SVG não são suportadas. As listas online vêm de [iptv-com/iptv](https://github.com/iptv-com/iptv) e têm cache separado; **Y** atualiza. Listas próprias M3U/M3U8 podem ser colocadas em `ports/kplayer/iptv/`. Limite de 2.048 entradas por fonte e 4 MiB por arquivo. Sem EPG nesta versão. Alguns canais podem não funcionar; verifique disponibilidade e direitos de cada transmissão. Integração não testada no R36S.
+- Na tela de rádio, X marca ou desmarca a estação selecionada; esquerda/direita permite abrir a categoria **Favoritas**. A lista salva nomes e endereços em `radio-favorites.tsv`.
 - A rádio tenta reconectar até três vezes após falha ou término e mostra a música atual quando a emissora envia metadados compatíveis. A libVLC pode continuar bloqueada durante uma conexão; valide no aparelho.
 - Sete temas, interface em português brasileiro, inglês e espanhol, tela de boas-vindas e termos de uso.
 - Controles de reprodução, proporção e faixas de áudio/legendas quando disponíveis.
@@ -35,6 +38,7 @@ Estas imagens foram renderizadas a partir das telas do programa em um computador
 
 ## Requisitos
 
+- A versão com Futebol precisa dos arquivos `golazo` e `football_fetch.py` gerados/incluídos no pacote pelo GitHub Actions, além de `python3`. Faça a instalação manual desse pacote: o atualizador das versões anteriores não instala esses novos arquivos.
 - R36S ARM64, firmware dArkOS compatível e PortMaster configurado. A compatibilidade com outros aparelhos/firmwares não foi garantida.
 - SDL2, saída de áudio e plugins VLC compatíveis disponibilizados pelo sistema. O pacote inclui as bibliotecas do núcleo libVLC; os codecs/plugins não vêm todos nele.
 - Internet para rádio e atualizações; `python3` com HTTPS para o atualizador. Logos de rádio podem depender de `curl` e suporte a JPEG/PNG.
@@ -87,7 +91,7 @@ O catálogo e as transmissões de rádio acessam serviços de terceiros. A local
 - **Atualização não aparece:** precisa haver uma release pública mais nova com os arquivos compatíveis, Python 3 e internet. Rascunhos e pré-releases não são utilizados.
 - **Interface parece parada ao pesquisar:** a busca é síncrona e o indicador pode parar enquanto o cartão responde.
 
-Ao relatar um problema, informe firmware, aparelho, passos para reproduzir e o log após remover dados pessoais. Faça backup de `midias/`, `radios_usuario/`, `settings.cfg`, `preferences.cfg` e `favorites.cfg`.
+Ao relatar um problema, informe firmware, aparelho, passos para reproduzir e o log após remover dados pessoais. Faça backup de `midias/`, `radios_usuario/`, `settings.cfg`, `preferences.cfg`, `favorites.cfg`, `radio-favorites.tsv` e `resume.cfg`.
 
 ## Compilação e licença
 

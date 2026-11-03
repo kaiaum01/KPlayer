@@ -103,7 +103,7 @@ static void *network_location_worker(void *unused) {
 
   static const char request[] =
       "GET /json/?fields=status,message,city,region,countryCode,offset "
-      "HTTP/1.0\r\nHost: ip-api.com\r\nUser-Agent: KPlayer/1.0.0\r\n"
+      "HTTP/1.0\r\nHost: ip-api.com\r\nUser-Agent: KPlayer/" KPLAYER_VERSION "\r\n"
       "Connection: close\r\n\r\n";
   size_t sent = 0;
   while (sent < sizeof(request) - 1) {

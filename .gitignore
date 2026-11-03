@@ -11,6 +11,10 @@
 /ports/kplayer/favorites.cfg
 /ports/kplayer/resume.cfg
 /ports/kplayer/resume.tmp
+/ports/kplayer/radio-favorites.tsv
+/ports/kplayer/radio-favorites.tmp
+/ports/kplayer/iptv/*.m3u
+/ports/kplayer/iptv/*.m3u8
 /output/
 *.bmp
 .*.tar.xz.*
