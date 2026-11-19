@@ -1,61 +1,110 @@
-name: Compilar KPlayer R36S
+name: KPlayer - Build R36S
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags:
+      - "v*.*.*"
     paths:
-      - 'source/**'
-      - 'ports/**'
-      - 'tools/package_release.py'
-      - '.github/workflows/r36s-build.yml'
+      - "source/**"
+      - "ports/**"
+      - "tests/**"
+      - "tools/**"
+      - "upstream/**"
+      - "patches/**"
+      - "build.sh"
+      - ".github/workflows/r36s-build.yml"
   pull_request:
+    branches: [main]
     paths:
-      - 'source/**'
-      - 'ports/**'
-      - 'tools/package_release.py'
-      - '.github/workflows/r36s-build.yml'
+      - "source/**"
+      - "ports/**"
+      - "tests/**"
+      - "tools/**"
+      - "upstream/**"
+      - "patches/**"
+      - "build.sh"
+      - ".github/workflows/r36s-build.yml"
 
 permissions:
   contents: read
 
 jobs:
   build-r36s:
+    name: Compile ARM64 / R36S
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 120
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.x'
-      - name: Compilar Golazo para R36S
-        env:
-          GOPATH: ${{ runner.temp }}/golazo-gopath
-        run: |
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go install github.com/0xjuanma/golazo@latest
-          cp "$GOPATH/bin/linux_arm64/golazo" ports/kplayer/golazo
-      - name: Instalar compilador ARM64
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libsdl2-2.0-0
-      - name: Testar interface e metadados com sanitizadores
+          sudo apt-get install -y \
+            build-essential \
+            libsdl2-dev \
+            python3 \
+            python3-venv \
+            python3-pip \
+            patch \
+            xz-utils \
+            file
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: false
+
+      - name: Build Golazo for Linux ARM64
+        env:
+          GOBIN: ${{ runner.temp }}/go-bin
+        run: |
+          mkdir -p "$GOBIN"
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+            go install github.com/0xjuanma/golazo@latest
+          install -m 755 "$GOBIN/golazo" ports/kplayer/golazo
+
+      - name: Run native C tests
         run: |
           mkdir -p output
-          gcc -O1 -g -fsanitize=address,undefined -I source/include tests/test_native.c -o output/test-native -ldl -lpthread -lm
-          gcc -O1 -g -fsanitize=address,undefined tests/test_tags.c -o output/test-tags
+          gcc -O1 -g -fsanitize=address,undefined \
+            -I source/include tests/test_native.c \
+            -o output/test-native -ldl -lpthread -lm
+          gcc -O1 -g -fsanitize=address,undefined \
+            tests/test_tags.c -o output/test-tags
           ASAN_OPTIONS=detect_leaks=0 output/test-tags
-          (cd ports/kplayer && SDL_VIDEODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
-      - name: Compilar frontend para R36S
+          (
+            cd ports/kplayer
+            SDL_VIDEODRIVER=dummy \
+              ASAN_OPTIONS=detect_leaks=0 ../../output/test-native
+          )
+
+      - name: Run football data tests
+        run: python3 -m unittest discover -s tests -p "test_football.py" -v
+
+      - name: Build VLC engine and KPlayer for ARM64
+        env:
+          JOBS: "2"
         run: |
-          aarch64-linux-gnu-gcc -O2 -std=gnu11 -Wall -Wextra -Werror \
-            -I source/include source/kplayer.c -o ports/kplayer/kplayer \
-            -ldl -lpthread -lm
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Assemble R36S runtime
+        run: |
+          install -D -m 755 output/kplayer ports/kplayer/kplayer
+          install -D -m 755 output/lib/libvlc.so.5 ports/kplayer/lib/libvlc.so.5
+          install -D -m 755 output/lib/libvlccore.so.9 ports/kplayer/lib/libvlccore.so.9
           file ports/kplayer/kplayer
-      - name: Testar conversão dos placares
-        run: python3 -m unittest discover -s tests -p test_football.py -v
-      - name: Criar pacote instalável
+          readelf -h ports/kplayer/kplayer | grep -E "Class:|Machine:"
+
+      - name: Create install ZIP and SHA256
         run: python3 tools/package_release.py
-      - name: Disponibilizar pacote e checksum
+
+      - name: Upload R36S package
         uses: actions/upload-artifact@v4
         with:
           name: KPlayer-R36S-${{ github.run_number }}
@@ -64,3 +113,15 @@ jobs:
             releases/KPlayer-v*-R36S.zip.sha256
           if-no-files-found: error
           retention-days: 30
+
+      - name: Create draft GitHub release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: KPlayer ${{ github.ref_name }} - R36S / dArkOS
+          body_path: releases/RELEASE_NOTES.md
+          fail_on_unmatched_files: true
+          files: |
+            releases/KPlayer-v*-R36S.zip
+            releases/KPlayer-v*-R36S.zip.sha256
