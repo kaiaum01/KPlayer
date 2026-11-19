@@ -74,7 +74,6 @@ static void radio_cancel_retries(void);
 static int repeat_mode = 0;
 static bool shuffle_enabled = false;
 static bool playing_iptv = false;
-static bool youtube_playing = false;
 static long long resume_pending_ms = -1;
 static uint32_t resume_deadline;
 static uint32_t sleep_end;
@@ -287,40 +286,19 @@ static void label(const char *s, int x, int y, int size, SDL_Color c,
   SDL_Rect r = {x - 2, y - 2, t->w, t->h};
   SDL_RenderCopy(renderer, t->texture, NULL, &r);
 }
-/* Indeterminate: there is no known total until traversal has finished.  SDL
- * remains on the main thread; refresh periodically while entries are read. */
-static uint32_t loading_last_frame;
 static bool scan_cancelled;
-static void loading_screen(const char *message, int found, bool force) {
-  SDL_Event event;
-  while (SDL_PollEvent(&event)) {
-    if (event.type == SDL_QUIT) { scan_cancelled = true; running = 0; }
-    else if (event.type == SDL_KEYDOWN && !event.key.repeat &&
-             (event.key.keysym.sym == SDLK_BACKSPACE || event.key.keysym.sym == SDLK_ESCAPE))
-      scan_cancelled = true;
+static Item cached_media[MAX_FILES];
+static int cached_media_total = 0;
+static bool media_preloaded = false;
+static bool media_cache_capped = false;
+static void clear_cached_media(void) {
+  for (int i = 0; i < cached_media_total; i++) {
+    free(cached_media[i].name);
+    free(cached_media[i].path);
   }
-  if (!renderer || !fontdata || !bolddata || !p_SDL_GetTicks) return;
-  uint32_t tick = SDL_GetTicks();
-  if (!force && tick - loading_last_frame < 80) return;
-  loading_last_frame = tick;
-  backdrop();
-  panel_card(88, 142, 464, 190, 18);
-  const char *title_text = tr(message);
-  int title_x = (W - (int)measure(title_text, 23)) / 2;
-  label(title_text, title_x, 174, 23, textc, 410);
-  const char *subtitle = tr("Aguarde, procurando arquivos...");
-  int sub_x = (W - (int)measure(subtitle, 14)) / 2;
-  label(subtitle, sub_x, 211, 14, muted, 410);
-  rounded(132, 248, 376, 14, 7, track_color());
-  int segment = (int)((tick / 6) % 594);
-  if (segment > 297) segment = 594 - segment;
-  rounded(134 + segment, 250, 76, 10, 5, accent);
-  char count_text[96];
-  snprintf(count_text, sizeof(count_text), "%s: %d", tr("Arquivos encontrados"), found);
-  int count_x = (W - (int)measure(count_text, 13)) / 2;
-  label(count_text, count_x, 278, 13, muted, 410);
-  label(tr("A Cancelar busca"), 240, 306, 13, muted, 240);
-  SDL_RenderPresent(renderer);
+  cached_media_total = 0;
+  media_preloaded = false;
+  media_cache_capped = false;
 }
 static void notify(const char *message) {
   snprintf(status_note, sizeof(status_note), "%s", message);
@@ -379,7 +357,6 @@ static void scan(void) {
   }
   scan_cancelled = false;
   folder_error[0] = 0;
-  loading_screen("Carregando arquivos", 0, true);
   clear_items();
   selected = offset = 0;
   DIR *d = opendir(folder);
@@ -394,8 +371,6 @@ static void scan(void) {
   struct dirent *e;
   bool capped = false;
   while ((e = readdir(d))) {
-    loading_screen("Carregando arquivos", total, false);
-    if (scan_cancelled) break;
     if (e->d_name[0] == '.')
       continue;
     char path[PATH_MAX];
@@ -427,29 +402,27 @@ static void scan(void) {
   qsort(items, total, sizeof(*items), sort_items);
   if (capped)
     notify(tr("Limite de 4096 itens: organize em subpastas"));
-  else if (scan_cancelled)
-    notify(tr("Busca cancelada"));
   menu_dirty = true;
 }
-static bool automatic_has_path(const char *path) {
-  for (int i = 0; i < total; i++)
-    if (items[i].path && !strcmp(items[i].path, path))
+static bool cache_has_path(const char *path) {
+  for (int i = 0; i < cached_media_total; i++)
+    if (cached_media[i].path && !strcmp(cached_media[i].path, path))
       return true;
   return false;
 }
-static void automatic_scan_tree(const char *base, int depth, bool *capped) {
-  if (scan_cancelled || depth > 32 || total >= MAX_FILES) {
-    *capped = total >= MAX_FILES;
+static void boot_scan_tree(const char *base, int depth, int media_filter,
+                           bool *capped, void (*on_tick)(int)) {
+  if (scan_cancelled || depth > 8 || cached_media_total >= MAX_FILES) {
+    *capped = cached_media_total >= MAX_FILES;
     return;
   }
   DIR *d = opendir(base);
   if (!d)
     return;
   struct dirent *e;
-  while ((e = readdir(d)) && total < MAX_FILES) {
-    loading_screen(category == 1 ? "Carregando músicas" : "Carregando vídeos",
-                   total, false);
-    if (scan_cancelled) break;
+  while ((e = readdir(d)) && cached_media_total < MAX_FILES) {
+    if (on_tick) on_tick(cached_media_total);
+    if (scan_cancelled || !running) break;
     if (e->d_name[0] == '.')
       continue;
     char path[PATH_MAX];
@@ -460,13 +433,15 @@ static void automatic_scan_tree(const char *base, int depth, bool *capped) {
     if (lstat(path, &lst) || S_ISLNK(lst.st_mode) || stat(path, &st))
       continue;
     if (S_ISDIR(st.st_mode)) {
-      automatic_scan_tree(path, depth + 1, capped);
+      boot_scan_tree(path, depth + 1, media_filter, capped, on_tick);
       continue;
     }
     if (!S_ISREG(st.st_mode) || st.st_size < 50 * 1024 ||
-        !supported(e->d_name) || (category == 1 && !audio_file(e->d_name)) ||
-        (category == 2 && audio_file(e->d_name)) || automatic_has_path(path) ||
-        (favorites_view && !is_favorite_path(path)))
+        !supported(e->d_name) || cache_has_path(path))
+      continue;
+    if (media_filter == 1 && !audio_file(e->d_name))
+      continue;
+    if (media_filter == 2 && audio_file(e->d_name))
       continue;
     char *name = strdup(e->d_name), *stored_path = strdup(path);
     if (!name || !stored_path) {
@@ -475,38 +450,64 @@ static void automatic_scan_tree(const char *base, int depth, bool *capped) {
       *capped = true;
       break;
     }
-    items[total++] = (Item){name, stored_path, false, st.st_size};
+    cached_media[cached_media_total++] = (Item){name, stored_path, false, st.st_size};
   }
-  if (total >= MAX_FILES)
+  if (cached_media_total >= MAX_FILES)
     *capped = true;
   closedir(d);
 }
-static void scan_automatic_media(void) {
+static void boot_index_media(void (*on_tick)(int)) {
   scan_cancelled = false;
-  loading_screen(category == 1 ? "Carregando músicas" : "Carregando vídeos",
-                 0, true);
+  clear_cached_media();
+  bool capped = false;
+  for (size_t i = 0;
+       i < sizeof(automatic_roots) / sizeof(*automatic_roots) && !capped && !scan_cancelled; i++) {
+    char resolved[PATH_MAX];
+    if (realpath(automatic_roots[i].path, resolved))
+      boot_scan_tree(resolved, 0, automatic_roots[i].kind, &capped, on_tick);
+  }
+  qsort(cached_media, cached_media_total, sizeof(*cached_media), sort_items);
+  media_cache_capped = capped;
+  media_preloaded = true;
+}
+static void populate_automatic_from_cache(void) {
   clear_items();
   selected = offset = 0;
   folder_error[0] = 0;
   automatic_view = true;
   locations_view = false;
-  bool capped = false;
-  for (size_t i = 0;
-       i < sizeof(automatic_roots) / sizeof(*automatic_roots) && !capped && !scan_cancelled; i++) {
-    char resolved[PATH_MAX];
-    if (realpath(automatic_roots[i], resolved))
-      automatic_scan_tree(resolved, 0, &capped);
+  for (int i = 0; i < cached_media_total && total < MAX_FILES; i++) {
+    const char *nm = cached_media[i].name;
+    const char *pt = cached_media[i].path;
+    if (!nm || !pt) continue;
+    if ((category == 1 && !audio_file(nm)) || (category == 2 && audio_file(nm)))
+      continue;
+    if (favorites_view && !is_favorite_path(pt))
+      continue;
+    char *name = strdup(nm), *stored_path = strdup(pt);
+    if (!name || !stored_path) {
+      free(name);
+      free(stored_path);
+      break;
+    }
+    items[total++] = (Item){name, stored_path, false, cached_media[i].size};
   }
-  qsort(items, total, sizeof(*items), sort_items);
-  if (!total && !scan_cancelled)
+  if (!total)
     snprintf(folder_error, sizeof(folder_error), "%s",
              tr(favorites_view ? "Nenhuma favorita encontrada" : "Nenhuma mídia acima de 50 KB encontrada"));
-  if (capped)
+  if (media_cache_capped)
     notify(tr("Limite de 4096 itens: organize em subpastas"));
-  else if (scan_cancelled)
-    notify(tr("Busca cancelada"));
   mode = 0;
   menu_dirty = true;
+}
+static void scan_automatic_media(void) {
+  if (!media_preloaded)
+    boot_index_media(NULL);
+  populate_automatic_from_cache();
+}
+static void rescan_automatic_media(void) {
+  boot_index_media(NULL);
+  populate_automatic_from_cache();
 }
 static unsigned format_video(void **opaque, char *chroma, unsigned *width,
                              unsigned *height, unsigned *pitches,
@@ -571,7 +572,6 @@ static void stop_media(void) {
   active = false;
   playing_radio = false;
   playing_iptv = false;
-  youtube_playing = false;
   if (player)
     libvlc_media_player_stop(player);
   pthread_mutex_lock(&video.mutex);
@@ -780,7 +780,7 @@ static void save_settings(void);
 #include "radio.h"
 #include "iptv.h"
 #include "football.h"
-#include "youtube.h"
+#include "splash.h"
 // First-run screens use the skin drawing helpers.
 #include "onboarding.h"
 /* Update operations run off the SDL thread. Output is one fixed status line. */
@@ -1245,13 +1245,27 @@ static void key(SDL_Keycode k, bool repeat) {
     return;
   }
   if (mode == 5) {
-    if (k == SDLK_LEFT || k == SDLK_UP)
-      language = (language + 2) % 3;
-    else if (k == SDLK_RIGHT || k == SDLK_DOWN)
-      language = (language + 1) % 3;
-    else if (k == SDLK_m && !repeat)
+    if (k == SDLK_UP || k == SDLK_DOWN)
+      welcome_focus = 1 - welcome_focus;
+    else if (k == SDLK_LEFT) {
+      if (welcome_focus == 0)
+        language = (language + 2) % 3;
+      else
+        apply_theme((theme_index + THEME_COUNT - 1) % THEME_COUNT);
+    } else if (k == SDLK_RIGHT) {
+      if (welcome_focus == 0)
+        language = (language + 1) % 3;
+      else
+        apply_theme((theme_index + 1) % THEME_COUNT);
+    } else if (k == SDLK_PAGEUP) {
+      welcome_focus = 1;
+      apply_theme((theme_index + THEME_COUNT - 1) % THEME_COUNT);
+    } else if (k == SDLK_PAGEDOWN) {
+      welcome_focus = 1;
+      apply_theme((theme_index + 1) % THEME_COUNT);
+    } else if (k == SDLK_m && !repeat)
       open_terms(5);
-    else if (k == SDLK_RETURN && !repeat)
+    else if ((k == SDLK_RETURN || k == SDLK_SPACE) && !repeat)
       finish_onboarding();
     return;
   }
@@ -1304,7 +1318,7 @@ static void key(SDL_Keycode k, bool repeat) {
       else if (dash_focus == 4)
         iptv_open();
       else if (dash_focus == 5)
-        youtube_open();
+        football_open();
     } else if (k == SDLK_SPACE && !repeat && active)
       mode = playing_audio ? 4 : 1;
     else if (k == SDLK_m && !repeat)
@@ -1321,10 +1335,6 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (mode == 9) {
     if (!repeat) football_key(k);
-    return;
-  }
-  if (mode == 10) {
-    if (!repeat) youtube_key(k);
     return;
   }
   if (mode == 0) {
@@ -1362,7 +1372,7 @@ static void key(SDL_Keycode k, bool repeat) {
         scan();
     } else if (k == SDLK_m && !repeat) {
       if (automatic_view)
-        scan_automatic_media();
+        rescan_automatic_media();
       else
         scan();
       notify(tr("Biblioteca atualizada"));
@@ -1412,19 +1422,11 @@ static void key(SDL_Keycode k, bool repeat) {
       seek_media(k == SDLK_LEFT ? -10000 : 10000);
     return;
   }
-  if (mode == 1 && youtube_playing && k == SDLK_m && !repeat && youtube_count) {
-    mode = 10;
-    youtube_keyboard = false;
-    youtube_download_selection = 0;
-    youtube_download_menu = true;
-    return;
-  }
   if (k == SDLK_BACKSPACE && !repeat) {
-    bool was_iptv = playing_iptv, was_youtube = youtube_playing;
+    bool was_iptv = playing_iptv;
     if (mode == 1)
       stop_media();
-    youtube_playing = false;
-    mode = was_youtube ? 10 : was_iptv ? 8 : 3;
+    mode = was_iptv ? 8 : 3;
     return;
   }
   if (k == SDLK_RETURN && !repeat)
@@ -1594,21 +1596,9 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 5; i++)
       items[total++] =
           (Item){strdup(names[i]), strdup(names[i]), i < 2, 32500000};
-    if (!strcmp(argv[1], "--preview-youtube")) {
-      snprintf(youtube_query, sizeof(youtube_query), "MUSICA");
-      youtube_cursor = 38;
-      draw_youtube();
-    } else if (!strcmp(argv[1], "--preview-youtube-results")) {
-      youtube_keyboard = false; youtube_count = 3;
-      snprintf(youtube_query, sizeof(youtube_query), "MUSICA");
-      snprintf(youtube_items[0].title, sizeof(youtube_items[0].title), "Música para relaxar");
-      snprintf(youtube_items[0].channel, sizeof(youtube_items[0].channel), "Canal exemplo");
-      snprintf(youtube_items[1].title, sizeof(youtube_items[1].title), "Música ao vivo");
-      snprintf(youtube_items[1].channel, sizeof(youtube_items[1].channel), "Canal exemplo");
-      snprintf(youtube_items[2].title, sizeof(youtube_items[2].title), "Seleção de músicas");
-      snprintf(youtube_items[2].channel, sizeof(youtube_items[2].channel), "Canal exemplo");
-      snprintf(youtube_message, sizeof(youtube_message), "3 resultados");
-      draw_youtube();
+    if (!strcmp(argv[1], "--preview-splash")) {
+      splash_visual_progress = 0.72f;
+      draw_boot_splash_frame(0.72f, "Preparando rádios, IPTV e Placar da Bola", 42, 0.0f);
     } else if (!strcmp(argv[1], "--preview-welcome"))
       draw_welcome();
     else if (!strcmp(argv[1], "--preview-terms")) {
@@ -1712,10 +1702,7 @@ int main(int argc, char **argv) {
   bool restart_after_update = startup_update();
   if (restart_after_update) running = 0;
   else {
-    network_location_start();
-    mkdir(root, 0755);
-    snprintf(folder, sizeof(folder), "%s", root);
-    scan();
+    run_boot_splash();
   }
   while (running) {
     uint32_t frame = SDL_GetTicks();
@@ -1736,7 +1723,6 @@ int main(int argc, char **argv) {
     }
     radio_poll_play();
     radio_retry_tick();
-    youtube_poll();
     if (active) {
       if (playing_radio) radio_update_nowplaying();
       if (resume_pending_ms >= 0) {
@@ -1755,14 +1741,13 @@ int main(int argc, char **argv) {
       if (playing_radio && state == libvlc_Playing) radio_note_playing();
       else if (playing_radio) radio_stable_since = 0;
       if (state == libvlc_Error) {
-        bool was_iptv = playing_iptv, was_youtube = youtube_playing;
+        bool was_iptv = playing_iptv;
         bool was_radio = playing_radio;
         if (was_radio) { active = false; playing_radio = false; paused = false; radio_schedule_retry(); }
         else stop_media();
         notify(tr("Falha na reprodução. Consulte log.txt"));
         if (was_radio)
           mode = 7;
-        else if (was_youtube) { youtube_playing = false; mode = 10; }
         else if (was_iptv) mode = 8;
       } else if (state == libvlc_Ended) {
         if (playing_radio) {
@@ -1771,8 +1756,6 @@ int main(int argc, char **argv) {
           paused = false;
           radio_schedule_retry();
           mode = 7;
-        } else if (youtube_playing) {
-          stop_media(); youtube_playing = false; mode = 10;
         } else if (playing_iptv) {
           stop_media();
           mode = 8;
@@ -1804,14 +1787,12 @@ int main(int argc, char **argv) {
       draw_football();
     else if (mode == 8)
       draw_iptv();
-    else if (mode == 10)
-      draw_youtube();
     else
       draw_menu();
     SDL_RenderPresent(renderer);
     uint32_t elapsed = SDL_GetTicks() - frame;
-    /* Keep video at ~30 FPS; static screens and audio need fewer redraws. */
-    uint32_t frame_ms = (active && !playing_audio && !playing_radio) ? 33 : 100;
+    /* Keep video and animated welcome screen at ~30 FPS. */
+    uint32_t frame_ms = (mode == 5 || (active && !playing_audio && !playing_radio)) ? 33 : 100;
     if (elapsed < frame_ms)
       SDL_Delay(frame_ms - elapsed);
   }
@@ -1831,6 +1812,7 @@ int main(int argc, char **argv) {
   free(bolddata);
   clear_queue();
   clear_music_entries();
+  clear_cached_media();
   if (cover_texture)
     SDL_DestroyTexture(cover_texture);
   if (radio_art_texture)

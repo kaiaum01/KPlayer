@@ -1,101 +1,110 @@
-# KPlayer 1.0.4
+<p align="center">
+  <img src="docs/images/banner.svg" alt="KPlayer v2.0.0 — Central de Mídia Portátil para R36S" width="100%" />
+</p>
 
-Um player de músicas, vídeos e rádios online para dispositivos portáteis, pensado para **R36S com dArkOS e PortMaster**. A interface é feita em C e SDL2, com reprodução baseada na libVLC, e foi desenhada para telas de 640 × 480 e botões físicos.
+<h1 align="center">KPlayer v2.0.0</h1>
 
-[English](README.md) · [Como instalar](docs/INSTALL.md) · [Controles](docs/CONTROLS.md) · [Mídias e letras](docs/MEDIA.md) · [Licenças e créditos](THIRD_PARTY.md) · [Publicar no GitHub](PUBLICACAO-1.0.0.md)
+<p align="center">
+  <strong>Central de mídia portátil para R36S (dArkOS / PortMaster)</strong><br />
+  Músicas com letras sincronizadas (.LRC) · Vídeos · Rádio Online · IPTV · <strong>Placar da Bola</strong>
+</p>
 
-> **Estado do projeto:** versão 1.0.4 experimental, com atualização automática experimental. Esta integração IPTV ainda precisa de teste físico no aparelho. O código Android é experimental e não faz parte do port R36S.
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="docs/INSTALL.md">Instalação</a> ·
+  <a href="docs/CONTROLS.md">Controles</a> ·
+  <a href="docs/MEDIA.md">Mídias e Letras</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.0.0</a> ·
+  <a href="THIRD_PARTY.md">Licenças</a>
+</p>
 
-## Prévia
+---
 
-Estas imagens foram renderizadas a partir das telas do programa em um computador, com informações demonstrativas; não são fotografias do console. A disponibilidade e o conteúdo das rádios podem mudar.
+## Novidades da v2.0.0
 
-| Início | Música |
+- **Tela de Boot Animada (Splash Screen):** toda vez que o KPlayer liga, uma tela animada com vinil giratório, anéis de sonar, faíscas orbitais, equalizador de 28 barras e barra de progresso pré-carrega suas mídias, rádios, IPTV e jogos do Placar da Bola de uma só vez — deixando a navegação interna instantânea e sem travamentos.
+- **Tela de Boas-Vindas Slim e Animada:** design enxuto e moderno no mesmo visual do boot, com seletor unificado de idioma (**Português / English / Español**) e **seletor de cores do tema em bolinhas** (7 temas ao vivo), sem botões gigantes nem barra inferior poluída.
+- **Placar da Bola (estilo SofaScore):** acompanhe jogos ao vivo, encerrados e futuros do **Brasileirão, Libertadores, Champions League, Premier League** e mais, com filtros (`Todos`, `Ao vivo`, `Brasil`, `Europa`) e tela de detalhes completa com **Estatísticas comparativas**, **Eventos minuto a minuto** e **Escalações**.
+- **Player de Música Revisado:** barra central de reprodução perfeitamente centralizada e simétrica (anterior / play-pause / próxima + barra de progresso alinhada) com ícones nítidos, capa/vinil, metadados técnicos (FLAC/MP3, kHz, kbps) e painel alternável de **Letras sincronizadas (.LRC)**, **Fila** e **Pasta**.
+- **Pastas Dedicadas (carregamento ultrarrápido):** sem varrer o cartão SD inteiro nem passar por ROMs/BIOS/saves. O KPlayer indexa exclusivamente:
+  - **Músicas:** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
+  - **Vídeos:** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
+- **Capa do Port e Metadados XML para dArkOS / EmulationStation:** o pacote `KPlayer-v2.0.0-R36S.zip` já inclui a capa oficial 640×480 (`images/KPlayer-image.png`), `gamelist.xml` pronto para uso e `kplayer/KPlayer-metadata.xml` para mesclar com seus outros ports.
+
+---
+
+## Capturas de Tela (640 × 480 — R36S)
+
+| Tela de Boot Animada | Boas-Vindas Slim (Idioma + Cores) |
 | :---: | :---: |
-| ![Tela inicial do KPlayer](docs/images/readme-home.png) | ![Player de música](docs/images/readme-audio.png) |
-| **Rádio online** | **Opções e temas** |
-| ![Lista demonstrativa de rádios](docs/images/readme-radio.png) | ![Configurações do KPlayer](docs/images/readme-options.png) |
-| **Vídeo** | **Biblioteca** |
-| ![Controles de vídeo](docs/images/readme-video.png) | ![Navegação por arquivos](docs/images/readme-library.png) |
+| ![Splash animada v2.0.0](docs/images/readme-splash.png) | ![Boas-vindas slim v2.0.0](docs/images/readme-welcome.png) |
+| **Dashboard Principal** | **Player de Música & Letras (.LRC)** |
+| ![Dashboard v2.0.0](docs/images/readme-home.png) | ![Player de música v2.0.0](docs/images/readme-audio.png) |
+| **Placar da Bola — Jogos ao Vivo** | **Placar da Bola — Estatísticas da Partida** |
+| ![Placar da Bola](docs/images/readme-football.png) | ![Detalhes da partida](docs/images/readme-football-detail.png) |
+| **Rádio Online** | **IPTV Ao Vivo (Brasil / Mundo / Local)** |
+| ![Rádio Online](docs/images/readme-radio.png) | ![IPTV](docs/images/readme-iptv.png) |
+| **Pastas Dedicadas (SD1 / SD2)** | **Player de Vídeo (libVLC)** |
+| ![Biblioteca dedicada](docs/images/readme-library.png) | ![Player de vídeo](docs/images/readme-video.png) |
+| **Configurações & 7 Temas** | **Capa Oficial do Port (dArkOS / EmulationStation)** |
+| ![Opções e temas](docs/images/readme-options.png) | ![Capa KPlayer v2.0.0](docs/images/port-cover.png) |
 
-## O que o KPlayer oferece
+---
 
-- **Vídeos online experimental:** pesquise e reproduza vídeos dentro do KPlayer com o extrator yt-dlp também utilizado pelo PilasTube. As demais funções do PilasTube ainda não foram portadas. Veja [detalhes e limitações](PILASTUBE-KPLAYER.md).
-- **Futebol experimental:** abra **Futebol** na tela inicial para consultar jogos ao vivo, placares e competições disponíveis no Golazo. Use o direcional para navegar, **Y** para atualizar e **A** para voltar. Precisa de internet; a disponibilidade de ligas e jogos depende da fonte do Golazo. Não transmite partidas. Se a atualização falhar, dados antigos são identificados como possivelmente desatualizados.
-- Reprodução local de músicas e vídeos, com codecs e plugins disponibilizados pelo sistema.
-- Busca de mídias em `kplayer/midias`, `/roms` e `/roms2`, além de navegação por pastas e indicador de carregamento.
-- Metadados, capa, fila, próxima faixa e letras locais `.lrc` ou embutidas quando suportadas. Não baixa letras da internet.
-- Rádio online via Radio Browser e aba **Rádio do Usuário** para listas próprias.
-- **IPTV experimental:** abra **IPTV** na tela inicial ou em **Opções → Biblioteca → IPTV**; pressione **X** para alternar entre Brasil, Mundo e listas próprias. A lista mostra nome, categoria, ID e logo do canal selecionado quando disponíveis. Logos JPEG/PNG são baixados em segundo plano usando `curl`; imagens SVG não são suportadas. As listas online vêm de [iptv-com/iptv](https://github.com/iptv-com/iptv) e têm cache separado; **Y** atualiza. Listas próprias M3U/M3U8 podem ser colocadas em `ports/kplayer/iptv/`. Limite de 2.048 entradas por fonte e 4 MiB por arquivo. Sem EPG nesta versão. Alguns canais podem não funcionar; verifique disponibilidade e direitos de cada transmissão. Integração não testada no R36S.
-- Na tela de rádio, X marca ou desmarca a estação selecionada; esquerda/direita permite abrir a categoria **Favoritas**. A lista salva nomes e endereços em `radio-favorites.tsv`.
-- A rádio tenta reconectar até três vezes após falha ou término e mostra a música atual quando a emissora envia metadados compatíveis. A libVLC pode continuar bloqueada durante uma conexão; valide no aparelho.
-- Sete temas, interface em português brasileiro, inglês e espanhol, tela de boas-vindas e termos de uso.
-- Controles de reprodução, proporção e faixas de áudio/legendas quando disponíveis.
-- Em Opções, selecione repetição desligada, da faixa ou da fila, e ative o modo aleatório para músicas. Sem repetir a fila, a reprodução para ao terminar o ciclo; L1 volta sequencialmente e R1 avança.
-- Em Opções, marque a faixa atual em **Favoritar faixa** e abra **Minhas favoritas** para ver as músicas encontradas. A lista usa a busca automática e seus limites; mover um arquivo pode perder a marcação.
-- Em Arquivos, filtro Todos, abra playlists M3U/M3U8 locais de músicas; caminhos podem ser absolutos ou relativos à playlist. Streams e listas aninhadas não são importados.
-- Em Opções, **Retomar mídia** abre o último arquivo e tenta restaurar sua posição (não restaura a fila); o timer de sono para a reprodução e o equalizador oferece presets da libVLC quando disponíveis. Timer e preset não persistem após sair.
-- Verificação experimental de atualização do GitHub ao iniciar, com confirmação antes da instalação.
+## Instalação no R36S (dArkOS / PortMaster)
 
-## Requisitos
+1. Baixe **`KPlayer-v2.0.0-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
+2. Extraia o arquivo e copie para `/roms/ports/` (ou `/roms2/ports/` no SD2):
+   - `KPlayer.sh`
+   - pasta `kplayer/`
+   - `images/KPlayer-image.png` *(capa do port no EmulationStation)*
+   - `gamelist.xml` *(se ainda não tiver um em `ports/`; caso já possua outros ports, copie apenas o bloco `<game>...</game>` de `kplayer/KPlayer-metadata.xml` para dentro do seu `gamelist.xml` existente)*.
+3. Coloque suas mídias nas pastas dedicadas:
 
-- A versão com Futebol precisa dos arquivos `golazo` e `football_fetch.py` gerados/incluídos no pacote pelo GitHub Actions, além de `python3`. Faça a instalação manual desse pacote: o atualizador das versões anteriores não instala esses novos arquivos.
-- R36S ARM64, firmware dArkOS compatível e PortMaster configurado. A compatibilidade com outros aparelhos/firmwares não foi garantida.
-- SDL2, saída de áudio e plugins VLC compatíveis disponibilizados pelo sistema. O pacote inclui as bibliotecas do núcleo libVLC; os codecs/plugins não vêm todos nele.
-- Internet para rádio e atualizações; `python3` com HTTPS para o atualizador. Logos de rádio podem depender de `curl` e suporte a JPEG/PNG.
-- Espaço no cartão para o aplicativo, suas mídias e eventuais backups. Faça backup antes de instalar ou atualizar.
+| Tipo de Mídia | Cartão SD1 | Cartão SD2 | Formatos reconhecidos |
+| :--- | :--- | :--- | :--- |
+| **Músicas (+ `.lrc`)** | `/roms/bgmusic` | `/roms2/bgmusic` | MP3, FLAC, OGG, WAV, M4A, AAC, OPUS |
+| **Vídeos** | `/roms/videos` | `/roms2/videos` | MP4, MKV, AVI, MOV, WEBM |
+| **Rádios pessoais** | `ports/kplayer/radios_usuario/` | — | `.pls`, `.m3u`, `.m3u8`, `.asx` |
+| **Listas IPTV locais** | `ports/kplayer/iptv/` | — | `.m3u`, `.m3u8` |
 
-## Instalação rápida
+4. Reinicie o EmulationStation (ou atualize a lista de jogos) e abra **Ports → KPlayer v2.0.0**.
 
-1. Baixe o **ZIP instalável R36S** em [Releases](https://github.com/kaiaum01/KPLAYER-v1.0.0/releases), se já estiver publicado. O ZIP do código-fonte não é o instalador.
-2. Extraia o pacote. Copie `KPlayer.sh` e a pasta `kplayer/` lado a lado para a pasta `ports/` do cartão. Se já existir uma instalação, preserve suas músicas, rádios pessoais e configurações.
-3. No console, atualize a lista de ports se necessário e abra **KPlayer**.
-4. Na primeira execução, escolha o idioma; os termos podem ser consultados na tela inicial.
+> **Requisitos:** R36S ARM64 com dArkOS e PortMaster, SDL2, ALSA e plugins VLC compatíveis em `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio Online, IPTV, Placar da Bola e atualizações exigem conexão com a internet. Veja o guia completo em [docs/INSTALL.md](docs/INSTALL.md).
 
-Se a release ainda não existir, o mantenedor precisa compilar o projeto no Actions antes; veja [publicação](PUBLICACAO-1.0.0.md). Uma instalação antiga precisa receber manualmente o novo executável, `updater.py` e `KPlayer.sh` antes de poder usar a atualização automática. Quando o novo lançador funcionar, remova apenas o antigo `KPlayer (Beta).sh` para evitar uma entrada duplicada, preservando a pasta `kplayer/`.
+---
 
-## Controles principais
+## Controles Principais
 
 | Botão | Ação |
-| --- | --- |
-| Direcional | Navegar e mudar opções |
-| B | Abrir ou confirmar |
-| A | Voltar ou cancelar |
-| SELECT | Abrir/fechar opções |
-| START | Pausar ou continuar a mídia |
-| X / Y | Funções conforme a tela, exibidas na interface |
-| L1 / R1 | Faixa ou estação anterior / seguinte, conforme a tela |
+| :---: | :--- |
+| **Direcional** | Navegar menus, alternar abas, mudar idioma/tema ou avançar ±10s |
+| **B** | Confirmar / Abrir / Tocar / Detalhes da partida |
+| **A** | Voltar / Cancelar |
+| **X** | Alternar Fila/Pasta na música · Trocar filtro no Placar/IPTV · Favoritar rádio · Ocultar OSD no vídeo |
+| **Y** | Letras na música · Atualizar dados (Rádio / IPTV / Placar / Biblioteca) · Termos nas Boas-Vindas |
+| **L1 / R1** | Faixa, vídeo ou estação anterior / seguinte |
+| **START** | Pausar / Retomar reprodução |
+| **SELECT** | Abrir / Fechar Opções |
 
-O volume é ajustado pelos controles físicos/do sistema. Confira o [mapa completo](docs/CONTROLS.md), pois as ações variam por tela.
+O volume é controlado diretamente pelos botões físicos do console. Confira o mapa completo por tela em [docs/CONTROLS.md](docs/CONTROLS.md).
 
-## Músicas, vídeos e rádios
+---
 
-Coloque arquivos em `ports/kplayer/midias/` ou navegue até suas pastas no cartão. A busca automática ignora arquivos menores que 50 KiB e limita os resultados a 4.096 entradas. O explorador manual pode mostrar arquivos menores. O acesso a `/roms` e `/roms2` depende de os caminhos existirem e estarem acessíveis no firmware.
+## Recursos Técnicos
 
-O navegador reconhece extensões de áudio como MP3, FLAC, OGG, WAV, M4A, AAC e OPUS, e de vídeo como MP4, MKV, AVI, MOV e WEBM. **Reconhecer uma extensão não garante reprodução:** codec, perfil, resolução e desempenho dependem dos plugins VLC e do aparelho. Consulte [mídias e metadados](docs/MEDIA.md).
+- **Motor nativo em C + SDL2 + libVLC** compilado especificamente para `aarch64-linux-gnu` em 640×480.
+- **7 temas de cores** com troca instantânea nas Boas-Vindas ou em Opções: *Verde Spotify*, *Noite Azul*, *Claro Menta*, *Claro Quente*, *Vermelho Neon*, *Roxo Synth* e *Âmbar Retrô*.
+- **3 idiomas integrados:** Português (BR), English e Español.
+- **Metadados ID3 locais:** lê título, artista, álbum, capa embutida (JPEG/PNG) e letras sincronizadas/embutidas (`.lrc` / USLT) sem depender de internet.
+- **Fila, Repetição, Aleatório, Favoritas, Timer de sono, Retomar mídia e Equalizador libVLC.**
+- **Atualizador experimental integrado:** verifica novas releases públicas no GitHub com validação de integridade SHA-256 e confirmação do usuário.
 
-Para rádios próprias, coloque arquivos `.pls`, `.asx`, `.m3u` ou `.m3u8` em `ports/kplayer/radios_usuario/`. Em **Rádio Online**, escolha **Rádio do Usuário** com esquerda/direita e pressione **Y** para atualizar. São aceitos endereços HTTP/HTTPS encontrados nos arquivos, com limite de 64 KiB por lista; nem toda variante de playlist é suportada. Rádios incluídas são exemplos, não há garantia de disponibilidade.
+---
 
-## Atualização automática experimental
+## Compilação, Testes e Licenças
 
-Ao abrir, o KPlayer consulta a última release pública. Se detectar um pacote mais novo compatível, pergunta se deseja atualizar. Escolher **Não**, não encontrar atualização ou falhar a consulta permite iniciar o app. Ao escolher **Sim**, aguarde a instalação e o reinício; em caso de falha, use B para continuar. O lançador e o próprio atualizador não são substituídos por esse mecanismo.
-
-A atualização exige uma release pública compatível, com ZIP e checksum correspondentes. O checksum verifica integridade, mas **não é assinatura digital**. O novo lançador tenta recuperar a instalação após uma interrupção, mas a recuperação após queda real de energia ainda não foi testada no aparelho. Teste primeiro em uma cópia do cartão e leia [as limitações](ATUALIZADOR-EXPERIMENTAL.md) e [como publicar uma versão](PUBLICACAO-1.0.0.md).
-
-## Privacidade e problemas
-
-O catálogo e as transmissões de rádio acessam serviços de terceiros. A localização aproximada por IP começa desativada e pode ser ligada em Opções; quando ativa, envia o IP ao provedor via HTTP sem criptografia. Rádios podem usar HTTP ou HTTPS. Disponibilidade, privacidade e termos dependem dos provedores. Evite reproduzir conteúdo para o qual você não tenha autorização.
-
-- **Não abre:** verifique PortMaster, permissões, plugins do sistema e `ports/kplayer/log.txt`.
-- **Não encontra mídia:** confira os caminhos, a extensão, o limite de 50 KiB e tente a navegação manual.
-- **Rádio não toca:** teste outra estação e sua conexão; streams podem ficar indisponíveis ou bloquear a reprodução.
-- **Atualização não aparece:** precisa haver uma release pública mais nova com os arquivos compatíveis, Python 3 e internet. Rascunhos e pré-releases não são utilizados.
-- **Interface parece parada ao pesquisar:** a busca é síncrona e o indicador pode parar enquanto o cartão responde.
-
-Ao relatar um problema, informe firmware, aparelho, passos para reproduzir e o log após remover dados pessoais. Faça backup de `midias/`, `radios_usuario/`, `settings.cfg`, `preferences.cfg`, `favorites.cfg`, `radio-favorites.tsv` e `resume.cfg`.
-
-## Compilação e licença
-
-Veja [compilação](docs/BUILD.md), [contribuições](CONTRIBUTING.md), [histórico](CHANGELOG.md) e [publicação](PUBLICACAO-1.0.0.md). A interface original está sob **GPL-2.0-or-later**; leia [LICENSE](LICENSE). VLC/libVLC, SDL, stb e fontes têm seus próprios termos e avisos em [THIRD_PARTY.md](THIRD_PARTY.md) e `ports/kplayer/licencas/`. O código-fonte VLC e o patch estão em `upstream/` e `patches/`.
-
-KPlayer não é afiliado nem endossado oficialmente por VideoLAN ou PortMaster.
+- **Compilar binário ARM64 e gerar ZIP instalável:** consulte [docs/BUILD.md](docs/BUILD.md) e [PUBLICAR_NO_GITHUB.md](PUBLICAR_NO_GITHUB.md).
+- **Licença:** o código original do KPlayer é distribuído sob **GPL-2.0-or-later** ([LICENSE](LICENSE)). VLC/libVLC, SDL2, stb e fontes seguem suas respectivas licenças listadas em [THIRD_PARTY.md](THIRD_PARTY.md) e `ports/kplayer/licencas/`.
+- KPlayer é um projeto independente, sem afiliação oficial com VideoLAN, PortMaster ou SofaScore.

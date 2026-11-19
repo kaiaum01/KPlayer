@@ -3,10 +3,20 @@ static bool locations_view = false;
 static bool automatic_view = false;
 static int location_selected = 0;
 static char location_root[PATH_MAX], folder_error[160];
-static const char *location_names[] = {"Mídias do K PLAYER", "Cartão /roms",
-                                       "Cartão /roms2", "Sistema /"};
-static const char *location_paths[] = {"midias", "/roms", "/roms2", "/"};
-static const char *automatic_roots[] = {"midias", "/roms", "/roms2"};
+static const char *location_names[] = {"Músicas (SD1)", "Músicas (SD2)",
+                                       "Vídeos (SD1)", "Vídeos (SD2)"};
+static const char *location_paths[] = {"/roms/bgmusic", "/roms2/bgmusic",
+                                       "/roms/videos", "/roms2/videos"};
+typedef struct {
+  const char *path;
+  int kind; /* 1 = audio only, 2 = video only */
+} AutoMediaRoot;
+static AutoMediaRoot automatic_roots[] = {
+    {"/roms/bgmusic", 1},
+    {"/roms2/bgmusic", 1},
+    {"/roms/videos", 2},
+    {"/roms2/videos", 2},
+};
 static bool location_available[4];
 static void scan(void);
 static void refresh_locations(void) {

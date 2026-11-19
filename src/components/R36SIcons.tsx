@@ -111,7 +111,7 @@ export function KpSprite({
   return (
     <span
       aria-hidden="true"
-      className={`inline-block shrink-0 select-none ${className}`}
+      className={`block shrink-0 select-none ${className}`}
       style={{
         width: size,
         height: size,
@@ -133,19 +133,21 @@ export function KPlayerLogo({ theme, size = 76 }: { theme: KpTheme; size?: numbe
         borderRadius: Math.round(size * 0.29),
         backgroundColor: theme.accent,
         color: theme.bg,
-        boxShadow: `0 0 26px ${rgbToRgba(theme.accent, 0.45)}`,
+        boxShadow: `0 0 24px ${rgbToRgba(theme.accent, 0.44)}`,
       }}
       className="flex items-center justify-center font-extrabold tracking-tight select-none shrink-0"
     >
-      <span style={{ fontSize: Math.round(size * 0.58), lineHeight: 1 }}>K</span>
+      <span style={{ fontSize: Math.round(size * 0.56), lineHeight: 1 }} className="translate-x-[1px]">
+        K
+      </span>
       <svg
-        width={Math.round(size * 0.28)}
-        height={Math.round(size * 0.28)}
+        width={Math.round(size * 0.26)}
+        height={Math.round(size * 0.26)}
         viewBox="0 0 20 20"
         fill="currentColor"
-        className="ml-0.5"
+        className="ml-0.5 shrink-0"
       >
-        <polygon points="3,2 18,10 3,18" />
+        <path d="M4.2 2.9C4.2 2.2 5 1.8 5.6 2.2L16.6 9.1C17.2 9.5 17.2 10.5 16.6 10.9L5.6 17.8C5 18.2 4.2 17.8 4.2 17.1V2.9Z" />
       </svg>
     </div>
   );
@@ -185,7 +187,7 @@ export function PlayDisc({
   onClick?: () => void;
   title?: string;
 }) {
-  const iconSize = Math.round(size * 0.44);
+  const iconSize = Math.round(size * 0.48);
   return (
     <button
       type="button"
@@ -196,20 +198,65 @@ export function PlayDisc({
         height: size,
         backgroundColor: theme.accent,
         color: theme.bg,
-        boxShadow: `0 0 18px ${rgbToRgba(theme.accent, 0.48)}`,
+        boxShadow: `0 0 ${size >= 38 ? 18 : 12}px ${rgbToRgba(theme.accent, 0.45)}`,
       }}
       className="rounded-full flex items-center justify-center shrink-0 cursor-pointer hover:brightness-110 active:scale-95 transition-transform"
     >
       {playing ? (
-        <svg width={iconSize} height={iconSize} viewBox="0 0 20 20" fill="currentColor">
-          <rect x="4" y="3" width="4.2" height="14" rx="1.6" />
-          <rect x="11.8" y="3" width="4.2" height="14" rx="1.6" />
+        <svg width={iconSize} height={iconSize} viewBox="0 0 20 20" fill="currentColor" className="block">
+          <rect x="4.6" y="3.2" width="3.8" height="13.6" rx="1.6" />
+          <rect x="11.6" y="3.2" width="3.8" height="13.6" rx="1.6" />
         </svg>
       ) : (
-        <svg width={iconSize} height={iconSize} viewBox="0 0 20 20" fill="currentColor">
-          <polygon points="5,2.5 17.5,10 5,17.5" />
+        <svg width={iconSize} height={iconSize} viewBox="0 0 20 20" fill="currentColor" className="block">
+          <path d="M6.4 3.6C6.4 2.9 7.2 2.5 7.8 2.9L16.7 9.1C17.2 9.5 17.2 10.5 16.7 10.9L7.8 17.1C7.2 17.5 6.4 17.1 6.4 16.4V3.6Z" />
         </svg>
       )}
+    </button>
+  );
+}
+
+export function TransportSkipButton({
+  theme,
+  direction,
+  size = 24,
+  onClick,
+  title,
+}: {
+  theme: KpTheme;
+  direction: 'prev' | 'next';
+  size?: number;
+  onClick?: () => void;
+  title?: string;
+}) {
+  const iconSize = Math.round(size * 0.56);
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: mixRgb(theme.elevated, theme.text, 0.06),
+        color: theme.text,
+        border: `1px solid ${mixRgb(theme.panel, theme.text, 0.09)}`,
+      }}
+      className="rounded-full flex items-center justify-center shrink-0 cursor-pointer hover:brightness-125 active:scale-95 transition-all"
+    >
+      <svg width={iconSize} height={iconSize} viewBox="0 0 20 20" fill="currentColor" className="block">
+        {direction === 'prev' ? (
+          <>
+            <rect x="3.5" y="4" width="2.4" height="12" rx="1.2" />
+            <path d="M16.2 4.6C16.2 3.9 15.4 3.5 14.8 3.9L7.4 9.1C6.9 9.5 6.9 10.5 7.4 10.9L14.8 16.1C15.4 16.5 16.2 16.1 16.2 15.4V4.6Z" />
+          </>
+        ) : (
+          <>
+            <rect x="14.1" y="4" width="2.4" height="12" rx="1.2" />
+            <path d="M3.8 4.6C3.8 3.9 4.6 3.5 5.2 3.9L12.6 9.1C13.1 9.5 13.1 10.5 12.6 10.9L5.2 16.1C4.6 16.5 3.8 16.1 3.8 15.4V4.6Z" />
+          </>
+        )}
+      </svg>
     </button>
   );
 }
@@ -541,12 +588,17 @@ export function FooterBar({
           return (
             <div key={i} className="flex items-center gap-1.5 min-w-0">
               {spriteCol !== undefined ? (
-                <KpSprite
-                  sheet="botoes"
-                  col={spriteCol}
-                  themeIndex={themeIndex}
-                  size={iconSize}
-                />
+                <div
+                  style={{ width: iconSize, height: iconSize }}
+                  className="flex items-center justify-center shrink-0"
+                >
+                  <KpSprite
+                    sheet="botoes"
+                    col={spriteCol}
+                    themeIndex={themeIndex}
+                    size={iconSize}
+                  />
+                </div>
               ) : (
                 <span
                   style={{

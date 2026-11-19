@@ -1,6 +1,7 @@
 export type LanguageCode = 0 | 1 | 2; // 0 = pt-BR, 1 = en, 2 = es
 
 export type ScreenMode =
+  | 'boot'
   | 'welcome'
   | 'terms'
   | 'home'
@@ -10,15 +11,7 @@ export type ScreenMode =
   | 'radio'
   | 'iptv'
   | 'football'
-  | 'youtube'
   | 'options';
-
-export interface YoutubeItem {
-  id: string;
-  title: string;
-  channel: string;
-  thumb: string;
-}
 
 export interface LyricLine {
   timeMs: number;
@@ -67,11 +60,54 @@ export interface IptvChannel {
 }
 
 export interface FootballMatch {
+  id: string;
+  leagueCode: string;
   league: string;
+  region: 'br' | 'eu';
+  state: 'in' | 'post' | 'pre';
   home: string;
-  score: string;
+  homeLogo: string;
   away: string;
+  awayLogo: string;
+  score: string;
   status: string;
+  venue: string;
+  preview: string;
+}
+
+export interface FootballStat {
+  label: string;
+  home: string;
+  away: string;
+  homeNum: number;
+  awayNum: number;
+}
+
+export interface FootballEvent {
+  minute: string;
+  kind: 'goal' | 'yellow' | 'red' | 'sub' | 'other';
+  team: string;
+  desc: string;
+}
+
+export interface FootballPlayer {
+  jersey: string;
+  name: string;
+  pos: string;
+}
+
+export interface FootballMatchDetail {
+  venue: string;
+  attendance: string;
+  referee: string;
+  homeForm: string;
+  awayForm: string;
+  homeFormation: string;
+  awayFormation: string;
+  stats: FootballStat[];
+  events: FootballEvent[];
+  homeLineup: FootballPlayer[];
+  awayLineup: FootballPlayer[];
 }
 
 export type RepeatMode = 0 | 1 | 2; // 0 = off, 1 = track, 2 = queue

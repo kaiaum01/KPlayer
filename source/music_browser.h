@@ -21,7 +21,6 @@ static int music_compare(const void *a, const void *b) {
   return strcasecmp(x->name, y->name);
 }
 static bool scan_music_folder(const char *path) {
-  loading_screen("Carregando músicas", 0, true);
   char resolved[PATH_MAX];
   if (!realpath(path, resolved)) {
     folder_failure(errno);
@@ -36,7 +35,6 @@ static bool scan_music_folder(const char *path) {
   snprintf(music_folder, sizeof(music_folder), "%s", resolved);
   struct dirent *e;
   while ((e = readdir(d))) {
-    loading_screen("Carregando músicas", music_total, false);
     if (e->d_name[0] == '.')
       continue;
     char p[PATH_MAX];
@@ -69,8 +67,20 @@ static void open_current_music_folder(void) {
       slash[1] = 0;
     else
       *slash = 0;
-  } else
-    snprintf(p, sizeof(p), "%s", root);
+  } else {
+    DIR *d1 = opendir("/roms/bgmusic");
+    if (d1) {
+      closedir(d1);
+      snprintf(p, sizeof(p), "/roms/bgmusic");
+    } else {
+      DIR *d2 = opendir("/roms2/bgmusic");
+      if (d2) {
+        closedir(d2);
+        snprintf(p, sizeof(p), "/roms2/bgmusic");
+      } else
+        snprintf(p, sizeof(p), "%s", root);
+    }
+  }
   scan_music_folder(p);
   for (int i = 0; i < music_total; i++) {
     char path[PATH_MAX];

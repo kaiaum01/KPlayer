@@ -178,13 +178,23 @@ static void visualizer(int x, int y, int w, int h, int bars, bool on) {
 }
 /* Accent play/pause button with halo, icon drawn in background color. */
 static void play_disc(int cx, int cy, int radius, bool pause_icon) {
-  glow_circle(cx, cy, radius, alpha(accent, 255), 7);
+  int halo = radius >= 18 ? 6 : 4;
+  glow_circle(cx, cy, radius, alpha(accent, 255), halo);
   fill_circle(cx, cy, radius, accent);
-  int s = radius * 9 / 10;
   if (pause_icon) {
-    int bw = s / 4 > 2 ? s / 4 : 2;
-    rounded(cx - s / 2 + bw / 3, cy - s / 2, bw, s, bw / 2, bg);
-    rounded(cx + s / 2 - bw - bw / 3, cy - s / 2, bw, s, bw / 2, bg);
-  } else
-    triangle(cx - s / 3 + 1, cy - s / 2, s, bg);
+    int h = (radius * 9) / 10;
+    if (h < 8) h = 8;
+    int bw = (radius * 26) / 100;
+    if (bw < 2) bw = 2;
+    int gap = bw;
+    int top = cy - h / 2;
+    int left_x = cx - (gap / 2) - bw;
+    int right_x = cx + ((gap + 1) / 2);
+    rounded(left_x, top, bw, h, bw / 2, bg);
+    rounded(right_x, top, bw, h, bw / 2, bg);
+  } else {
+    int s = ((radius * 9) / 10) | 1;
+    if (s < 9) s = 9;
+    triangle(cx - s / 3, cy - s / 2, s, bg);
+  }
 }

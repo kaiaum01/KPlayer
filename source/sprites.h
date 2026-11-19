@@ -9,7 +9,7 @@ enum { KP_PLAY=0, KP_PAUSE=1, KP_PREV=2, KP_REWIND=3, KP_FORWARD=4,
        KP_VOLUME_HIGH=12, KP_MUTE=13, KP_LIST=14,
        KP_SCREEN=15, KP_FULLSCREEN=16 };
 static SDL_Texture *kp_atlases[3];
-static SDL_Rect kp_category_bounds[7][6];
+static SDL_Rect kp_sprite_bounds[3][7][17];
 static int kp_sprite_palette = 0;
 static const int kp_sprite_cols[3] = {17, 6, 15};
 static const int kp_sprite_cell[3] = {48, 76, 64};
@@ -25,20 +25,19 @@ static void kp_sprites_load(void) {
     int cell=kp_sprite_cell[i];
     if (!pixels) continue;
     if (w==kp_sprite_cols[i]*cell && h==7*cell) {
-      if (i == KP_SPR_CATEGORIES) {
-        for (int row = 0; row < 7; row++) for (int col = 0; col < 6; col++) {
-          int minx=cell, miny=cell, maxx=-1, maxy=-1;
-          for (int py=0; py<cell; py++) for (int px=0; px<cell; px++) {
-            if (pixels[((row*cell+py)*w+col*cell+px)*4+3] > 32) {
-              if (px<minx) minx=px;
-              if (px>maxx) maxx=px;
-              if (py<miny) miny=py;
-              if (py>maxy) maxy=py;
-            }
+      int cols = kp_sprite_cols[i];
+      for (int row = 0; row < 7; row++) for (int col = 0; col < cols; col++) {
+        int minx=cell, miny=cell, maxx=-1, maxy=-1;
+        for (int py=0; py<cell; py++) for (int px=0; px<cell; px++) {
+          if (pixels[((row*cell+py)*w+col*cell+px)*4+3] > 28) {
+            if (px<minx) minx=px;
+            if (px>maxx) maxx=px;
+            if (py<miny) miny=py;
+            if (py>maxy) maxy=py;
           }
-          if (maxx>=minx && maxy>=miny)
-            kp_category_bounds[row][col]=(SDL_Rect){col*cell+minx,row*cell+miny,maxx-minx+1,maxy-miny+1};
         }
+        if (maxx>=minx && maxy>=miny)
+          kp_sprite_bounds[i][row][col]=(SDL_Rect){col*cell+minx,row*cell+miny,maxx-minx+1,maxy-miny+1};
       }
       SDL_Texture *tex=SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
                                          SDL_TEXTUREACCESS_STATIC, w, h);
@@ -58,16 +57,17 @@ static bool kp_sprite(int atlas, int id, int x, int y, int w, int h) {
   int cell=kp_sprite_cell[atlas];
   int palette=kp_sprite_palette;
   if (palette<0 || palette>=7) palette=0;
-  SDL_Rect source={id*cell,kp_sprite_theme_rows[palette]*cell,cell,cell};
+  int row=kp_sprite_theme_rows[palette];
+  SDL_Rect source={id*cell,row*cell,cell,cell};
   SDL_Rect dest={x,y,w,h};
-  if (atlas == KP_SPR_CATEGORIES) {
-    SDL_Rect bounds=kp_category_bounds[kp_sprite_theme_rows[palette]][id];
-    if (bounds.w > 0 && bounds.h > 0) {
-      source=bounds;
-      if ((long long)w*bounds.h > (long long)h*bounds.w) dest.w=h*bounds.w/bounds.h;
-      else dest.h=w*bounds.h/bounds.w;
-      dest.x=x+(w-dest.w)/2; dest.y=y+(h-dest.h)/2;
-    }
+  SDL_Rect bounds=kp_sprite_bounds[atlas][row][id];
+  if (bounds.w > 0 && bounds.h > 0) {
+    source=bounds;
+    if ((long long)w*bounds.h > (long long)h*bounds.w) dest.w=h*bounds.w/bounds.h;
+    else dest.h=w*bounds.h/bounds.w;
+    if (dest.w < 1) dest.w = 1;
+    if (dest.h < 1) dest.h = 1;
+    dest.x=x+(w-dest.w)/2; dest.y=y+(h-dest.h)/2;
   }
   SDL_RenderCopy(renderer,kp_atlases[atlas],&source,&dest);
   return true;

@@ -57,8 +57,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          name: KPlayer ${{ github.ref_name }}
-          body: Pacote experimental para R36S/dArkOS. Confira os testes e as notas antes de publicar.
+          name: KPlayer ${{ github.ref_name }} — R36S / dArkOS
+          body_path: releases/RELEASE_NOTES.md
           fail_on_unmatched_files: true
           files: |
             releases/KPlayer-v*-R36S.zip

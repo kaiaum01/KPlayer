@@ -134,7 +134,14 @@ static void iptv_fetch_start(void) {
   }
 }
 
-static void iptv_open(void) { iptv_source = 1; iptv_reload(); mode = 8; iptv_fetch_start(); }
+static void iptv_open(void) {
+  if (iptv_source != 1 || !iptv_count) {
+    iptv_source = 1;
+    iptv_reload();
+    if (!iptv_count) iptv_fetch_start();
+  }
+  mode = 8;
+}
 static void iptv_play_selected(void) {
   if (!iptv_count) return;
   if (!iptv_channels[iptv_selected].url[0]) { notify(tr("Canal sem fluxo direto compatível")); return; }

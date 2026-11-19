@@ -1,87 +1,99 @@
-# KPlayer 1.0.4
+<p align="center">
+  <img src="docs/images/banner.svg" alt="KPlayer v2.0.0 — Portable Media Center for R36S" width="100%" />
+</p>
 
-Music, video and internet radio for handheld devices, designed for **R36S with dArkOS and PortMaster**. Built in C with SDL2 and libVLC, with a 640 × 480 interface for physical controls.
+<h1 align="center">KPlayer v2.0.0</h1>
 
-[Português brasileiro](README.pt-BR.md) · [Installation](docs/INSTALL.md) · [Controls](docs/CONTROLS.md) · [Media and lyrics](docs/MEDIA.md) · [Licenses and credits](THIRD_PARTY.md) · [Publishing guide](PUBLICACAO-1.0.0.md)
+<p align="center">
+  <strong>Portable media center for R36S (dArkOS / PortMaster)</strong><br />
+  Music with synced lyrics (.LRC) · Video · Online Radio · IPTV · <strong>Placar da Bola (Live Football)</strong>
+</p>
 
-> **Project status:** experimental 1.0.4 with an experimental updater. This IPTV integration still needs testing on the physical device. Android code is experimental and is not part of the R36S release.
+<p align="center">
+  <a href="README.pt-BR.md">Português (BR)</a> ·
+  <a href="docs/INSTALL.md">Installation</a> ·
+  <a href="docs/CONTROLS.md">Controls</a> ·
+  <a href="docs/MEDIA.md">Media &amp; Lyrics</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="releases/RELEASE_NOTES.md">v2.0.0 Release Notes</a> ·
+  <a href="THIRD_PARTY.md">Licenses</a>
+</p>
 
-## Screenshots
+---
 
-These are actual application screens rendered on a computer with demo data, not photos of the console. Radio availability and content may change.
+## What's New in v2.0.0
 
-| Dashboard | Music |
+- **Animated Boot Splash Screen:** Every launch displays an animated boot splash featuring a spinning vinyl disc, expanding sonar rings, orbiting sparks, a 28-bar live equalizer, and a shimmering progress bar that preloads your library, radio, IPTV, and live football scores upfront — making in-app navigation instant.
+- **Slim Animated Welcome Screen:** Redesigned first-run experience matching the boot aesthetic with a compact unified language capsule (**PT-BR / English / Español**) and **7 live color theme dots** — removing bulky cards and bottom-bar clutter.
+- **Placar da Bola (SofaScore-style Match Center):** Live, finished, and upcoming football scores across **Brasileirão, Libertadores, UEFA Champions League, Premier League** and more, with filters (`All`, `Live`, `Brazil`, `Europe`) and a full match detail view with **Comparison Stats**, **Minute-by-Minute Events**, and **Lineups**.
+- **Refined Music Player:** Re-centered, symmetric transport bar (previous / play-pause / next + aligned progress bar) with sharper geometric icons, embedded artwork/vinyl, technical audio specs, and switchable **Synced Lyrics (.LRC)**, **Queue**, and **Folder** panes.
+- **Dedicated Media Folders (Fast Boot, Zero SD Overhead):** No more scanning the entire SD card (ROMs/BIOS/saves are skipped). KPlayer indexes exclusively:
+  - **Music:** `/roms/bgmusic` (SD1) and `/roms2/bgmusic` (SD2)
+  - **Videos:** `/roms/videos` (SD1) and `/roms2/videos` (SD2)
+- **dArkOS / EmulationStation Port Artwork & XML Metadata:** `KPlayer-v2.0.0-R36S.zip` ships with a custom 640×480 cover (`images/KPlayer-image.png`), ready-to-use `gamelist.xml`, and a standalone `kplayer/KPlayer-metadata.xml` snippet to merge with existing ports.
+
+---
+
+## Screenshots (640 × 480 — R36S)
+
+| Animated Boot Splash | Slim Welcome (Language + Theme Dots) |
 | :---: | :---: |
-| ![KPlayer dashboard](docs/images/readme-home.png) | ![Music player](docs/images/readme-audio.png) |
-| **Online radio** | **Settings and themes** |
-| ![Demo radio list](docs/images/readme-radio.png) | ![KPlayer settings](docs/images/readme-options.png) |
-| **Video** | **Library** |
-| ![Video controls](docs/images/readme-video.png) | ![File browser](docs/images/readme-library.png) |
+| ![Animated boot splash v2.0.0](docs/images/readme-splash.png) | ![Slim welcome screen v2.0.0](docs/images/readme-welcome.png) |
+| **Main Dashboard** | **Music Player & Synced Lyrics (.LRC)** |
+| ![Dashboard v2.0.0](docs/images/readme-home.png) | ![Music player v2.0.0](docs/images/readme-audio.png) |
+| **Placar da Bola — Live Matches** | **Placar da Bola — Match Statistics** |
+| ![Placar da Bola](docs/images/readme-football.png) | ![Match detail stats](docs/images/readme-football-detail.png) |
+| **Online Radio** | **Live IPTV (Brazil / World / Local)** |
+| ![Online radio](docs/images/readme-radio.png) | ![IPTV](docs/images/readme-iptv.png) |
+| **Dedicated Folders (SD1 / SD2)** | **Video Player (libVLC)** |
+| ![Dedicated library folders](docs/images/readme-library.png) | ![Video player](docs/images/readme-video.png) |
+| **Settings & 7 Color Themes** | **Official dArkOS / EmulationStation Port Cover** |
+| ![Settings and themes](docs/images/readme-options.png) | ![KPlayer v2.0.0 Port Cover](docs/images/port-cover.png) |
 
-## Features
+---
 
-- Local music and video via libVLC; decoding depends on the target system's codecs and plugins.
-- Media scan in `kplayer/midias`, `/roms` and `/roms2`, manual browsing and a loading indicator.
-- Metadata, artwork, queue, next track and supported local LRC or embedded lyrics. Lyrics are not downloaded.
-- Radio Browser directory and a User Radio section for personal playlists.
-- **Experimental IPTV:** open **IPTV** on the home screen or in **Settings → Library → IPTV**. Use **X** to switch between Brazil, World and local lists. Channel name, category, ID and JPEG/PNG logo are shown when available; SVG and EPG are not supported. The online M3U lists come from [iptv-com/iptv](https://github.com/iptv-com/iptv), download in the background using `curl`, and are cached separately; **Y** refreshes. Local lists go in `ports/kplayer/iptv/`. Limit 2,048 entries per source and 4 MiB per file. Playback and rights vary; not tested on physical hardware.
-- Press X on a selected radio station to add or remove it; browse the **Favorites** category with left/right. Names and stream URLs are stored in `radio-favorites.tsv`.
-- Radio attempts up to three reconnects after a failure or stream end and shows current-track metadata when provided. A blocked libVLC connection can still delay switching; test on device.
-- Seven themes; Brazilian Portuguese, English and Spanish; first-run welcome and usage notices.
-- Video playback options and available audio/subtitle tracks.
-- Settings provide repeat off, track or queue and shuffle for music. Without queue repeat, playback stops after the cycle; L1 goes back sequentially and R1 advances.
-- In Settings, mark the current song with **Favorite track** and open **My favorites** to browse matching songs. The automatic scan and its limits apply; moving a file can lose the mark.
-- Open local M3U/M3U8 music playlists in Files, All filter. Entries can be absolute or relative file paths; streams and nested playlists are not imported.
-- Settings can resume the last file and its position (not its old queue), set a timer that stops playback, or select an available libVLC equalizer preset. The timer and preset do not persist after exit.
-- Experimental GitHub release check at startup, with consent before installation.
+## Installation on R36S (dArkOS / PortMaster)
 
-## Requirements and installation
+1. Download **`KPlayer-v2.0.0-R36S.zip`** from **[Releases](../../releases)**. *(Do not install the GitHub source archive.)*
+2. Extract it and copy these files to `/roms/ports/` (or `/roms2/ports/` on SD2):
+   - `KPlayer.sh`
+   - `kplayer/` directory
+   - `images/KPlayer-image.png` *(EmulationStation cover art)*
+   - `gamelist.xml` *(if you don't already have one in `ports/`; if you have other ports, paste the `<game>...</game>` block from `kplayer/KPlayer-metadata.xml` into your existing `gamelist.xml`)*.
+3. Add your media to the dedicated folders:
 
-An ARM64 R36S with compatible dArkOS and configured PortMaster is the intended target; other devices and firmware are not guaranteed. The system must supply compatible SDL2, audio output and VLC plugins. Radio and updates need internet; the updater needs `python3` with HTTPS. Radio logos may require `curl` and JPEG/PNG support.
+| Media Type | SD1 Path | SD2 Path | Recognized Formats |
+| :--- | :--- | :--- | :--- |
+| **Music (+ `.lrc`)** | `/roms/bgmusic` | `/roms2/bgmusic` | MP3, FLAC, OGG, WAV, M4A, AAC, OPUS |
+| **Videos** | `/roms/videos` | `/roms2/videos` | MP4, MKV, AVI, MOV, WEBM |
+| **User Radio** | `ports/kplayer/radios_usuario/` | — | `.pls`, `.m3u`, `.m3u8`, `.asx` |
+| **Local IPTV** | `ports/kplayer/iptv/` | — | `.m3u`, `.m3u8` |
 
-1. Download the installable R36S ZIP from [Releases](https://github.com/kaiaum01/KPLAYER-v1.0.0/releases), if published. The source ZIP is not an installer.
-2. Extract it and copy `KPlayer.sh` and `kplayer/` side by side to the SD card's `ports/` directory. Preserve personal media, radio lists and settings when replacing an installation.
-3. Refresh the ports list if needed and start **KPlayer**. Select the language on first run; usage notices are available on the welcome screen.
+4. Refresh the Ports list in EmulationStation and launch **Ports → KPlayer v2.0.0**.
 
-Older installations need a manual installation of the new executable, `updater.py` and `KPlayer.sh` before automatic updates can work. Once the new launcher works, remove only the old `KPlayer (Beta).sh` to avoid a duplicate menu entry; keep the `kplayer/` directory. More details: [installation](docs/INSTALL.md).
+> **Requirements:** ARM64 R36S running dArkOS with PortMaster, SDL2, ALSA, and compatible VLC plugins in `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Online Radio, IPTV, Placar da Bola, and updates require internet access. See [docs/INSTALL.md](docs/INSTALL.md) for full details.
+
+---
 
 ## Controls
 
-| Button | Main action |
-| --- | --- |
-| D-pad | Navigate / change options |
-| B / A | Confirm / back |
-| SELECT | Open or close settings |
-| START | Pause / resume media |
-| X / Y | Context-dependent actions shown on screen |
-| L1 / R1 | Previous / next track or station where available |
+| Button | Action |
+| :---: | :--- |
+| **D-pad** | Navigate menus, switch tabs, pick language/theme, or seek ±10s |
+| **B** | Confirm / Open / Play / Match details |
+| **A** | Back / Cancel |
+| **X** | Switch Queue/Folder in Music · Filter in Football/IPTV · Favorite Radio · Hide Video OSD |
+| **Y** | Lyrics in Music · Refresh data (Radio / IPTV / Football / Library) · Terms on Welcome |
+| **L1 / R1** | Previous / next track, video, or radio station |
+| **START** | Pause / Resume playback |
+| **SELECT** | Open / Close Settings |
 
-Use the console's physical/system controls for volume. See the [full control map](docs/CONTROLS.md).
+Use the console's physical buttons for volume. See [docs/CONTROLS.md](docs/CONTROLS.md) for the complete screen-by-screen control map.
 
-## Media and user radio
+---
 
-Put files in `ports/kplayer/midias/` or use the browser. The automatic scan ignores files below 50 KiB and is limited to 4,096 results; the manual browser may show smaller files. Access to `/roms` and `/roms2` depends on the firmware and permissions.
+## Build, Tests & Licenses
 
-Recognized extensions include MP3, FLAC, OGG, WAV, M4A, AAC and OPUS for audio, and MP4, MKV, AVI, MOV and WEBM for video. **Extension recognition does not guarantee decoding or performance**: codec, profile and resolution depend on installed plugins and the device. See [media details](docs/MEDIA.md).
-
-Place `.pls`, `.asx`, `.m3u` or `.m3u8` files in `ports/kplayer/radios_usuario/`. Open **Online Radio**, use left/right to select **User Radio**, then press **Y** to refresh. Files are limited to 64 KiB, HTTP/HTTPS URLs are recognized and not all playlist variants work. Included stations are examples and may go offline.
-
-## Experimental updater
-
-At startup the app checks the latest public release. If a newer compatible package is found, it asks before installing. Selecting **No**, no update being available or a failed check allows normal startup. Selecting **Yes** installs and restarts; press B to continue after installation failure. The launcher and updater script themselves are not updated automatically.
-
-The release must include a compatible ZIP and checksum. SHA-256 checks integrity, **not a digital signature**. The new launcher attempts recovery after interruption; actual power-loss recovery has not been tested on a device. Test on a copied SD card first; see [limitations](ATUALIZADOR-EXPERIMENTAL.md) and the [publishing guide](PUBLICACAO-1.0.0.md).
-
-## Privacy and troubleshooting
-
-Radio directories and streams contact third-party services. Approximate IP location is disabled by default and can be enabled in Settings; when enabled, it sends the public IP to the provider over unencrypted HTTP. Radio streams can use HTTP or HTTPS. Provider availability, privacy and terms vary.
-
-If the app does not start, check PortMaster, system plugins and `ports/kplayer/log.txt`. If media is missing, check paths, extensions, the size limit and the manual browser. For a radio failure, try another station and check connectivity. An update requires a newer public compatible release, Python 3 and internet; drafts and prereleases are not used. The synchronous scanning indicator may pause while the card is busy. Remove personal data from logs before sharing them.
-
-Back up `midias/`, `radios_usuario/`, `settings.cfg`, `preferences.cfg`, `favorites.cfg`, `radio-favorites.tsv` and `resume.cfg` before changes.
-
-## Development and licenses
-
-See [build instructions](docs/BUILD.md), [contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md) and [publishing](PUBLICACAO-1.0.0.md). Original interface code is **GPL-2.0-or-later**; see [LICENSE](LICENSE). VLC/libVLC, SDL, stb and fonts have their own terms: [THIRD_PARTY.md](THIRD_PARTY.md) and `ports/kplayer/licencas/`. VLC source and patch are under `upstream/` and `patches/`.
-
-KPlayer is not officially affiliated with or endorsed by VideoLAN or PortMaster.
+- **Build & Packaging:** See [docs/BUILD.md](docs/BUILD.md) and [PUBLICAR_NO_GITHUB.md](PUBLICAR_NO_GITHUB.md).
+- **License:** Original KPlayer interface code is licensed under **GPL-2.0-or-later** ([LICENSE](LICENSE)). VLC/libVLC, SDL2, stb, and bundled fonts retain their respective licenses in [THIRD_PARTY.md](THIRD_PARTY.md) and `ports/kplayer/licencas/`.
+- KPlayer is an independent project and is not affiliated with or endorsed by VideoLAN, PortMaster, or SofaScore.

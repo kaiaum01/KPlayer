@@ -764,9 +764,11 @@ static void draw_radio(void) {
                      : tr("Nenhuma estação encontrada"),
              28, 246, 200, 13, muted);
   int control_y = 356;
-  media_ui_skip(86, control_y, false);
+  fill_circle(82, control_y, 13, mix(elevated, textc, 0.05f));
+  media_ui_skip(82, control_y, false);
   play_disc(128, control_y, 20, playing_radio && active && !paused);
-  media_ui_skip(170, control_y, true);
+  fill_circle(174, control_y, 13, mix(elevated, textc, 0.05f));
+  media_ui_skip(174, control_y, true);
   rounded(48, 390, 160, 22, 11, elevated);
   const char *play_status = tr("B  Ouvir estação");
   if (radio_retry_waiting) play_status = tr("Reconectando...");

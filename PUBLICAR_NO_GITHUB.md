@@ -1,59 +1,60 @@
-# Publicar KPlayer (Beta) pelo GitHub Desktop
+# Publicar KPlayer v2.0.0 no GitHub
 
-Este projeto já contém uma pasta Git inicializada, com branch `main`, sem commits, conta, e-mail de autor ou endereço remoto configurado. Nenhuma publicação foi realizada.
+Tudo já está pronto, compilado, testado, documentado e com o **commit** e a **tag `v2.0.0`** criados no repositório local.
 
-## 1. Adicionar o projeto
+---
 
-1. Extraia o ZIP completamente. Não abra os arquivos dentro da janela do ZIP.
-2. Abra o GitHub Desktop e entre na sua conta.
-3. Use **File → Add local repository → Choose**.
-4. Selecione a pasta **KPlayer**, a mesma que contém `README.md`, `source` e `ports`.
-5. Clique em **Add repository**.
+## 1. Enviar o Commit e a Tag `v2.0.0` (Terminal)
 
-Também é possível arrastar a pasta KPlayer para a janela do Desktop.
+Substitua `<SEU_USUARIO>/<SEU_REPO>` pelo endereço do seu repositório no GitHub:
 
-Se o programa disser que não é um repositório Git, confira se selecionou a pasta correta e se a extração preservou a pasta `.git`. Como alternativa, abra um terminal na pasta KPlayer e execute `git init -b main`; depois adicione essa mesma pasta ao Desktop. Não crie uma segunda pasta KPlayer dentro dela.
+```bash
+git remote add origin https://github.com/<SEU_USUARIO>/<SEU_REPO>.git
+# Se já tiver origin configurado, use: git remote set-url origin https://github.com/<SEU_USUARIO>/<SEU_REPO>.git
 
-## 2. Fazer o primeiro commit
+git push -u origin main
+git push origin v2.0.0
+```
 
-Na aba Changes, mantenha os arquivos do projeto selecionados. Em Summary, use:
+> **Automação via GitHub Actions:** assim que você fizer `git push origin v2.0.0`, o workflow **KPlayer - Compilar e preparar release R36S** (`.github/workflows/release-r36s.yml`) compila automaticamente o binário ARM64, gera `KPlayer-v2.0.0-R36S.zip` + `.sha256` e cria um **rascunho da Release `KPlayer v2.0.0`** já preenchido com `releases/RELEASE_NOTES.md`!
 
-`KPlayer (Beta) v0.7.1 — Players de áudio e rádio renovados`
+---
 
-Clique em **Commit to main**. O autor do commit será a identidade configurada na sua conta do GitHub Desktop.
+## 2. Ou Publicar Manualmente (GitHub Desktop + Web)
 
-## 3. Publicar
+1. Abra o **GitHub Desktop → File → Add local repository** e selecione a pasta do projeto.
+2. Clique em **Publish repository** (ou **Push origin** se já conectado).
+   - **Nome sugerido:** `KPlayer`
+   - **Descrição sugerida:** `Portable media center for R36S (dArkOS / PortMaster) — Music with LRC, Video, Online Radio, IPTV & Placar da Bola (C + SDL2 + libVLC)`
+3. No navegador, abra seu repositório no GitHub e vá em **Releases → Draft a new release**:
+   - **Tag:** `v2.0.0` (branch `main`)
+   - **Release title:** `KPlayer v2.0.0 — R36S / dArkOS`
+   - **Description:** copie e cole todo o conteúdo de **`releases/RELEASE_NOTES.md`**
+   - **Anexos (Attach binaries):**
+     - `releases/KPlayer-v2.0.0-R36S.zip`
+     - `releases/KPlayer-v2.0.0-R36S.zip.sha256`
+4. Clique em **Publish release**.
 
-Clique em **Publish repository**. Sugestão:
+---
 
-- **Name:** `KPlayer`
-- **Description:** `Native audio and video player for R36S / dArkOS / PortMaster. C, SDL2 and libVLC. PT-BR, English and Spanish. Beta.`
-- Desmarque **Keep this code private** se quiser disponibilizar publicamente.
-- Publique na sua conta pessoal e clique em **Publish repository**.
+## 3. Mensagem de Commit Utilizada
 
-O nome apresentado no README é **KPlayer (Beta)**. O nome curto `KPlayer` é o sugerido para o endereço do repositório.
+```text
+release: KPlayer v2.0.0 for R36S / dArkOS
 
-## 4. Criar a primeira release
+- Animated boot splash screen with upfront library, radio, IPTV & football preloading
+- Slim animated first-run welcome screen with unified language capsule and 7 live theme color dots
+- Replace YouTube with Placar da Bola (SofaScore-style live scores, stats, events & lineups)
+- Re-center music player transport bar and polish playback/category icons
+- Restrict media scan to dedicated folders: /roms(2)/bgmusic (audio) and /roms(2)/videos (video)
+- Bundle 640x480 dArkOS port cover (images/KPlayer-image.png), gamelist.xml and KPlayer-metadata.xml
+- Refresh all v2.0.0 screenshots, banner, bilingual documentation, unit tests and release notes
+```
 
-Depois do upload, abra o repositório no navegador:
+---
 
-1. Acesse **Releases → Draft a new release**.
-2. Crie a tag **`v0.7.1-beta`**, apontando para o commit publicado na branch `main`.
-3. Use o título **`KPlayer (Beta) — v0.7.1`**.
-4. Copie o texto de `releases/RELEASE_NOTES.md` para a descrição.
-5. Anexe `releases/KPlayer-Beta-v0.7.1-R36S.zip` e seu arquivo `.sha256`.
-6. Marque a versão como **pre-release** e publique quando estiver pronto.
+## 4. Verificação do Pacote Gerado
 
-O ZIP instalável já está gerado. Não anexe o ZIP externo do projeto como se fosse o pacote de instalação.
-
-## O que está preparado
-
-README em inglês e português com imagens; instalação, controles, compilação, mídias, changelog, créditos e licenças; fontes C e testes; motor VLC original e patch; arquivos compilados em `ports/`; ZIP instalável e notas da release.
-
-O diretório `upstream/` inclui o tarball VLC necessário para os fontes correspondentes do motor. Use o GitHub Desktop para publicar a pasta completa. Os arquivos foram organizados sem músicas pessoais, logs, configurações de usuário, compiladores ou pastas temporárias de desenvolvimento.
-
-## Documentação oficial
-
-- https://docs.github.com/en/desktop/adding-and-cloning-repositories/adding-a-repository-from-your-local-computer-to-github-desktop
-- https://docs.github.com/en/desktop/adding-and-cloning-repositories/adding-an-existing-project-to-github-using-github-desktop
-- https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository
+- **ZIP instalável:** `releases/KPlayer-v2.0.0-R36S.zip` (`7.011.063 bytes`)
+- **SHA-256:** `7733a29cf0ca3c226ffd7f2e94218eaf69446162390f3ca5430788fea1045b0b`
+- **Conteúdo do ZIP:** `KPlayer.sh`, `gamelist.xml`, `images/KPlayer-image.png`, `kplayer/kplayer` (ARM64), `kplayer/cover.png`, `kplayer/KPlayer-metadata.xml`, `kplayer/lib/libvlc*`, `kplayer/football_fetch.py`, `kplayer/golazo`, `kplayer/updater.py`, fontes, sprites, rádios de exemplo e licenças.

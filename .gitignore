@@ -18,3 +18,11 @@
 /output/
 *.bmp
 .*.tar.xz.*
+/node_modules/
+/dist/
+/.aistudio/
+/.build-outputs/
+/releases/*.zip
+/releases/*.sha256
+__pycache__/
+*.pyc

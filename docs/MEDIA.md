@@ -1,35 +1,42 @@
-# Media and metadata / Mídias e metadados
+# Media and Metadata / Mídias e Metadados — KPlayer v2.0.0
 
 ## English
 
-The Music and Video dashboard cards recursively scan `kplayer/midias`, `/roms` and `/roms2`. Files smaller than 50 KB are excluded from this automatic view, and results are bounded to 4096 entries. The Files card keeps manual folder navigation and can still show smaller supported files.
+### Dedicated Fast-Loading Folders (v2.0.0)
+To avoid slowing down the R36S by scanning thousands of ROMs, BIOS files, and emulator saves, KPlayer v2.0.0 indexes **only four dedicated folders**, filtered strictly by media type (max recursion depth 8, files ≥ 50 KB, up to 4,096 items):
 
-The extension list in the README is the browser filter, not a codec guarantee. Decoding, subtitle rendering, smooth playback and supported profiles depend on installed VLC plugins and device performance.
+- **Music (Audio only):** `/roms/bgmusic` (SD1) and `/roms2/bgmusic` (SD2)
+- **Videos (Video only):** `/roms/videos` (SD1) and `/roms2/videos` (SD2)
 
-MP3 tags are read locally: ID3v2.2/2.3/2.4 and ID3v1 title/artist/album; APIC/PIC JPEG or PNG artwork; USLT/ULT lyrics. UTF-8, Latin-1 and UTF-16 text are handled. Valid local metadata is kept rather than replaced by the engine's filename fallback. Other formats continue to use libVLC metadata; direct embedded artwork/lyrics extraction in this version is specific to ID3 tags.
+The **Files** view gives direct access to those same four folders on SD1 and SD2 so you can browse subfolders manually.
 
-For external artwork, use the media basename plus `.jpg`/`.png`, or `cover.jpg`, `cover.png`, `folder.jpg`, `folder.png`, `front.jpg`, `front.png` in the same folder. External covers have priority. The display crops the centre of the image into a square while preserving its proportions. Images are limited to 2048 × 2048; ID3 tags to 16 MiB and embedded picture data to 8 MiB.
+### Formats, Tags, Artwork & Lyrics
+- **Recognized extensions:** MP3, FLAC, OGG, WAV, M4A, AAC, OPUS (audio) and MP4, MKV, AVI, MOV, WEBM (video). Actual decoding depends on the device's installed VLC plugins.
+- **Local MP3 ID3 tags:** ID3v2.2/2.3/2.4 and ID3v1 title/artist/album; APIC/PIC JPEG or PNG artwork; USLT/ULT lyrics (UTF-8, Latin-1, UTF-16).
+- **External artwork:** `Song.jpg`/`.png`, or `cover.jpg`, `cover.png`, `folder.jpg`, `folder.png`, `front.jpg`, `front.png` in the same folder (up to 2048×2048). External covers take priority over embedded art.
+- **Synced lyrics (`.lrc`):** UTF-8 `Song.lrc` / `Song.LRC` alongside `Song.mp3` with `[mm:ss.xx]` timestamps and optional `[offset:ms]`. Lyrics are read locally and are never downloaded from the internet.
+- **Queue, Favorites & Playlists:** Queue snapshots the current folder's audio files; repeat (off / track / queue) and shuffle are configurable in Settings; local `.m3u` / `.m3u8` music playlists are supported.
 
-Use UTF-8 `Song.lrc` / `Song.LRC` alongside `Song.mp3`, with `[mm:ss.xx]` timestamps. Multiple timestamps and `[offset:milliseconds]` are accepted. Valid external LRC lines take precedence over embedded lyrics. Embedded USLT containing timestamps synchronizes too; plain embedded text can be scrolled. Lyrics are not downloaded from the internet.
-
-The queue is a snapshot of media of the same type in the selected folder. Browsing alone preserves it. Playing a track through the music Folder pane rebuilds the queue. Settings offer repeat off, current track or queue and a shuffle option for music. When shuffle is on, R1 advances through unvisited tracks and L1 moves sequentially. The My favorites entry scans the automatic roots for marked audio files, with the same scan limits; moving a file can lose its mark.
+---
 
 ## Português
 
-Os cartões Músicas e Vídeos pesquisam recursivamente em `kplayer/midias`, `/roms` e `/roms2`. Arquivos menores que 50 KB ficam fora desta visualização automática, limitada a 4096 resultados. O cartão Arquivos mantém a navegação manual e pode mostrar arquivos compatíveis menores.
+### Pastas Dedicadas de Carregamento Rápido (v2.0.0)
+Para não sobrecarregar o console R36S varrendo milhares de ROMs, BIOS e saves no cartão SD, o KPlayer v2.0.0 carrega **exclusivamente quatro pastas dedicadas**, filtrando estritamente por tipo de mídia (profundidade máxima de 8 subpastas, arquivos ≥ 50 KB, limite de 4.096 entradas):
 
-As extensões listadas no README são filtros do explorador. Codecs, perfis, legendas e fluidez dependem dos plugins VLC instalados e do desempenho do aparelho.
+- **Músicas (somente áudio):** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
+- **Vídeos (somente vídeo):** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
 
-MP3: leitura local de ID3v2.2/2.3/2.4 e ID3v1 para título/artistas/álbum; APIC/PIC para capa JPEG/PNG; USLT/ULT para letras. Texto UTF-8, Latin-1 e UTF-16. Metadados locais válidos são preservados. Outros formatos continuam usando os metadados da libVLC; a extração direta de capa e letras embutidas desta versão é específica de tags ID3.
+O cartão **Arquivos** lista diretamente essas 4 pastas para navegação manual por subpastas.
 
-Capas externas: mesmo nome da mídia com `.jpg`/`.png`, ou `cover.jpg`, `cover.png`, `folder.jpg`, `folder.png`, `front.jpg`, `front.png` na pasta. Têm prioridade sobre a capa embutida. A imagem mantém a proporção e é recortada no centro para ocupar o quadrado. Limites: imagem 2048 × 2048; tag ID3 16 MiB; imagem embutida 8 MiB.
+### Formatos, Tags, Capas e Letras
+- **Extensões reconhecidas:** MP3, FLAC, OGG, WAV, M4A, AAC e OPUS (áudio); MP4, MKV, AVI, MOV e WEBM (vídeo). A decodificação real depende dos plugins VLC instalados no firmware.
+- **Tags ID3 locais (MP3):** ID3v2.2/2.3/2.4 e ID3v1 para título, artista e álbum; APIC/PIC para capas JPEG/PNG; USLT/ULT para letras embutidas (UTF-8, Latin-1 e UTF-16).
+- **Capas externas:** mesmo nome da faixa com `.jpg`/`.png`, ou `cover`, `folder`, `front` (`.jpg`/`.png`) na mesma pasta (até 2048×2048). Têm prioridade sobre a capa embutida.
+- **Letras sincronizadas (`.lrc`):** arquivo `Musica.lrc` / `Musica.LRC` UTF-8 ao lado da música, com tempos `[mm:ss.xx]` e suporte a `[offset:ms]`. As letras são 100% locais e não usam internet.
+- **Fila, Favoritas e Playlists:** a fila preserva as faixas da pasta atual; repetição (desligada / faixa / fila) e aleatório ficam em Opções; playlists locais `.m3u` / `.m3u8` são suportadas.
 
-Letras: `Musica.lrc` / `Musica.LRC` UTF-8 ao lado de `Musica.mp3`, com tempos `[mm:ss.xx]`. Aceita múltiplos tempos e `[offset:milissegundos]`. Linhas válidas no LRC externo têm prioridade. USLT embutido com tempos também sincroniza; texto simples permite rolagem. As letras não são baixadas da internet.
+---
 
-A fila preserva os arquivos do mesmo tipo da pasta selecionada. Explorar outras pastas não a altera. Tocar pelo painel Pasta refaz a fila. Em Opções, escolha repetição desligada, da faixa ou da fila e ative o aleatório para música. Com aleatório, R1 avança entre faixas ainda não visitadas e L1 volta sequencialmente. Minhas favoritas procura arquivos de áudio marcados nas pastas da busca automática, com os mesmos limites; mover o arquivo pode perder a marcação.
-
-## Transport metadata / Metadados da barra
-
-The format badge is the uppercase filename extension, not a decoded codec/profile report. File size is read from `stat` when the file opens. It uses 1024-byte KB and 1024²-byte MB and shows `-- MB` when unavailable. No bitrate, channel count or sample rate is invented.
-
-A etiqueta mostra a extensão em maiúsculas, não um relatório do codec/perfil. O tamanho vem de `stat` ao abrir o arquivo; usa KB de 1024 bytes e MB de 1024² bytes, com `-- MB` quando indisponível. Bitrate, canais e taxa de amostragem não são estimados.
+## Transport Metadata / Metadados da Barra
+The format badge displays the uppercase file extension and reads the exact file size via `stat` (1024-byte KB / 1024²-byte MB), displaying `-- MB` when unavailable. Audio sample rate, channels, and bitrate are queried from libVLC tracks when playing.

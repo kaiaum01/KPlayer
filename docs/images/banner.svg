@@ -1,12 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="380" viewBox="0 0 1280 380">
-<rect width="1280" height="380" rx="24" fill="#121212"/>
-<rect x="64" y="98" width="164" height="164" rx="42" fill="#1db954"/>
-<text x="89" y="219" fill="#121212" font-family="Arial,sans-serif" font-weight="700" font-size="109">K</text>
-<path d="M169 159 L204 181 L169 203Z" fill="#121212"/>
-<text x="282" y="166" fill="#ffffff" font-family="Arial,sans-serif" font-size="66" font-weight="700">KPlayer</text>
-<rect x="570" y="113" width="138" height="58" rx="16" fill="#24392c"/>
-<text x="594" y="152" fill="#1db954" font-family="Arial,sans-serif" font-size="31" font-weight="700">BETA</text>
-<text x="284" y="218" fill="#b3b3b3" font-family="Arial,sans-serif" font-size="26">Audio &amp; video, wherever you go.</text>
-<text x="284" y="274" fill="#1db954" font-family="Arial,sans-serif" font-size="22">R36S   /   dArkOS   /   PortMaster</text>
-<text x="284" y="312" fill="#8c8c8c" font-family="Arial,sans-serif" font-size="18">Native C + SDL2 + libVLC    ·    PT-BR / EN / ES</text>
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0c10"/>
+      <stop offset="55%" stop-color="#0f1512"/>
+      <stop offset="100%" stop-color="#0a0c10"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="15%" cy="50%" r="40%">
+      <stop offset="0%" stop-color="#1db954" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#1db954" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1db954"/>
+      <stop offset="100%" stop-color="#34e877"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="380" rx="24" fill="url(#bgGrad)"/>
+  <rect width="1280" height="380" rx="24" fill="url(#glow)"/>
+  <rect x="1" y="1" width="1278" height="378" rx="23" fill="none" stroke="#1db954" stroke-opacity="0.25" stroke-width="2"/>
+
+  <!-- Sonar rings & vinyl disc emblem -->
+  <circle cx="176" cy="190" r="118" fill="none" stroke="#1db954" stroke-opacity="0.16" stroke-width="2"/>
+  <circle cx="176" cy="190" r="96" fill="none" stroke="#1db954" stroke-opacity="0.30" stroke-width="2"/>
+  <circle cx="176" cy="190" r="76" fill="#111613" stroke="#1db954" stroke-width="3"/>
+  <circle cx="176" cy="190" r="58" fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="1.5"/>
+  <circle cx="176" cy="190" r="44" fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="1.5"/>
+  <circle cx="176" cy="190" r="28" fill="url(#accentGrad)"/>
+  <circle cx="176" cy="190" r="8" fill="#0a0c10"/>
+  <circle cx="262" cy="126" r="5" fill="#34e877"/>
+  <circle cx="88" cy="242" r="4" fill="#1db954"/>
+
+  <!-- Wordmark + v2.0.0 badge -->
+  <text x="330" y="152" fill="#ffffff" font-family="DejaVu Sans,Arial,sans-serif" font-size="74" font-weight="700" letter-spacing="1">K PLAYER</text>
+  <rect x="722" y="96" width="154" height="58" rx="29" fill="#143220" stroke="#1db954" stroke-width="2"/>
+  <text x="799" y="136" text-anchor="middle" fill="#34e877" font-family="DejaVu Sans,Arial,sans-serif" font-size="30" font-weight="700">v2.0.0</text>
+
+  <!-- Tagline -->
+  <text x="332" y="206" fill="#c6d1cb" font-family="DejaVu Sans,Arial,sans-serif" font-size="25">Central de Mídia Portátil para R36S · dArkOS · PortMaster</text>
+
+  <!-- Feature pills -->
+  <rect x="332" y="236" width="128" height="36" rx="18" fill="#151b18" stroke="#25342b"/>
+  <text x="396" y="259" text-anchor="middle" fill="#e5efe9" font-family="DejaVu Sans,Arial,sans-serif" font-size="16" font-weight="600">Músicas LRC</text>
+
+  <rect x="472" y="236" width="102" height="36" rx="18" fill="#151b18" stroke="#25342b"/>
+  <text x="523" y="259" text-anchor="middle" fill="#e5efe9" font-family="DejaVu Sans,Arial,sans-serif" font-size="16" font-weight="600">Vídeos</text>
+
+  <rect x="586" y="236" width="138" height="36" rx="18" fill="#151b18" stroke="#25342b"/>
+  <text x="655" y="259" text-anchor="middle" fill="#e5efe9" font-family="DejaVu Sans,Arial,sans-serif" font-size="16" font-weight="600">Rádio Online</text>
+
+  <rect x="736" y="236" width="84" height="36" rx="18" fill="#151b18" stroke="#25342b"/>
+  <text x="778" y="259" text-anchor="middle" fill="#e5efe9" font-family="DejaVu Sans,Arial,sans-serif" font-size="16" font-weight="600">IPTV</text>
+
+  <rect x="832" y="236" width="166" height="36" rx="18" fill="#143220" stroke="#1db954"/>
+  <text x="915" y="259" text-anchor="middle" fill="#34e877" font-family="DejaVu Sans,Arial,sans-serif" font-size="16" font-weight="700">Placar da Bola</text>
+
+  <!-- Footer specs -->
+  <text x="332" y="318" fill="#819187" font-family="DejaVu Sans,Arial,sans-serif" font-size="18">C + SDL2 + libVLC (ARM64 · 640×480)   ·   7 Temas   ·   PT-BR / EN / ES   ·   dArkOS XML + Capa</text>
 </svg>

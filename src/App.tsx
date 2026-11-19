@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KP_THEMES } from './themes';
-import { LANGUAGE_CODES, LANGUAGE_NAMES, TERMS_PAGES, tr } from './i18n';
+import { LANGUAGE_NAMES, TERMS_PAGES, tr } from './i18n';
 import type {
   EqPresetName,
   FootballMatch,
@@ -26,11 +26,11 @@ import {
   AudioVisualizer,
   FooterBar,
   KpCardIcon,
-  KPlayerLogo,
   KpSprite,
   ModernBackdrop,
   PlayDisc,
   TileArrow,
+  TransportSkipButton,
   VinylArt,
   mixRgb,
   modernCardStyle,
@@ -41,7 +41,9 @@ import {
 } from './components/R36SIcons';
 import { R36SControls, type R36SButton } from './components/R36SControls';
 import { VideoScreen } from './components/VideoScreen';
-import { YoutubeScreen, type YoutubeScreenHandle } from './components/YoutubeScreen';
+import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/PlacarDaBolaScreen';
+import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
+import portCoverImg from './assets/images/kplayer_port_cover_1795064951734.jpg';
 
 const RADIO_CATEGORIES = [
   'Brasil',
@@ -86,6 +88,7 @@ export default function App() {
   const [language, setLanguage] = useState<LanguageCode>(() => loadStorage('kp_lang', 0));
   const [onboarded, setOnboarded] = useState<boolean>(() => loadStorage('kp_onboarded', false));
   const [themeIndex, setThemeIndex] = useState<number>(() => loadStorage('kp_theme', 0));
+  const [welcomeFocus, setWelcomeFocus] = useState<0 | 1>(0);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => loadStorage('kp_repeat', 0));
   const [shuffle, setShuffle] = useState<boolean>(() => loadStorage('kp_shuffle', false));
   const [ipLocationEnabled, setIpLocationEnabled] = useState<boolean>(() =>
@@ -98,15 +101,52 @@ export default function App() {
     loadStorage('kp_fav_radios', [])
   );
   const [showDeck, setShowDeck] = useState<boolean>(true);
+  const [showR36sModal, setShowR36sModal] = useState<boolean>(false);
+  const [r36sInfo, setR36sInfo] = useState<{
+    ready: boolean;
+    version: string;
+    filename: string;
+    sizeBytes: number;
+    sha256: string;
+    arch: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/r36s/info')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.ready) setR36sInfo(data);
+      })
+      .catch(() => {});
+  }, []);
 
   const theme = KP_THEMES[themeIndex] ?? KP_THEMES[0];
 
-  // Screen navigation
-  const [screen, setScreen] = useState<ScreenMode>(() => (onboarded ? 'home' : 'welcome'));
+  // Screen navigation — always starts on animated boot splash screen every time player turns on
+  const [screen, setScreen] = useState<ScreenMode>('boot');
   const [prevScreen, setPrevScreen] = useState<ScreenMode>('home');
   const [termsPage, setTermsPage] = useState(0);
   const [termsReturn, setTermsReturn] = useState<ScreenMode>('welcome');
   const [dashFocus, setDashFocus] = useState(0);
+
+  // Boot splash animation & upfront preload state
+  const [bootRunId, setBootRunId] = useState(0);
+  const [bootProgress, setBootProgress] = useState(6);
+  const [bootStep, setBootStep] = useState('Iniciando K PLAYER');
+  const [bootFading, setBootFading] = useState(false);
+  const [bootStatus, setBootStatus] = useState<BootPreloadStatus>({
+    libraryReady: false,
+    radioReady: false,
+    iptvReady: false,
+    footballReady: false,
+    mediaCount: 0,
+    radioCount: 0,
+    iptvCount: 0,
+    matchCount: 0,
+  });
+  const [preloadedMatches, setPreloadedMatches] = useState<FootballMatch[]>([]);
+  const radioCacheRef = useRef<Map<number, RadioStation[]>>(new Map());
+  const iptvCacheRef = useRef<Map<number, IptvChannel[]>>(new Map());
 
   // Header location & toast notification
   const [locationLabel, setLocationLabel] = useState('Mídias locais');
@@ -132,7 +172,7 @@ export default function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const m3uInputRef = useRef<HTMLInputElement | null>(null);
-  const youtubeRef = useRef<YoutubeScreenHandle | null>(null);
+  const placarRef = useRef<PlacarDaBolaHandle | null>(null);
 
   const [activeTrack, setActiveTrack] = useState<MediaTrack | null>(() => tracks[0] ?? null);
   const [activeRadio, setActiveRadio] = useState<RadioStation | null>(null);
@@ -168,11 +208,6 @@ export default function App() {
   const [localIptvChannels, setLocalIptvChannels] = useState<IptvChannel[]>([]);
   const [iptvSelected, setIptvSelected] = useState(0);
   const [iptvLoading, setIptvLoading] = useState(false);
-
-  // Football State
-  const [matches, setMatches] = useState<FootballMatch[]>([]);
-  const [footballSelected, setFootballSelected] = useState(0);
-  const [footballLoading, setFootballLoading] = useState(false);
 
   // Options State
   const [optionGroupIdx, setOptionGroupIdx] = useState(0);
@@ -245,15 +280,146 @@ export default function App() {
     try {
       const r = await fetch('/api/user-radios');
       const d = (await r.json()) as { stations?: RadioStation[] };
-      setUserRadios(d.stations ?? []);
+      const list = d.stations ?? [];
+      setUserRadios(list);
+      return list;
     } catch {
       setUserRadios([]);
+      return [] as RadioStation[];
     }
   }, []);
 
+  // Animated boot startup sequence: preloads library, radios, IPTV & Placar da Bola upfront
+  // so entering screens inside KPlayer is instant with zero loading screen.
+  const tracksCountRef = useRef(tracks.length);
+  tracksCountRef.current = tracks.length;
+  const onboardedRef = useRef(onboarded);
+  onboardedRef.current = onboarded;
+
   useEffect(() => {
-    fetchUserRadios();
-  }, [fetchUserRadios]);
+    let cancelled = false;
+    setScreen('boot');
+    setBootFading(false);
+    setBootProgress(8);
+    setBootStep('Iniciando K PLAYER');
+    setBootStatus({
+      libraryReady: false,
+      radioReady: false,
+      iptvReady: false,
+      footballReady: false,
+      mediaCount: 0,
+      radioCount: 0,
+      iptvCount: 0,
+      matchCount: 0,
+    });
+
+    const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+    const runBoot = async () => {
+      const startTs = performance.now();
+
+      // Phase 1: Library indexing ready
+      await sleep(320);
+      if (cancelled) return;
+      setBootStep('Carregando biblioteca de mídias');
+      setBootProgress(32);
+      setBootStatus((prev) => ({
+        ...prev,
+        libraryReady: true,
+        mediaCount: tracksCountRef.current,
+      }));
+
+      // Phase 2: Preload Radio, IPTV & Placar da Bola in parallel during boot animation
+      await sleep(220);
+      if (cancelled) return;
+      setBootStep('Preparando rádios, IPTV e Placar da Bola');
+      setBootProgress(52);
+
+      const radioTask = Promise.all([
+        fetchUserRadios(),
+        fetch('/api/radio?category=0')
+          .then((r) => (r.ok ? r.json() : { stations: [] }))
+          .then((d: { stations?: RadioStation[] }) => d.stations ?? [])
+          .catch(() => [] as RadioStation[]),
+      ]).then(([uList, brList]) => {
+        if (cancelled) return;
+        radioCacheRef.current.set(0, brList);
+        setRadioStations(brList);
+        setBootStatus((prev) => ({
+          ...prev,
+          radioReady: true,
+          radioCount: brList.length + uList.length,
+        }));
+        setBootProgress((p) => Math.max(p, 68));
+      });
+
+      const iptvTask = fetch('/api/iptv?source=br')
+        .then((r) => (r.ok ? r.json() : { channels: [] }))
+        .then((d: { channels?: IptvChannel[] }) => d.channels ?? [])
+        .catch(() => [] as IptvChannel[])
+        .then((channels) => {
+          if (cancelled) return;
+          iptvCacheRef.current.set(1, channels);
+          setIptvChannels(channels);
+          setBootStatus((prev) => ({
+            ...prev,
+            iptvReady: true,
+            iptvCount: channels.length,
+          }));
+          setBootProgress((p) => Math.max(p, 82));
+        });
+
+      const footballTask = fetch('/api/football')
+        .then((r) => (r.ok ? r.json() : { matches: [] }))
+        .then((d: { matches?: FootballMatch[] }) => d.matches ?? [])
+        .catch(() => [] as FootballMatch[])
+        .then((list) => {
+          if (cancelled) return;
+          setPreloadedMatches(list);
+          setBootStatus((prev) => ({
+            ...prev,
+            footballReady: true,
+            matchCount: list.length,
+          }));
+          setBootProgress((p) => Math.max(p, 92));
+        });
+
+      // Wait for preloads (capped at 3.2s so boot never stalls offline)
+      await Promise.race([Promise.all([radioTask, iptvTask, footballTask]), sleep(3200)]);
+      if (cancelled) return;
+
+      // Ensure smooth minimum ~1.9s animation so transitions feel fluid
+      const elapsed = performance.now() - startTs;
+      if (elapsed < 1850) {
+        await sleep(1850 - elapsed);
+      }
+      if (cancelled) return;
+
+      setBootStatus((prev) => ({
+        ...prev,
+        libraryReady: true,
+        radioReady: true,
+        iptvReady: true,
+        footballReady: true,
+      }));
+      setBootStep('Tudo pronto!');
+      setBootProgress(100);
+      await sleep(360);
+      if (cancelled) return;
+
+      setBootFading(true);
+      await sleep(280);
+      if (cancelled) return;
+
+      setScreen(onboardedRef.current ? 'home' : 'welcome');
+      setBootFading(false);
+    };
+
+    runBoot();
+    return () => {
+      cancelled = true;
+    };
+  }, [bootRunId, fetchUserRadios]);
 
   // Web Audio Equalizer chain
   const eqNodesRef = useRef<{
@@ -472,9 +638,9 @@ export default function App() {
     }
   }, [playbackRate, activeRadio]);
 
-  // Fetch Radio stations when category changes or Radio opens
+  // Fetch Radio stations when category changes or Radio opens (instant when preloaded at boot)
   const loadRadioCategory = useCallback(
-    async (cat: number) => {
+    async (cat: number, force = false) => {
       setRadioError(null);
       setRadioSelected(0);
       if (cat === 5) {
@@ -485,12 +651,20 @@ export default function App() {
         setRadioStations(favoriteRadios);
         return;
       }
+      const cached = radioCacheRef.current.get(cat);
+      if (!force && cached && cached.length > 0) {
+        setRadioStations(cached);
+        setRadioLoading(false);
+        return;
+      }
       setRadioLoading(true);
       try {
         const r = await fetch(`/api/radio?category=${cat}`);
         const d = (await r.json()) as { stations?: RadioStation[]; error?: string };
-        setRadioStations(d.stations ?? []);
-        if (d.error && (!d.stations || d.stations.length === 0)) {
+        const list = d.stations ?? [];
+        if (list.length > 0) radioCacheRef.current.set(cat, list);
+        setRadioStations(list);
+        if (d.error && list.length === 0) {
           setRadioError(tr('Rádio indisponível', language));
         }
       } catch {
@@ -505,11 +679,11 @@ export default function App() {
 
   useEffect(() => {
     if (screen === 'radio') {
-      loadRadioCategory(radioCategory);
+      loadRadioCategory(radioCategory, false);
     }
   }, [screen, radioCategory, loadRadioCategory]);
 
-  // Fetch IPTV channels
+  // Fetch IPTV channels (instant when preloaded at boot)
   const loadIptv = useCallback(
     async (src: 0 | 1 | 2, force = false) => {
       setIptvSelected(0);
@@ -517,12 +691,20 @@ export default function App() {
         setIptvChannels(localIptvChannels);
         return;
       }
+      const cached = iptvCacheRef.current.get(src);
+      if (!force && cached && cached.length > 0) {
+        setIptvChannels(cached);
+        setIptvLoading(false);
+        return;
+      }
       setIptvLoading(true);
       try {
         const key = src === 1 ? 'br' : 'world';
         const r = await fetch(`/api/iptv?source=${key}${force ? '&refresh=1' : ''}`);
         const d = (await r.json()) as { channels?: IptvChannel[] };
-        setIptvChannels(d.channels ?? []);
+        const list = d.channels ?? [];
+        if (list.length > 0) iptvCacheRef.current.set(src, list);
+        setIptvChannels(list);
       } catch {
         setIptvChannels([]);
       } finally {
@@ -534,30 +716,9 @@ export default function App() {
 
   useEffect(() => {
     if (screen === 'iptv') {
-      loadIptv(iptvSource);
+      loadIptv(iptvSource, false);
     }
   }, [screen, iptvSource, loadIptv]);
-
-  // Fetch Football matches
-  const loadFootball = useCallback(async (force = false) => {
-    setFootballLoading(true);
-    try {
-      const r = await fetch(`/api/football${force ? '?refresh=1' : ''}`);
-      const d = (await r.json()) as { matches?: FootballMatch[] };
-      setMatches(d.matches ?? []);
-      setFootballSelected(0);
-    } catch {
-      setMatches([]);
-    } finally {
-      setFootballLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (screen === 'football') {
-      loadFootball();
-    }
-  }, [screen, loadFootball]);
 
   // Handle local media / LRC upload
   const handleFilesSelected = useCallback(
@@ -693,7 +854,7 @@ export default function App() {
         setIptvSource(1);
         setScreen('iptv');
       } else if (idx === 5) {
-        setScreen('youtube');
+        setScreen('football');
       }
     },
     [activeTrack, audioTracks]
@@ -789,6 +950,8 @@ export default function App() {
   // Unified R36S physical / keyboard / on-screen button handler
   const handleButton = useCallback(
     (btn: R36SButton) => {
+      if (screen === 'boot') return;
+
       if (btn === 'START') {
         togglePlayPause();
         return;
@@ -804,19 +967,22 @@ export default function App() {
         return;
       }
 
-      if (btn === 'L1') {
-        stepTrack(-1);
-        return;
-      }
-      if (btn === 'R1') {
-        stepTrack(1);
-        return;
-      }
-
       if (screen === 'welcome') {
-        if (btn === 'LEFT') setLanguage(((language + 2) % 3) as LanguageCode);
-        else if (btn === 'RIGHT') setLanguage(((language + 1) % 3) as LanguageCode);
-        else if (btn === 'B') {
+        if (btn === 'UP' || btn === 'DOWN') {
+          setWelcomeFocus((f) => (f === 0 ? 1 : 0));
+        } else if (btn === 'LEFT') {
+          if (welcomeFocus === 0) setLanguage(((language + 2) % 3) as LanguageCode);
+          else setThemeIndex((t) => (t + KP_THEMES.length - 1) % KP_THEMES.length);
+        } else if (btn === 'RIGHT') {
+          if (welcomeFocus === 0) setLanguage(((language + 1) % 3) as LanguageCode);
+          else setThemeIndex((t) => (t + 1) % KP_THEMES.length);
+        } else if (btn === 'L1') {
+          setWelcomeFocus(1);
+          setThemeIndex((t) => (t + KP_THEMES.length - 1) % KP_THEMES.length);
+        } else if (btn === 'R1') {
+          setWelcomeFocus(1);
+          setThemeIndex((t) => (t + 1) % KP_THEMES.length);
+        } else if (btn === 'B') {
           setOnboarded(true);
           setScreen('home');
         } else if (btn === 'Y') {
@@ -824,6 +990,15 @@ export default function App() {
           setTermsPage(0);
           setScreen('terms');
         }
+        return;
+      }
+
+      if (btn === 'L1') {
+        stepTrack(-1);
+        return;
+      }
+      if (btn === 'R1') {
+        stepTrack(1);
         return;
       }
 
@@ -954,8 +1129,8 @@ export default function App() {
         } else if (btn === 'X' && len) {
           toggleRadioFav(radioStations[radioSelected]);
         } else if (btn === 'Y') {
-          if (radioCategory === 5) fetchUserRadios().then(() => loadRadioCategory(5));
-          else loadRadioCategory(radioCategory);
+          if (radioCategory === 5) fetchUserRadios().then(() => loadRadioCategory(5, true));
+          else loadRadioCategory(radioCategory, true);
         }
         return;
       }
@@ -987,16 +1162,7 @@ export default function App() {
       }
 
       if (screen === 'football') {
-        const len = matches.length;
-        if (btn === 'A') setScreen('home');
-        else if (btn === 'UP' && len) setFootballSelected((i) => (i + len - 1) % len);
-        else if (btn === 'DOWN' && len) setFootballSelected((i) => (i + 1) % len);
-        else if (btn === 'Y') loadFootball(true);
-        return;
-      }
-
-      if (screen === 'youtube') {
-        youtubeRef.current?.handleButton(btn);
+        placarRef.current?.handleButton(btn);
         return;
       }
 
@@ -1024,6 +1190,7 @@ export default function App() {
       prevScreen,
       stepTrack,
       language,
+      welcomeFocus,
       termsReturn,
       dashFocus,
       openDashboardCard,
@@ -1051,8 +1218,6 @@ export default function App() {
       iptvSelected,
       iptvSource,
       loadIptv,
-      matches.length,
-      loadFootball,
       optionGroupIdx,
       optionRowIdx,
       activateOption,
@@ -1177,7 +1342,7 @@ export default function App() {
       myFavs: 'Minhas favoritas',
       resume: 'Retomar mídia',
       iptv: 'IPTV',
-      football: 'Futebol',
+      football: 'Placar da Bola',
       language: 'Idioma',
       theme: 'Tema',
       ipLocation: 'Localização por IP',
@@ -1192,7 +1357,6 @@ export default function App() {
   const selectedRadio = radioStations[radioSelected];
   const radioWindowStart = Math.max(0, Math.min(radioSelected - 2, Math.max(0, radioStations.length - 5)));
   const iptvWindowStart = Math.max(0, Math.min(iptvSelected - 3, Math.max(0, iptvChannels.length - 6)));
-  const footballWindowStart = Math.max(0, Math.min(footballSelected - 3, Math.max(0, matches.length - 6)));
   const libWindowStart = Math.max(0, Math.min(libSelected - 3, Math.max(0, filteredLibrary.length - 6)));
 
   return (
@@ -1249,16 +1413,44 @@ export default function App() {
             className="w-2 h-2 rounded-full"
             style={{ backgroundColor: theme.accent, boxShadow: `0 0 8px ${rgbToRgba(theme.accent, 0.7)}` }}
           />
-          <span className="font-semibold text-zinc-100">KPlayer 1.0.4</span>
+          <span className="font-semibold text-zinc-100">KPlayer 2.0.0</span>
           <span className="text-zinc-500">R36S • Visual Moderno • 640×480</span>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setShowR36sModal(true)}
+            style={{
+              backgroundColor: theme.accent,
+              color: theme.bg,
+              boxShadow: `0 0 12px ${rgbToRgba(theme.accent, 0.35)}`,
+            }}
+            className="px-2.5 py-1 rounded-md text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
+          >
+            ⬇ Baixar para R36S (.zip)
+          </button>
+          <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1db954] text-[#0c140e] hover:bg-[#22d361] transition-colors cursor-pointer"
+            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-100 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer"
           >
             + {tr('Mídias locais', language)} / .LRC
+          </button>
+          <button
+            type="button"
+            onClick={() => setScreen('welcome')}
+            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-200 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer"
+            title="Visualizar tela inicial de boas-vindas"
+          >
+            ✦ Boas-vindas
+          </button>
+          <button
+            type="button"
+            onClick={() => setBootRunId((n) => n + 1)}
+            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-200 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer"
+            title="Reproduzir tela de inicialização"
+          >
+            ↻ Reiniciar
           </button>
           <button
             type="button"
@@ -1291,11 +1483,30 @@ export default function App() {
             }}
             className="kp-screen"
           >
-            {/* ==================== WELCOME / ONBOARDING (09-boas-vindas.png) ==================== */}
+            {/* ==================== ANIMATED BOOT SPLASH SCREEN ==================== */}
+            {screen === 'boot' && (
+              <BootSplashScreen
+                theme={theme}
+                lang={language}
+                progress={bootProgress}
+                stepLabel={bootStep}
+                status={bootStatus}
+                fadingOut={bootFading}
+              />
+            )}
+
+            {/* ==================== WELCOME / ONBOARDING (ANIMATED BOOT STYLE v2.0.0) ==================== */}
             {screen === 'welcome' && (
-              <div className="w-full h-full relative overflow-hidden">
+              <div className="w-full h-full relative overflow-hidden flex flex-col items-center">
                 <ModernBackdrop theme={theme} />
 
+                {/* Ambient central aura matching Boot Splash */}
+                <div
+                  className="pointer-events-none absolute left-1/2 top-[110px] -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px] rounded-full blur-3xl opacity-30 transition-colors duration-500"
+                  style={{ backgroundColor: theme.accent }}
+                />
+
+                {/* Subtle top-right Terms shortcut micro-pill */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1304,109 +1515,246 @@ export default function App() {
                     setScreen('terms');
                   }}
                   style={{
-                    left: 430,
-                    top: 16,
-                    width: 194,
-                    height: 30,
-                    borderRadius: 15,
-                    backgroundColor: theme.elevated,
+                    ...modernPanelStyle(theme, 12),
+                    right: 16,
+                    top: 14,
+                    width: 166,
+                    height: 24,
                     color: theme.muted,
                   }}
-                  className="absolute z-10 flex items-center justify-center text-[13px] font-medium cursor-pointer hover:brightness-110"
+                  className="absolute z-20 flex items-center justify-center text-[11px] font-medium cursor-pointer hover:brightness-125 transition-all"
                 >
                   {tr('Y  Termos de uso', language)}
                 </button>
 
-                <div className="absolute z-10 left-1/2 -translate-x-1/2 top-[54px]">
-                  <KPlayerLogo theme={theme} size={76} />
-                </div>
-
-                <div
-                  style={{ top: 146, color: theme.text }}
-                  className="absolute z-10 inset-x-5 text-center text-[32px] font-extrabold tracking-wide"
-                >
-                  K PLAYER
-                </div>
-                <div
-                  style={{ top: 191, color: theme.muted }}
-                  className="absolute z-10 inset-x-5 text-center text-[16px]"
-                >
-                  {tr('Bem-vindo ao seu player', language)}
-                </div>
-                <div
-                  style={{ top: 228, color: theme.text }}
-                  className="absolute z-10 inset-x-5 text-center text-[17px] font-semibold"
-                >
-                  {tr('Escolha seu idioma', language)}
-                </div>
-
-                <div className="absolute z-10 left-[24px] top-[264px] flex gap-[8px]">
-                  {LANGUAGE_NAMES.map((name, idx) => {
-                    const chosen = idx === language;
-                    return (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => setLanguage(idx as LanguageCode)}
+                {/* Animated Boot-style Centerpiece (Sonar rings + Orbiting sparks + Spinning Vinyl) */}
+                <div className="relative z-10 flex flex-col items-center pt-[26px] w-full">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOnboarded(true);
+                      setScreen('home');
+                    }}
+                    title={tr('Toque ou pressione B para continuar', language)}
+                    className="relative w-[112px] h-[112px] flex items-center justify-center kp-boot-float cursor-pointer"
+                  >
+                    {[0, 0.7, 1.4].map((delay, i) => (
+                      <span
+                        key={i}
+                        className="pointer-events-none absolute inset-2 rounded-full kp-boot-sonar"
                         style={{
-                          ...modernCardStyle(theme, chosen, 12, theme.panel),
-                          width: 192,
-                          height: 66,
+                          border: `2px solid ${rgbToRgba(theme.accent, 0.65)}`,
+                          animationDelay: `${delay}s`,
                         }}
-                        className="text-left px-3.5 py-2.5 flex flex-col justify-between cursor-pointer transition-all"
-                      >
-                        <span
-                          style={{ color: chosen ? theme.accent : theme.muted }}
-                          className="text-[12px] font-bold"
-                        >
-                          {LANGUAGE_CODES[idx]}
-                        </span>
-                        <span style={{ color: theme.text }} className="text-[17px] font-semibold">
-                          {name}
-                        </span>
-                      </button>
-                    );
-                  })}
+                      />
+                    ))}
+
+                    <span
+                      className="pointer-events-none absolute w-[7px] h-[7px] rounded-full kp-boot-orbit"
+                      style={{
+                        backgroundColor: theme.accent,
+                        boxShadow: `0 0 12px ${theme.accent}`,
+                      }}
+                    />
+                    <span
+                      className="pointer-events-none absolute w-[5px] h-[5px] rounded-full kp-boot-orbit-rev"
+                      style={{
+                        backgroundColor: mixRgb(theme.accent, theme.text, 0.45),
+                        boxShadow: `0 0 10px ${theme.accent}`,
+                      }}
+                    />
+
+                    <div
+                      className="rounded-full p-1 transition-shadow duration-300"
+                      style={{
+                        boxShadow: `0 0 32px ${rgbToRgba(theme.accent, 0.42)}`,
+                      }}
+                    >
+                      <VinylArt theme={theme} size={78} spinning={true} />
+                    </div>
+                  </button>
+
+                  {/* Brand wordmark + v2.0.0 pill + live equalizer */}
+                  <div
+                    className="mt-2 flex flex-col items-center kp-boot-rise"
+                    style={{ animationDelay: '70ms' }}
+                  >
+                    <h1
+                      style={{
+                        color: theme.text,
+                        textShadow: `0 0 22px ${rgbToRgba(theme.accent, 0.25)}`,
+                      }}
+                      className="text-[28px] font-extrabold tracking-tight leading-none"
+                    >
+                      K <span style={{ color: theme.accent }}>PLAYER</span>
+                    </h1>
+
+                    <div
+                      style={{
+                        backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
+                        border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
+                        color: theme.accent,
+                      }}
+                      className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
+                    >
+                      v2.0.0 • R36S
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 kp-boot-rise" style={{ animationDelay: '130ms' }}>
+                    <AudioVisualizer theme={theme} bars={24} width={220} height={14} active={true} />
+                  </div>
+
+                  {/* Row 0: Slim Unified Segmented Language Capsule */}
+                  <div
+                    className="mt-3.5 flex flex-col items-center kp-boot-rise"
+                    style={{ animationDelay: '190ms' }}
+                  >
+                    <div
+                      style={{ color: welcomeFocus === 0 ? theme.accent : theme.muted }}
+                      className="text-[10px] font-bold tracking-wider uppercase mb-1.5 transition-colors"
+                    >
+                      {tr('Idioma', language)}
+                    </div>
+                    <div
+                      style={{
+                        ...modernPanelStyle(theme, 19),
+                        width: 448,
+                        height: 38,
+                        borderColor:
+                          welcomeFocus === 0
+                            ? rgbToRgba(theme.accent, 0.65)
+                            : themeHairline(theme),
+                        boxShadow:
+                          welcomeFocus === 0
+                            ? `0 0 14px ${rgbToRgba(theme.accent, 0.22)}`
+                            : undefined,
+                      }}
+                      className="p-1 grid grid-cols-3 gap-1 items-center transition-all"
+                    >
+                      {LANGUAGE_NAMES.map((name, idx) => {
+                        const chosen = idx === language;
+                        return (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => {
+                              setWelcomeFocus(0);
+                              setLanguage(idx as LanguageCode);
+                            }}
+                            style={
+                              chosen
+                                ? {
+                                    backgroundColor: theme.accent,
+                                    color: theme.bg,
+                                    boxShadow: `0 0 12px ${rgbToRgba(theme.accent, 0.42)}`,
+                                  }
+                                : {
+                                    backgroundColor: 'transparent',
+                                    color: theme.muted,
+                                  }
+                            }
+                            className="h-[30px] rounded-full text-[12.5px] font-bold flex items-center justify-center cursor-pointer transition-all hover:brightness-115"
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Row 1: Slim Theme Color Dots ("bolinhas") */}
+                  <div
+                    className="mt-3 flex flex-col items-center kp-boot-rise"
+                    style={{ animationDelay: '250ms' }}
+                  >
+                    <div
+                      style={{ color: welcomeFocus === 1 ? theme.accent : theme.muted }}
+                      className="text-[10px] font-bold tracking-wider uppercase mb-1.5 transition-colors"
+                    >
+                      {tr('Tema', language)} • {tr(theme.name, language)}
+                    </div>
+                    <div
+                      style={{
+                        ...modernPanelStyle(theme, 23),
+                        width: 348,
+                        height: 46,
+                        borderColor:
+                          welcomeFocus === 1
+                            ? rgbToRgba(theme.accent, 0.65)
+                            : themeHairline(theme),
+                        boxShadow:
+                          welcomeFocus === 1
+                            ? `0 0 14px ${rgbToRgba(theme.accent, 0.22)}`
+                            : undefined,
+                      }}
+                      className="px-4 flex items-center justify-between transition-all"
+                    >
+                      {KP_THEMES.map((tItem, idx) => {
+                        const chosen = idx === themeIndex;
+                        const isLight = idx === 2 || idx === 3;
+                        const outerColor = isLight ? tItem.bg : tItem.accent;
+                        const innerColor = isLight ? tItem.accent : tItem.bg;
+                        return (
+                          <button
+                            key={tItem.id}
+                            type="button"
+                            title={tr(tItem.name, language)}
+                            aria-label={tr(tItem.name, language)}
+                            onClick={() => {
+                              setWelcomeFocus(1);
+                              setThemeIndex(idx);
+                            }}
+                            style={{
+                              width: 32,
+                              height: 32,
+                              boxShadow: chosen
+                                ? `0 0 0 2px ${theme.text}, 0 0 14px ${rgbToRgba(theme.accent, 0.65)}`
+                                : 'none',
+                            }}
+                            className={`rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 ${
+                              chosen ? 'scale-110' : 'hover:scale-110 opacity-85 hover:opacity-100'
+                            }`}
+                          >
+                            <span
+                              style={{
+                                width: 22,
+                                height: 22,
+                                backgroundColor: outerColor,
+                                border: `1px solid ${rgbToRgba(theme.text, 0.22)}`,
+                              }}
+                              className="rounded-full flex items-center justify-center"
+                            >
+                              {(isLight || idx === 1) && (
+                                <span
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    backgroundColor: innerColor,
+                                  }}
+                                  className="rounded-full"
+                                />
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Minimal borderless pulsing continue hint (no B button box, no bottom bar) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOnboarded(true);
+                      setScreen('home');
+                    }}
+                    style={{ color: theme.muted }}
+                    className="mt-5 text-[11.5px] font-medium tracking-wide cursor-pointer hover:brightness-125 animate-pulse transition-colors"
+                  >
+                    {tr('Toque ou pressione B para continuar', language)}
+                  </button>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOnboarded(true);
-                    setScreen('home');
-                  }}
-                  style={{
-                    left: 180,
-                    top: 352,
-                    width: 280,
-                    height: 44,
-                    borderRadius: 22,
-                    backgroundColor: theme.accent,
-                    color: theme.bg,
-                    boxShadow: `0 0 22px ${rgbToRgba(theme.accent, 0.45)}`,
-                  }}
-                  className="absolute z-10 font-extrabold text-[18px] flex items-center justify-center cursor-pointer hover:brightness-110"
-                >
-                  {tr('B  Iniciar K PLAYER', language)}
-                </button>
-
-                <div
-                  style={{ top: 410, color: theme.muted }}
-                  className="absolute z-10 inset-x-5 text-center text-[12px]"
-                >
-                  {tr('Sua escolha será salva neste aparelho.', language)}
-                </div>
-
-                <FooterBar
-                  theme={theme}
-                  themeIndex={themeIndex}
-                  toast={toast}
-                  hints={[
-                    { key: 'DIR', label: tr('Idioma', language) },
-                    { key: 'B', label: tr('Iniciar', language) },
-                    { key: 'Y', label: tr('Termos', language) },
-                  ]}
-                />
               </div>
             )}
 
@@ -1536,11 +1884,11 @@ export default function App() {
                         desc: tr('Canais ao vivo', language),
                       },
                       {
-                        kind: 'youtube',
-                        spriteCol: 1,
-                        tag: 'PilasTube',
-                        name: 'YouTube',
-                        desc: tr('Vídeos online', language),
+                        kind: 'football',
+                        spriteCol: 5,
+                        tag: tr('Placar ao vivo', language),
+                        name: tr('Placar da Bola', language),
+                        desc: tr('Jogos e estatísticas', language),
                       },
                     ] as const
                   ).map((cardItem, i) => {
@@ -1571,7 +1919,8 @@ export default function App() {
                               width: 38,
                               height: 38,
                               borderRadius: 12,
-                              backgroundColor: rgbToRgba(theme.bg, 0.6),
+                              backgroundColor: rgbToRgba(theme.bg, 0.65),
+                              border: `1px solid ${mixRgb(theme.panel, theme.text, 0.09)}`,
                             }}
                             className="flex items-center justify-center shrink-0"
                           >
@@ -1674,15 +2023,14 @@ export default function App() {
                     </div>
                   </button>
 
-                  <div className="flex items-center gap-3.5 pl-3 pr-1 shrink-0">
-                    <button
-                      type="button"
+                  <div className="flex items-center justify-center gap-3 pl-3 pr-1 shrink-0">
+                    <TransportSkipButton
+                      theme={theme}
+                      direction="prev"
+                      size={30}
                       onClick={() => stepTrack(-1)}
-                      className="cursor-pointer hover:brightness-125 active:scale-95 transition-transform"
                       title="Anterior"
-                    >
-                      <KpSprite sheet="controles" col={2} themeIndex={themeIndex} size={24} />
-                    </button>
+                    />
                     <PlayDisc
                       theme={theme}
                       size={44}
@@ -1690,14 +2038,13 @@ export default function App() {
                       onClick={togglePlayPause}
                       title="Reproduzir / Pausar"
                     />
-                    <button
-                      type="button"
+                    <TransportSkipButton
+                      theme={theme}
+                      direction="next"
+                      size={30}
                       onClick={() => stepTrack(1)}
-                      className="cursor-pointer hover:brightness-125 active:scale-95 transition-transform"
                       title="Próxima"
-                    >
-                      <KpSprite sheet="controles" col={5} themeIndex={themeIndex} size={24} />
-                    </button>
+                    />
                   </div>
                 </div>
 
@@ -1738,7 +2085,7 @@ export default function App() {
                         ? tr('Minhas favoritas', language)
                         : libLocationsView
                         ? tr('Escolha o local das suas mídias', language)
-                        : tr('Busca automática: midias, /roms e /roms2', language)}
+                        : tr('Pastas: /roms(2)/bgmusic e /roms(2)/videos', language)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1779,24 +2126,36 @@ export default function App() {
                   {libLocationsView ? (
                     [
                       {
-                        name: tr('Mídias do K PLAYER', language),
-                        path: '/ports/kplayer/midias',
-                        action: () => setLibLocationsView(false),
+                        name: tr('Músicas (SD1)', language),
+                        path: '/roms/bgmusic',
+                        action: () => {
+                          setLibFilter(1);
+                          setLibLocationsView(false);
+                        },
                       },
                       {
-                        name: tr('Cartão /roms', language),
-                        path: '/roms',
-                        action: () => setLibLocationsView(false),
+                        name: tr('Músicas (SD2)', language),
+                        path: '/roms2/bgmusic',
+                        action: () => {
+                          setLibFilter(1);
+                          setLibLocationsView(false);
+                        },
                       },
                       {
-                        name: tr('Cartão /roms2', language),
-                        path: '/roms2',
-                        action: () => setLibLocationsView(false),
+                        name: tr('Vídeos (SD1)', language),
+                        path: '/roms/videos',
+                        action: () => {
+                          setLibFilter(2);
+                          setLibLocationsView(false);
+                        },
                       },
                       {
-                        name: tr('Importar do dispositivo', language),
-                        path: 'MP3, FLAC, WAV, OGG, MP4, WEBM, LRC, M3U',
-                        action: () => fileInputRef.current?.click(),
+                        name: tr('Vídeos (SD2)', language),
+                        path: '/roms2/videos',
+                        action: () => {
+                          setLibFilter(2);
+                          setLibLocationsView(false);
+                        },
                       },
                     ].map((loc, idx) => {
                       const focus = idx === libLocationSelected;
@@ -2073,7 +2432,7 @@ export default function App() {
                     <div className="flex-1 flex flex-col mt-2.5 overflow-hidden">
                       <div style={{ color: theme.muted }} className="text-[11px] mb-2 truncate">
                         {audioPanel === 2
-                          ? '/ports/kplayer/midias'
+                          ? '/roms/bgmusic  •  /roms2/bgmusic'
                           : `${audioTracks.length} ${tr('Músicas', language).toLowerCase()}`}
                       </div>
                       <div className="space-y-1.5 overflow-y-auto kp-scroll pr-1">
@@ -2094,9 +2453,19 @@ export default function App() {
                             >
                               <span
                                 style={{ color: isCur ? theme.accent : theme.muted }}
-                                className="text-xs font-bold w-4 text-center shrink-0"
+                                className="w-4 h-4 flex items-center justify-center shrink-0"
                               >
-                                {isCur ? '▮▮' : '▶'}
+                                {isCur ? (
+                                  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="block">
+                                    <rect x="1.5" y="4" width="2" height="7" rx="1" />
+                                    <rect x="5" y="1" width="2" height="10" rx="1" />
+                                    <rect x="8.5" y="3" width="2" height="8" rx="1" />
+                                  </svg>
+                                ) : (
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" className="block">
+                                    <path d="M3 2.2C3 1.7 3.6 1.4 4 1.7L9.8 5.5C10.2 5.8 10.2 6.2 9.8 6.5L4 10.3C3.6 10.6 3 10.3 3 9.8V2.2Z" />
+                                  </svg>
+                                )}
                               </span>
                               <div className="min-w-0 flex-1">
                                 <div
@@ -2117,7 +2486,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Bottom Transport Bar (x=16, y=374, w=608, h=56) */}
+                {/* Bottom Transport Bar (x=16, y=374, w=608, h=56) — Symmetric 164 | 1fr | 164 grid */}
                 <div
                   style={{
                     ...modernPanelStyle(theme, 14),
@@ -2126,54 +2495,64 @@ export default function App() {
                     width: 608,
                     height: 56,
                   }}
-                  className="absolute z-10 px-3 flex items-center justify-between gap-3"
+                  className="absolute z-10 px-2.5 grid grid-cols-[164px_1fr_164px] items-center"
                 >
-                  <div className="flex items-center gap-2.5 w-[180px] min-w-0">
+                  {/* Left column: Up Next */}
+                  <div
+                    style={{ borderRight: `1px solid ${themeHairline(theme)}` }}
+                    className="flex items-center gap-2.5 pr-2.5 h-[40px] min-w-0"
+                  >
                     <div
                       style={{
                         backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
                         color: theme.accent,
                       }}
-                      className="w-[38px] h-[38px] rounded-[9px] flex items-center justify-center text-sm shrink-0"
+                      className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center shrink-0"
                     >
-                      ▶
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="block">
+                        <path d="M4.5 2.7C4.5 2.1 5.2 1.8 5.7 2.1L13.1 7.4C13.5 7.7 13.5 8.3 13.1 8.6L5.7 13.9C5.2 14.2 4.5 13.9 4.5 13.3V2.7Z" />
+                      </svg>
                     </div>
                     <div className="min-w-0">
-                      <div style={{ color: theme.accent }} className="text-[9px] font-bold tracking-wider">
+                      <div style={{ color: theme.accent }} className="text-[9px] font-bold tracking-wider leading-tight">
                         {tr('A SEGUIR', language)}
                       </div>
-                      <div style={{ color: theme.text }} className="text-[12px] font-semibold truncate">
+                      <div style={{ color: theme.text }} className="text-[11.5px] font-semibold truncate leading-tight mt-0.5">
                         {upNextTrack ? upNextTrack.title : tr('Fim da fila', language)}
                       </div>
                     </div>
                   </div>
 
-                  {/* Center Transport + Progress */}
-                  <div className="flex-1 flex flex-col items-center gap-1">
-                    <div className="flex items-center gap-4">
-                      <button
-                        type="button"
+                  {/* Center Transport + Progress (dead-center horizontally & vertically balanced) */}
+                  <div className="flex flex-col items-center justify-center px-3 gap-1.5">
+                    <div className="flex items-center justify-center gap-4">
+                      <TransportSkipButton
+                        theme={theme}
+                        direction="prev"
+                        size={24}
                         onClick={() => stepTrack(-1)}
-                        className="cursor-pointer hover:brightness-125"
-                      >
-                        <KpSprite sheet="controles" col={2} themeIndex={themeIndex} size={18} />
-                      </button>
+                        title="Anterior"
+                      />
                       <PlayDisc
                         theme={theme}
-                        size={28}
+                        size={30}
                         playing={isPlaying && !isPaused}
                         onClick={togglePlayPause}
+                        title="Reproduzir / Pausar"
                       />
-                      <button
-                        type="button"
+                      <TransportSkipButton
+                        theme={theme}
+                        direction="next"
+                        size={24}
                         onClick={() => stepTrack(1)}
-                        className="cursor-pointer hover:brightness-125"
-                      >
-                        <KpSprite sheet="controles" col={5} themeIndex={themeIndex} size={18} />
-                      </button>
+                        title="Próxima"
+                      />
                     </div>
-                    <div className="w-full flex items-center gap-2">
-                      <span style={{ color: theme.muted }} className="text-[10px] tabular-nums">
+                    <div className="w-full flex items-center justify-center gap-2">
+                      <span
+                        style={{ color: theme.muted }}
+                        className="text-[9.5px] tabular-nums min-w-[28px] text-right leading-none"
+                      >
                         {formatTime(currentMs)}
                       </span>
                       <div
@@ -2195,27 +2574,34 @@ export default function App() {
                         >
                           <span
                             style={{ backgroundColor: theme.text }}
-                            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-[9px] h-[9px] rounded-full shadow"
+                            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-[8px] h-[8px] rounded-full shadow"
                           />
                         </div>
                       </div>
-                      <span style={{ color: theme.muted }} className="text-[10px] tabular-nums">
+                      <span
+                        style={{ color: theme.muted }}
+                        className="text-[9.5px] tabular-nums min-w-[28px] text-left leading-none"
+                      >
                         {formatTime(durationMs)}
                       </span>
                     </div>
                   </div>
 
-                  <div className="w-[120px] flex items-center justify-end gap-1.5 shrink-0">
+                  {/* Right column: Format pill + file size */}
+                  <div
+                    style={{ borderLeft: `1px solid ${themeHairline(theme)}` }}
+                    className="flex items-center justify-end gap-2 pl-2.5 h-[40px] min-w-0"
+                  >
                     <span
                       style={{
-                        backgroundColor: mixRgb(theme.elevated, theme.accent, 0.15),
+                        backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
                         color: theme.accent,
                       }}
-                      className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                      className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide shrink-0"
                     >
                       {activeTrack?.format ?? 'AUDIO'}
                     </span>
-                    <span style={{ color: theme.muted }} className="text-[10px]">
+                    <span style={{ color: theme.text }} className="text-[11px] font-medium tabular-nums truncate">
                       {formatBytes(activeTrack?.sizeBytes ?? 0)}
                     </span>
                   </div>
@@ -2346,14 +2732,14 @@ export default function App() {
                       active={onAir}
                     />
 
-                    <div className="flex items-center gap-4">
-                      <button
-                        type="button"
+                    <div className="flex items-center justify-center gap-3.5">
+                      <TransportSkipButton
+                        theme={theme}
+                        direction="prev"
+                        size={28}
                         onClick={() => stepTrack(-1)}
-                        className="cursor-pointer hover:brightness-125"
-                      >
-                        <KpSprite sheet="controles" col={2} themeIndex={themeIndex} size={22} />
-                      </button>
+                        title="Estação anterior"
+                      />
                       <PlayDisc
                         theme={theme}
                         size={40}
@@ -2363,13 +2749,13 @@ export default function App() {
                           else if (selectedRadio) playRadioStation(selectedRadio);
                         }}
                       />
-                      <button
-                        type="button"
+                      <TransportSkipButton
+                        theme={theme}
+                        direction="next"
+                        size={28}
                         onClick={() => stepTrack(1)}
-                        className="cursor-pointer hover:brightness-125"
-                      >
-                        <KpSprite sheet="controles" col={5} themeIndex={themeIndex} size={22} />
-                      </button>
+                        title="Próxima estação"
+                      />
                     </div>
 
                     <button
@@ -2518,20 +2904,6 @@ export default function App() {
                 </div>
               );
             })()}
-
-            {/* ==================== YOUTUBE / PILASTUBE (10-youtube.png) ==================== */}
-            {screen === 'youtube' && (
-              <YoutubeScreen
-                ref={youtubeRef}
-                theme={theme}
-                themeIndex={themeIndex}
-                lang={language}
-                location={locationLabel}
-                toast={toast}
-                onBack={() => setScreen('home')}
-                onNotify={notify}
-              />
-            )}
 
             {/* ==================== IPTV ==================== */}
             {screen === 'iptv' && (
@@ -2690,99 +3062,19 @@ export default function App() {
               </div>
             )}
 
-            {/* ==================== FUTEBOL / GOLAZO ==================== */}
+            {/* ==================== PLACAR DA BOLA (SOFASCORE STYLE) ==================== */}
             {screen === 'football' && (
-              <div className="w-full h-full relative overflow-hidden">
-                <ModernBackdrop theme={theme} />
-                <HeaderBar
-                  theme={theme}
-                  section={tr('FUTEBOL', language)}
-                  location={locationLabel}
-                />
-
-                <div className="relative z-10 px-6 pt-3 flex items-center justify-between">
-                  <h2 style={{ color: theme.text }} className="text-[22px] font-extrabold">
-                    {tr('Jogos ao vivo', language)}
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => loadFootball(true)}
-                    style={{ backgroundColor: theme.elevated, color: theme.accent }}
-                    className="px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer hover:brightness-110"
-                  >
-                    Y {tr('Atualizar', language)}
-                  </button>
-                </div>
-
-                <div className="relative z-10 px-6 mt-2.5 space-y-1.5">
-                  {footballLoading ? (
-                    <div
-                      style={{ color: theme.accent }}
-                      className="h-[300px] flex items-center justify-center text-[17px] font-semibold"
-                    >
-                      {tr('Carregando placares...', language)}
-                    </div>
-                  ) : matches.length === 0 ? (
-                    <div
-                      style={{ color: theme.muted }}
-                      className="h-[300px] flex items-center justify-center text-[17px]"
-                    >
-                      {tr('Nenhum jogo ao vivo', language)}
-                    </div>
-                  ) : (
-                    matches.slice(footballWindowStart, footballWindowStart + 6).map((m, idx) => {
-                      const realIdx = footballWindowStart + idx;
-                      const focus = realIdx === footballSelected;
-                      return (
-                        <div
-                          key={`${m.home}-${m.away}-${realIdx}`}
-                          onMouseEnter={() => setFootballSelected(realIdx)}
-                          style={{
-                            ...modernCardStyle(theme, focus, 9, theme.panel),
-                            height: 48,
-                          }}
-                          className="px-3 py-1 flex flex-col justify-between transition-all"
-                        >
-                          <div style={{ color: theme.accent }} className="text-[10px] font-bold truncate">
-                            {m.league}
-                          </div>
-                          <div className="flex items-center text-[13px]">
-                            <span style={{ color: theme.text }} className="w-[185px] truncate font-semibold">
-                              {m.home}
-                            </span>
-                            <span
-                              style={{ color: theme.text }}
-                              className="w-[74px] text-center font-extrabold tabular-nums shrink-0"
-                            >
-                              {m.score}
-                            </span>
-                            <span style={{ color: theme.text }} className="flex-1 truncate font-semibold">
-                              {m.away}
-                            </span>
-                            <span
-                              style={{ color: theme.muted }}
-                              className="text-[11px] w-[96px] text-right truncate shrink-0"
-                            >
-                              {m.status}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                <FooterBar
-                  theme={theme}
-                  themeIndex={themeIndex}
-                  toast={toast}
-                  hints={[
-                    { key: 'DIR', label: tr('Navegar', language) },
-                    { key: 'Y', label: tr('Atualizar', language) },
-                    { key: 'A', label: tr('Voltar', language) },
-                  ]}
-                />
-              </div>
+              <PlacarDaBolaScreen
+                ref={placarRef}
+                theme={theme}
+                themeIndex={themeIndex}
+                lang={language}
+                location={locationLabel}
+                toast={toast}
+                initialMatches={preloadedMatches}
+                onMatchesLoaded={setPreloadedMatches}
+                onBack={() => setScreen('home')}
+              />
             )}
 
             {/* ==================== OPTIONS / SETTINGS (07-opcoes.png MODERN SKIN) ==================== */}
@@ -2877,6 +3169,122 @@ export default function App() {
       {showDeck && (
         <div className="px-3 pb-3 flex justify-center shrink-0">
           <R36SControls onPress={handleButton} />
+        </div>
+      )}
+
+      {/* R36S Compiled ARM64 Package Download Modal */}
+      {showR36sModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setShowR36sModal(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-[#131720] border border-white/15 p-5 shadow-2xl text-zinc-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-[#1db954]">
+                  Pacote Compilado ARM64 • R36S
+                </div>
+                <h2 className="text-xl font-extrabold mt-0.5">
+                  KPlayer v2.0.0 — Visual Moderno
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowR36sModal(false)}
+                className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-4 flex gap-3.5 items-stretch">
+              <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
+                <img
+                  src={portCoverImg}
+                  alt="Capa do Port KPlayer v2.0.0 para R36S dArkOS"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex-1 rounded-xl bg-[#0c0f15] border border-white/10 p-3 text-xs space-y-1.5 min-w-0">
+                <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">Arquivo</span>
+                  <span className="font-semibold text-zinc-100 truncate">
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.0-R36S.zip'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">Arquitetura</span>
+                  <span className="font-medium text-zinc-200 truncate">
+                    {r36sInfo?.arch ?? 'ARM64 (dArkOS)'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">Tamanho</span>
+                  <span className="font-medium text-zinc-200">
+                    {r36sInfo ? formatBytes(r36sInfo.sizeBytes) : '~6.9 MB'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">dArkOS XML</span>
+                  <span className="font-medium text-[#1db954]">gamelist.xml + capa PNG</span>
+                </div>
+                {r36sInfo?.sha256 && (
+                  <div className="pt-1 border-t border-white/10">
+                    <div className="text-zinc-400 mb-0.5">SHA-256</div>
+                    <div className="font-mono text-[9.5px] text-zinc-300 break-all leading-tight">
+                      {r36sInfo.sha256}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 text-xs text-zinc-300 space-y-1.5">
+              <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
+              <ol className="list-decimal list-inside space-y-1 text-zinc-300">
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.0-R36S.zip</code>.</li>
+                <li>
+                  Copie <code className="text-zinc-100">KPlayer.sh</code>,{' '}
+                  <code className="text-zinc-100">kplayer/</code>,{' '}
+                  <code className="text-zinc-100">images/KPlayer-image.png</code> e{' '}
+                  <code className="text-zinc-100">gamelist.xml</code> (ou mescle{' '}
+                  <code className="text-zinc-100">kplayer/KPlayer-metadata.xml</code>) para{' '}
+                  <code className="text-zinc-100">/roms/ports/</code>.
+                </li>
+                <li>
+                  Coloque músicas em <code className="text-zinc-100">/roms/bgmusic</code> ou{' '}
+                  <code className="text-zinc-100">/roms2/bgmusic</code> e vídeos em{' '}
+                  <code className="text-zinc-100">/roms/videos</code> ou{' '}
+                  <code className="text-zinc-100">/roms2/videos</code>.
+                </li>
+              </ol>
+              <p className="text-[11px] text-zinc-400 pt-1">
+                Inclui binário ARM64 v2.0.0, capa 640×480 e XML dArkOS, tela de boas-vindas animada com seletor de temas, libVLC ARM64, <strong>Placar da Bola</strong>, IPTV e rádios <code className="text-zinc-300">.pls</code>.
+              </p>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2.5">
+              <a
+                href="/api/r36s/download"
+                download="KPlayer-v2.0.0-R36S.zip"
+                style={{ backgroundColor: theme.accent, color: theme.bg }}
+                className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
+              >
+                ⬇ Baixar KPlayer-v2.0.0-R36S.zip
+              </a>
+              <a
+                href="/api/r36s/sha256"
+                download="KPlayer-v2.0.0-R36S.zip.sha256"
+                className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
+              >
+                .sha256
+              </a>
+            </div>
+          </div>
         </div>
       )}
     </div>

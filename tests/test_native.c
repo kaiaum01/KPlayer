@@ -297,7 +297,7 @@ int main(void) {
   for (int lang = 0; lang < 3; lang++) {
     language = lang;
     draw_welcome();
-    assert(measure(tr("Y  Termos de uso"), 13) <= 178);
+    assert(measure(tr("Y  Termos de uso"), 11) <= 168);
     for (int page = 0; page < 3; page++) {
       terms_page = page;
       assert(wrapped(tr(terms_text[page]), 38, 169, 560, 16, 26, 8, textc) > 0);
@@ -372,10 +372,15 @@ int main(void) {
   assert(!strcmp(folder, nested));
   show_locations();
   location_selected = 3;
+  const char *old3 = location_paths[3];
+  location_paths[3] = "/";
+  show_locations();
+  location_selected = 3;
   key(SDLK_RETURN, false);
   assert(!strcmp(folder, "/"));
   key(SDLK_BACKSPACE, false);
   assert(locations_view);
+  location_paths[3] = old3;
   location_paths[2] = "/this-path-does-not-exist-kplayer";
   location_selected = 2;
   key(SDLK_RETURN, false);
@@ -383,16 +388,17 @@ int main(void) {
   location_paths[1] = old1;
   location_paths[2] = old2;
 
-  /* Automatic media search is recursive and excludes files below 50 KB. */
+  /* Automatic media search uses dedicated audio/video folders and excludes files below 50 KB. */
   FILE *large = fopen(automatic_track, "wb");
   assert(large);
   assert(!fseek(large, 60 * 1024 - 1, SEEK_SET) && fputc(0, large) != EOF);
   fclose(large);
-  const char *auto0 = automatic_roots[0], *auto1 = automatic_roots[1],
-             *auto2 = automatic_roots[2];
-  automatic_roots[0] = card2;
-  automatic_roots[1] = "/this-path-does-not-exist-kplayer";
-  automatic_roots[2] = "/this-path-does-not-exist-kplayer";
+  const char *auto0 = automatic_roots[0].path, *auto1 = automatic_roots[1].path,
+             *auto2 = automatic_roots[2].path, *auto3 = automatic_roots[3].path;
+  automatic_roots[0].path = card2;
+  automatic_roots[1].path = "/this-path-does-not-exist-kplayer";
+  automatic_roots[2].path = "/this-path-does-not-exist-kplayer";
+  automatic_roots[3].path = "/this-path-does-not-exist-kplayer";
   category = 1;
   scan_automatic_media();
   assert(automatic_view && total == 1 &&
@@ -419,9 +425,10 @@ int main(void) {
   assert(queue_count == 1 && !strcmp(queue_paths[0], automatic_track));
   clear_queue();
   assert(!unlink(playlist));
-  automatic_roots[0] = auto0;
-  automatic_roots[1] = auto1;
-  automatic_roots[2] = auto2;
+  automatic_roots[0].path = auto0;
+  automatic_roots[1].path = auto1;
+  automatic_roots[2].path = auto2;
+  automatic_roots[3].path = auto3;
   clear_items();
   unlink(automatic_track);
   assert(scan_music_folder(card2));

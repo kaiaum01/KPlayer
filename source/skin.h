@@ -93,6 +93,7 @@ static int wrapped(const char *text, int x, int y, int width, int size,
   return row;
 }
 /* Same controller badges as the music transport, arranged in equal cells. */
+static void media_ui_skip(int cx, int cy, bool next);
 static void media_ui_button_circle(const char *name, int cx, int cy);
 static void media_ui_button_pill(const char *name, int x, int y, int width);
 typedef struct { const char *key; const char *action; } FooterHint;
@@ -111,7 +112,7 @@ static void footer_hints(const FooterHint *hints, int count) {
     int id = !strcmp(hints[i].key,"DIR") ? 0 : !strcmp(hints[i].key,"A") ? 1 :
              !strcmp(hints[i].key,"B") ? 2 : !strcmp(hints[i].key,"X") ? 3 :
              !strcmp(hints[i].key,"Y") ? 4 : !strcmp(hints[i].key,"SELECT") ? 6 : -1;
-    if (count >= 6 && id >= 0 && kp_sprite(KP_SPR_BUTTONS, id, x + 3, cy - 9, 18, 18)) {
+    if (count >= 6 && id >= 0 && kp_sprite(KP_SPR_BUTTONS, id, x + 3, cy - 8, 16, 16)) {
       /* Two-line footers keep each sprite inside its own 20-pixel row. */
     } else if (strlen(hints[i].key) == 1)
       media_ui_button_circle(hints[i].key, x + 13, cy);
@@ -153,12 +154,12 @@ static void draw_home(void) {
   label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 82, 12,
         muted, 600);
   const char *names[] = {tr("Músicas"), tr("Vídeos"), tr("Arquivos"),
-                         tr("Rádio Online"), tr("IPTV"), "YouTube"},
+                         tr("Rádio Online"), tr("IPTV"), tr("Placar da Bola")},
              *desc[] = {tr("Sua trilha sonora,"), tr("Cinema na palma"),
                         tr("Explore as pastas"), tr("Estações do mundo"),
-                        tr("Canais ao vivo"), tr("Vídeos online")},
+                        tr("Canais ao vivo"), tr("Jogos e estatísticas")},
              *tags[] = {tr("LRC Sync"), tr("Ocultar auto."), tr("Mídias locais"),
-                        tr("Radio Browser"), tr("TV Online"), "PilasTube"};
+                        tr("Radio Browser"), tr("TV Online"), tr("Placar ao vivo")};
   for (int i = 0; i < 6; i++) {
     int x = 16 + (i % 3) * 208, y = 104 + (i / 3) * 104;
     bool focus = i == dash_focus;
@@ -170,9 +171,10 @@ static void draw_home(void) {
     rounded_gradient(x + (focus ? 2 : 1), y + (focus ? 2 : 1), 192 - (focus ? 4 : 2),
                      94 - (focus ? 4 : 2), focus ? 14 : 15,
                      mix(elevated, accent, focus ? 0.22f : 0.10f), panel);
-    rounded(x + 12, y + 12, 38, 38, 12, alpha(bg, 150));
-    if (!kp_sprite(KP_SPR_CATEGORIES, i == 5 ? 1 : i, x + 17, y + 17, 28, 28))
-      icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 18, y + 18, 26, accent);
+    rounded(x + 12, y + 12, 38, 38, 12, mix(panel, textc, 0.08f));
+    rounded(x + 13, y + 13, 36, 36, 11, alpha(bg, 165));
+    if (!kp_sprite(KP_SPR_CATEGORIES, i, x + 18, y + 18, 26, 26))
+      icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 19, y + 19, 24, accent);
     label(tags[i], x + 60, y + 14, 10, accent, 104);
     tile_arrow(x + 170, y + 14, focus ? accent : dim);
     label(names[i], x + 14, y + 54, 17, textc, 168);
@@ -189,11 +191,11 @@ static void draw_home(void) {
                : tr("Abra Músicas ou Vídeos para começar"),
         130, 379, 12, muted, 330);
   visualizer(130, 400, 200, 14, 34, on);
-  if (!kp_sprite(KP_SPR_CONTROLS, KP_PREV, 484, 360, 24, 24))
-    label("|<", 488, 364, 16, muted, 25);
-  play_button(526, 350, 44);
-  if (!kp_sprite(KP_SPR_CONTROLS, KP_NEXT, 588, 360, 24, 24))
-    label(">|", 592, 364, 16, muted, 25);
+  fill_circle(500, 372, 14, mix(elevated, textc, 0.05f));
+  media_ui_skip(500, 372, false);
+  play_button(524, 350, 44);
+  fill_circle(592, 372, 14, mix(elevated, textc, 0.05f));
+  media_ui_skip(592, 372, true);
   const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Abrir"},
       {"X", "Player"}, {"Y", "Opções"}, {"START", "Pausa"}};
   footer_hints(hints, 5);
@@ -205,7 +207,7 @@ static void draw_menu(void) {
   icon(2, 28, 59, 22, accent);
   label(favorites_view   ? tr("Minhas favoritas")
         : locations_view   ? tr("Escolha o local das suas mídias")
-        : automatic_view ? tr("Busca automática: midias, /roms e /roms2")
+        : automatic_view ? tr("Pastas: /roms(2)/bgmusic e /roms(2)/videos")
                          : folder,
         62, 59, 15, textc, 548);
   const char *tabs[] = {tr("Todos"), tr("Músicas"), tr("Vídeos")};
@@ -492,7 +494,7 @@ static void draw_video(void) {
     snprintf(s, sizeof(s), "%s", tr("SELECT Opções"));
     label(s, 420, 397, 13, muted, 190);
     const FooterHint hints[] = {{"B", "Pausa"}, {"DIR", "10s"}, {"X", "Ocultar"},
-                                {"A", "Voltar"}, {youtube_playing ? "Y" : "SELECT", youtube_playing ? "Baixar" : "Opções"}};
+                                {"A", "Voltar"}, {"SELECT", "Opções"}};
     footer_hints(hints, 5);
   }
 }

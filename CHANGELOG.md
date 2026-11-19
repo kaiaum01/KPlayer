@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.0 — R36S / dArkOS Major Release
+
+- **Animated Boot Splash Screen:** Added an animated startup splash (spinning vinyl, sonar rings, orbiting glowing sparks, 28-bar equalizer, progress bar with shimmer, and module status chips) that runs on every boot and preloads media, radio, IPTV, and Placar da Bola upfront so internal navigation is instant.
+- **Slim Animated Welcome Screen:** Redesigned the first-run onboarding screen to match the boot splash animation with a compact unified language selector (PT-BR / English / Español) and live theme color dots ("bolinhas") for all 7 themes; removed the oversized 3-card grid, `B Iniciar KPlayer` button box, and bottom bar.
+- **Placar da Bola (SofaScore-style Match Center):** Replaced the experimental YouTube player with **Placar da Bola**, featuring live/finished/scheduled football matches, category filters (`Todos`, `Ao vivo`, `Brasil`, `Europa`), and a 3-tab Match Detail screen (**Estatísticas** with comparison bars, **Eventos** timeline, and **Escalações**).
+- **Music Player Alignment & Icon Polish:** Re-centered the middle transport controls (previous / white play-pause circle / next) directly above the progress bar and sharpened playback/category icons across native C/SDL2 and the web preview.
+- **Dedicated Fast-Loading Media Folders:** Replaced full-SD recursive scanning with dedicated media-type roots (`/roms/bgmusic` and `/roms2/bgmusic` for audio only; `/roms/videos` and `/roms2/videos` for video only) with capped recursion depth to keep R36S startup fast and lightweight.
+- **dArkOS / EmulationStation Port Artwork & XML Metadata:** Bundled custom 640×480 cover artwork (`images/KPlayer-image.png` and `kplayer/cover.png`), ready-to-use `gamelist.xml`, and mergeable `kplayer/KPlayer-metadata.xml` inside `KPlayer-v2.0.0-R36S.zip`.
+- **Updated Documentation & Screenshots:** Regenerated all 640×480 screenshots, `docs/images/banner.svg`, bilingual READMEs, controls, media docs, and unit tests for v2.0.0.
+
 ## 1.0.0 — release candidate for R36S
 
 - Added seven selectable color themes with persistent settings.
