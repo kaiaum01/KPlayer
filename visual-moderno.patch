@@ -1,0 +1,901 @@
+diff -ruN -x include -x vendor source/football.h /tmp/kpnew/source/football.h
+--- source/football.h	2026-11-09 14:28:44.000000000 +0000
++++ /tmp/kpnew/source/football.h	2026-11-10 02:08:29.438852245 +0000
+@@ -50,14 +50,14 @@
+ static void draw_football(void) {
+   pthread_mutex_lock(&football_mutex); bool busy = football_busy, done = football_done, ok = football_ok; football_done = false; pthread_mutex_unlock(&football_mutex);
+   if (done) { if (ok) { football_read(); football_stale = false; } else { football_stale = true; notify(tr("Não foi possível atualizar placares")); } }
+-  color(bg); SDL_RenderClear(renderer); draw_header(tr("FUTEBOL"));
++  backdrop(); draw_header(tr("FUTEBOL"));
+   label(tr("Jogos ao vivo"), 24, 52, 24, textc, 420);
+   if (!football_count) centered(busy ? tr("Carregando placares...") : football_stale ? tr("Sem dados atualizados") : tr("Nenhum jogo ao vivo"), 24, 190, 592, 18, muted);
+   if (football_selected < football_offset) football_offset = football_selected;
+   if (football_selected >= football_offset + 6) football_offset = football_selected - 5;
+   for (int row = 0; row < 6 && football_offset + row < football_count; row++) {
+     int i = football_offset + row, y = 86 + row * 52; FootballMatch *m = &football_matches[i];
+-    rounded(24, y, 592, 47, 7, i == football_selected ? elevated : panel);
++    card(24, y, 592, 47, 10, i == football_selected, panel);
+     label(m->league, 35, y + 4, 10, accent, 420);
+     label(m->home, 35, y + 21, 14, textc, 190);
+     centered(m->score, 225, y + 20, 85, 14, textc);
+diff -ruN -x include -x vendor source/i18n.h /tmp/kpnew/source/i18n.h
+--- source/i18n.h	2026-11-09 14:14:11.000000000 +0000
++++ /tmp/kpnew/source/i18n.h	2026-11-10 02:09:01.065853376 +0000
+@@ -8,6 +8,12 @@
+ } Translation;
+ static const Translation translations[] = {
+     {"Instale o PilasTube em ports primeiro", "Install PilasTube in ports first", "Instala PilasTube en ports primero"},
++    {"Seu som.", "Your sound.", "Tu sonido."},
++    {"Sua tela.", "Your screen.", "Tu pantalla."},
++    {"Músicas, vídeos, rádios e TV ao vivo num player só.", "Music, videos, radio and live TV in one player.", "Música, videos, radio y TV en vivo en un solo reproductor."},
++    {"TOCANDO AGORA", "NOW PLAYING", "SONANDO AHORA"},
++    {"PAUSADO", "PAUSED", "EN PAUSA"},
++    {"NADA TOCANDO", "NOTHING PLAYING", "NADA SONANDO"},
+     {"Futebol", "Football", "Fútbol"},
+     {"FUTEBOL", "FOOTBALL", "FÚTBOL"},
+     {"Jogos ao vivo", "Live matches", "Partidos en vivo"},
+diff -ruN -x include -x vendor source/iptv.h /tmp/kpnew/source/iptv.h
+--- source/iptv.h	2026-11-03 14:36:54.000000000 +0000
++++ /tmp/kpnew/source/iptv.h	2026-11-10 02:07:56.866851080 +0000
+@@ -176,7 +176,7 @@
+   pthread_mutex_unlock(&iptv_fetch_mutex);
+   if (done && completed_source == iptv_source) { if (ok) iptv_reload(); else notify(tr("Lista indisponível; usando cache")); }
+   else if (done && iptv_source && !iptv_count) iptv_fetch_start();
+-  color(bg); SDL_RenderClear(renderer); draw_header(tr("IPTV"));
++  backdrop(); draw_header(tr("IPTV"));
+   label(iptv_source == 1 ? tr("IPTV Brasil") : iptv_source == 2 ? tr("IPTV Mundo") : tr("Listas próprias"), 24, 52, 24, textc, 430);
+   if (!iptv_count) {
+     centered(tr("Nenhum canal encontrado"), 25, 170, 590, 20, muted);
+@@ -184,7 +184,7 @@
+   } else {
+     if (iptv_selected < iptv_offset) iptv_offset = iptv_selected;
+     IptvChannel *channel = &iptv_channels[iptv_selected];
+-    rounded(24, 86, 200, 310, 9, panel);
++    panel_card(24, 86, 200, 310, 16);
+     rounded(47, 102, 154, 120, 8, elevated);
+     radio_update_art(channel->logo);
+     if (radio_art_texture && !strcmp(radio_art_display_url, channel->logo)) {
+@@ -198,8 +198,7 @@
+     if (iptv_selected >= iptv_offset + 6) iptv_offset = iptv_selected - 5;
+     for (int row = 0; row < 6 && iptv_offset + row < iptv_count; row++) {
+       int index = iptv_offset + row, y = 86 + row * 51;
+-      rounded(238, y, 378, 45, 7, index == iptv_selected ? accent : panel);
+-      if (index == iptv_selected) rounded(240, y + 2, 374, 41, 6, elevated);
++      card(238, y, 378, 45, 10, index == iptv_selected, panel);
+       char number[24]; snprintf(number, sizeof(number), "%d", index + 1);
+       label(number, 249, y + 14, 13, muted, 40);
+       label(iptv_channels[index].name, 290, y + 13, 15, textc, 310);
+diff -ruN -x include -x vendor source/kplayer.c /tmp/kpnew/source/kplayer.c
+--- source/kplayer.c	2026-11-09 14:32:59.000000000 +0000
++++ /tmp/kpnew/source/kplayer.c	2026-11-10 02:08:29.438852245 +0000
+@@ -162,6 +162,7 @@
+                        y + size / 2 + half);
+   }
+ }
++#include "modern.h"
+ static const unsigned char *decode(const unsigned char *s, int *cp) {
+   unsigned a = *s++;
+   if (a < 128) {
+@@ -302,16 +303,15 @@
+   uint32_t tick = SDL_GetTicks();
+   if (!force && tick - loading_last_frame < 80) return;
+   loading_last_frame = tick;
+-  color(bg);
+-  SDL_RenderClear(renderer);
+-  rounded(88, 142, 464, 190, 12, panel);
++  backdrop();
++  panel_card(88, 142, 464, 190, 18);
+   const char *title_text = tr(message);
+   int title_x = (W - (int)measure(title_text, 23)) / 2;
+   label(title_text, title_x, 174, 23, textc, 410);
+   const char *subtitle = tr("Aguarde, procurando arquivos...");
+   int sub_x = (W - (int)measure(subtitle, 14)) / 2;
+   label(subtitle, sub_x, 211, 14, muted, 410);
+-  rounded(132, 248, 376, 14, 7, (SDL_Color){48, 48, 48, 255});
++  rounded(132, 248, 376, 14, 7, track_color());
+   int segment = (int)((tick / 6) % 594);
+   if (segment > 297) segment = 594 - segment;
+   rounded(134 + segment, 250, 76, 10, 5, accent);
+@@ -927,10 +927,9 @@
+         update_start();
+       }
+     }
+-    color(bg);
+-    SDL_RenderClear(renderer);
++    backdrop();
+     label("K PLAYER", 48, 48, 30, accent, 544);
+-    rounded(42, 120, 556, 240, 14, panel);
++    panel_card(42, 120, 556, 240, 18);
+     if (busy) {
+       label(tr(installing ? "Baixando e instalando..." : "Procurando atualizações..."), 68, 192, 24, textc, 505);
+       label(tr("Aguarde..."), 68, 245, 18, muted, 500);
+@@ -944,8 +943,8 @@
+       snprintf(line, sizeof(line), "%s: %s", tr("Nova versão disponível"), tag);
+       label(line, 68, 150, 22, accent, 500);
+       label(tr("Deseja atualizar agora?"), 68, 200, 22, textc, 500);
+-      rounded(160, 260, 140, 45, 8, yes ? accent : elevated);
+-      rounded(340, 260, 140, 45, 8, !yes ? accent : elevated);
++      pill(160, 260, 140, 45, yes);
++      pill(340, 260, 140, 45, !yes);
+       label(tr("Sim"), 205, 272, 20, yes ? bg : textc, 80);
+       label(tr("Não"), 385, 272, 20, !yes ? bg : textc, 80);
+       label(tr("Esquerda/Direita: escolher    B: confirmar"), 62, 390, 17, muted, 520);
+@@ -987,8 +986,7 @@
+   return 0;
+ }
+ static void draw_options(void) {
+-  color(bg);
+-  SDL_RenderClear(renderer);
++  backdrop();
+   draw_header(tr("OPÇÕES"));
+   label(tr("Opções"), 24, 52, 25, textc, 500);
+   const char *names[] = {
+@@ -999,14 +997,14 @@
+   int group = option_group_for(option);
+   for (int g = 0; g < 3; g++) {
+     int x = 24 + g * 199;
+-    rounded(x, 85, 194, 32, 7, g == group ? accent : panel);
++    pill(x, 85, 194, 32, g == group);
+     centered(tr(option_group_names[g]), x + 5, 93, 184, 14,
+              g == group ? bg : muted);
+   }
+   for (int row = 0; row < option_group_counts[group]; row++) {
+     int i = option_groups[group][row];
+     int y = 129 + row * 42;
+-    rounded(24, y, 592, 37, 8, i == option ? elevated : panel);
++    card(24, y, 592, 37, 10, i == option, panel);
+     label(names[i], 40, y + 10, 18, i == option ? accent : textc, 280);
+     char value[256];
+     switch (i) {
+diff -ruN -x include -x vendor source/modern.h /tmp/kpnew/source/modern.h
+--- source/modern.h	1970-01-01 00:00:00.000000000 +0000
++++ /tmp/kpnew/source/modern.h	2026-11-10 02:09:58.980855448 +0000
+@@ -0,0 +1,190 @@
++/* K PLAYER modern skin primitives (GPL-2.0-or-later).
++ * Soft glows, gradients, vinyl artwork and a light visualizer, drawn only with
++ * SDL2 calls already loaded by dynamic.h. Every color derives from the active
++ * theme, so all seven themes keep working. */
++static SDL_Color elevated = {36, 36, 36, 255}, dim = {117, 117, 117, 255};
++
++static SDL_Color mix(SDL_Color a, SDL_Color b, float t) {
++  if (t < 0) t = 0;
++  if (t > 1) t = 1;
++  return (SDL_Color){(Uint8)(a.r + (b.r - a.r) * t), (Uint8)(a.g + (b.g - a.g) * t),
++                     (Uint8)(a.b + (b.b - a.b) * t), (Uint8)(a.a + (b.a - a.a) * t)};
++}
++static SDL_Color alpha(SDL_Color c, int a) {
++  c.a = (Uint8)(a < 0 ? 0 : a > 255 ? 255 : a);
++  return c;
++}
++/* Subtle 1px outline color for cards on the current theme. */
++static SDL_Color hairline(void) { return mix(panel, textc, 0.10f); }
++static SDL_Color track_color(void) { return mix(elevated, textc, 0.14f); }
++
++static void fill_circle(int cx, int cy, int radius, SDL_Color c) {
++  if (radius <= 0) return;
++  color(c);
++  for (int y = -radius; y <= radius; y++) {
++    int dx = (int)sqrt((double)radius * radius - (double)y * y);
++    SDL_RenderDrawLine(renderer, cx - dx, cy + y, cx + dx, cy + y);
++  }
++}
++/* Annulus between inner and outer radius, row by row (no overdraw). */
++static void ring(int cx, int cy, int outer, int inner, SDL_Color c) {
++  if (outer <= 0) return;
++  if (inner < 0) inner = 0;
++  color(c);
++  for (int y = -outer; y <= outer; y++) {
++    int xo = (int)sqrt((double)outer * outer - (double)y * y);
++    if (abs(y) >= inner) {
++      SDL_RenderDrawLine(renderer, cx - xo, cy + y, cx + xo, cy + y);
++      continue;
++    }
++    int xi = (int)sqrt((double)inner * inner - (double)y * y);
++    SDL_RenderDrawLine(renderer, cx - xo, cy + y, cx - xi, cy + y);
++    SDL_RenderDrawLine(renderer, cx + xi, cy + y, cx + xo, cy + y);
++  }
++}
++/* Corner inset of a rounded rectangle at row d (0 = top edge). */
++static int corner_inset(int r, int d) {
++  if (d >= r) return 0;
++  return r - (int)sqrt((double)r * r - (r - d - .5) * (r - d - .5));
++}
++/* Rounded rectangle with a vertical gradient from top to bottom color. */
++static void rounded_gradient(int x, int y, int w, int h, int r, SDL_Color top,
++                             SDL_Color bottom) {
++  if (r * 2 > h) r = h / 2;
++  for (int row = 0; row < h; row++) {
++    int d = row < r ? row : h - 1 - row < r ? h - 1 - row : r;
++    int in = corner_inset(r, d);
++    color(mix(top, bottom, h > 1 ? (float)row / (h - 1) : 0));
++    SDL_RenderDrawLine(renderer, x + in, y + row, x + w - 1 - in, y + row);
++  }
++}
++/* Soft halo around a rounded rectangle: stacked translucent outlines. */
++static void glow_rect(int x, int y, int w, int h, int r, SDL_Color c, int size) {
++  for (int i = size; i >= 1; i--) {
++    int a = (int)(c.a * 0.18f * (1.0f - (float)(i - 1) / size));
++    rounded(x - i, y - i, w + 2 * i, h + 2 * i, r + i, alpha(c, a));
++  }
++}
++/* Layers accumulate toward the center; callers draw the solid shape on top. */
++static void glow_circle(int cx, int cy, int radius, SDL_Color c, int size) {
++  for (int i = size; i >= 1; i--)
++    fill_circle(cx, cy, radius + i, alpha(c, (int)(c.a * 0.07f)));
++}
++/* Panel card: hairline border, faint top highlight. */
++static void panel_card(int x, int y, int w, int h, int r) {
++  rounded(x, y, w, h, r, hairline());
++  rounded_gradient(x + 1, y + 1, w - 2, h - 2, r - 1, mix(panel, textc, 0.025f), panel);
++}
++/* Focusable row/tile: accent ring + halo when focused, quiet card otherwise.
++ * Inner fill keeps the original 2px inset geometry used by each screen. */
++static void card(int x, int y, int w, int h, int r, bool focus, SDL_Color base) {
++  if (focus) {
++    glow_rect(x, y, w, h, r, accent, 5);
++    rounded(x, y, w, h, r, accent);
++    rounded(x + 2, y + 2, w - 4, h - 4, r > 2 ? r - 2 : r, mix(elevated, accent, 0.08f));
++  } else {
++    rounded(x, y, w, h, r, mix(base, textc, 0.06f));
++    rounded(x + 1, y + 1, w - 2, h - 2, r > 1 ? r - 1 : r, base);
++  }
++}
++/* Pill tab: accent fill when active. */
++static void pill(int x, int y, int w, int h, bool on) {
++  if (on) glow_rect(x, y, w, h, h / 2, accent, 3);
++  rounded(x, y, w, h, h / 2, on ? accent : elevated);
++}
++
++/* Background: theme color plus two cached soft accent glows. */
++static SDL_Texture *glow_texture;
++static void backdrop(void) {
++  color(bg);
++  SDL_RenderClear(renderer);
++  if (!glow_texture) {
++    enum { GW = 64, GH = 48 };
++    static Uint8 px[GW * GH * 4];
++    for (int y = 0; y < GH; y++)
++      for (int x = 0; x < GW; x++) {
++        double dx = x / (double)GW, dy = y / (double)GH;
++        double a = 1.0 - sqrt(dx * dx * 1.1 + dy * dy * 1.9);
++        double b = 1.0 - sqrt((1 - dx) * (1 - dx) * 2.4 + (1 - dy) * (1 - dy) * 3.2);
++        double v = fmax(0, a) * fmax(0, a) * 1.0 + fmax(0, b) * fmax(0, b) * 0.45;
++        Uint8 *p = &px[(y * GW + x) * 4];
++        p[0] = p[1] = p[2] = 255;
++        p[3] = (Uint8)fmin(255, v * 255);
++      }
++    glow_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
++                                     SDL_TEXTUREACCESS_STATIC, GW, GH);
++    if (glow_texture) {
++      SDL_UpdateTexture(glow_texture, NULL, px, GW * 4);
++      SDL_SetTextureBlendMode(glow_texture, SDL_BLENDMODE_BLEND);
++    }
++  }
++  if (glow_texture) {
++    SDL_SetTextureColorMod(glow_texture, accent.r, accent.g, accent.b);
++    SDL_SetTextureAlphaMod(glow_texture, 46);
++    SDL_RenderCopy(renderer, glow_texture, NULL, NULL);
++  }
++}
++
++/* Vinyl disc artwork. spin animates a light sweep across the grooves. */
++static void vinyl(int cx, int cy, int radius, bool spin) {
++  glow_circle(cx, cy, radius, alpha(accent, 255), 6);
++  fill_circle(cx, cy, radius, mix(bg, panel, 0.6f));
++  SDL_Color groove = mix(bg, textc, 0.09f);
++  for (int r = radius - 3; r > radius * 34 / 100; r -= 4)
++    ring(cx, cy, r, r - 1, groove);
++  /* Light reflection: two opposite wedges of faint lines. */
++  double base = spin ? SDL_GetTicks() / 900.0 : 0.6;
++  color(alpha(textc, 14));
++  for (int k = 0; k < 2; k++)
++    for (int i = 0; i < 18; i++) {
++      double a = base + k * M_PI + i * 0.022;
++      int r0 = radius * 36 / 100, r1 = radius - 2;
++      SDL_RenderDrawLine(renderer, cx + (int)(cos(a) * r0), cy + (int)(sin(a) * r0),
++                         cx + (int)(cos(a) * r1), cy + (int)(sin(a) * r1));
++    }
++  int label_r = radius * 32 / 100;
++  fill_circle(cx, cy, label_r, accent);
++  ring(cx, cy, label_r, label_r - 2, mix(accent, textc, 0.25f));
++  fill_circle(cx, cy, label_r / 4 > 2 ? label_r / 4 : 2, bg);
++}
++/* Expanding rings for live radio. */
++static void pulse(int cx, int cy, int radius, bool on) {
++  if (!on) return;
++  for (int k = 0; k < 2; k++) {
++    float t = (float)((SDL_GetTicks() + k * 900) % 1800) / 1800.0f;
++    int r = radius + 2 + (int)(t * 16);
++    ring(cx, cy, r, r - 2, alpha(accent, (int)(150 * (1 - t))));
++  }
++}
++/* Synthetic spectrum bars; libVLC exposes no spectrum, so this follows
++ * playback state only. */
++static void visualizer(int x, int y, int w, int h, int bars, bool on) {
++  int gap = 2, bw = (w - gap * (bars - 1)) / bars;
++  if (bw < 2) bw = 2;
++  double t = SDL_GetTicks() / 1000.0;
++  for (int i = 0; i < bars; i++) {
++    double v = 0.08;
++    if (on) {
++      v = 0.22 + 0.5 * fabs(sin(t * 2.4 + i * 0.55)) * (0.6 + 0.4 * sin(t * 1.1 + i * 0.13));
++      v += 0.18 * fabs(sin(t * 5.3 + i * 1.7));
++      if (v > 1) v = 1;
++    }
++    int bh = (int)(v * h);
++    if (bh < 2) bh = 2;
++    int bx = x + i * (bw + gap);
++    rounded(bx, y + h - bh, bw, bh, bw >= 4 ? 2 : 0,
++            alpha(accent, (int)(90 + v * 165)));
++  }
++}
++/* Accent play/pause button with halo, icon drawn in background color. */
++static void play_disc(int cx, int cy, int radius, bool pause_icon) {
++  glow_circle(cx, cy, radius, alpha(accent, 255), 7);
++  fill_circle(cx, cy, radius, accent);
++  int s = radius * 9 / 10;
++  if (pause_icon) {
++    int bw = s / 4 > 2 ? s / 4 : 2;
++    rounded(cx - s / 2 + bw / 3, cy - s / 2, bw, s, bw / 2, bg);
++    rounded(cx + s / 2 - bw - bw / 3, cy - s / 2, bw, s, bw / 2, bg);
++  } else
++    triangle(cx - s / 3 + 1, cy - s / 2, s, bg);
++}
+diff -ruN -x include -x vendor source/onboarding.h /tmp/kpnew/source/onboarding.h
+--- source/onboarding.h	2026-11-03 14:36:55.000000000 +0000
++++ /tmp/kpnew/source/onboarding.h	2026-11-10 02:08:29.438852245 +0000
+@@ -1,14 +1,14 @@
+ /* First-run flow and readable in-app usage notices. */
+ static int terms_page = 0, terms_return = 5;
+ static void app_logo(int x, int y) {
+-  rounded(x, y, 76, 76, 20, accent);
++  glow_rect(x, y, 76, 76, 22, accent, 8);
++  rounded(x, y, 76, 76, 22, accent);
+   label("K", x + 14, y + 9, 49, bg, 44);
+   triangle(x + 50, y + 29, 20, bg);
+ }
+ static void draw_welcome(void) {
+-  color(bg);
+-  SDL_RenderClear(renderer);
+-  rounded(430, 16, 194, 30, 8, elevated);
++  backdrop();
++  rounded(430, 16, 194, 30, 15, elevated);
+   centered(tr("Y  Termos de uso"), 438, 23, 178, 13, muted);
+   app_logo(282, 54);
+   centered("K PLAYER", 20, 147, 600, 33, textc);
+@@ -18,13 +18,12 @@
+   for (int i = 0; i < 3; i++) {
+     int x = 24 + i * 200;
+     bool chosen = i == language;
+-    rounded(x, 264, 192, 66, 10, chosen ? accent : elevated);
+-    rounded(x + 2, 266, 188, 62, 8,
+-            chosen ? elevated : panel);
++    card(x, 264, 192, 66, 12, chosen, panel);
+     label(codes[i], x + 14, 275, 12, chosen ? accent : muted, 162);
+     label(language_names[i], x + 14, 297, 18, textc, 164);
+   }
+-  rounded(180, 352, 280, 44, 12, accent);
++  glow_rect(180, 352, 280, 44, 22, accent, 6);
++  rounded(180, 352, 280, 44, 22, accent);
+   centered(tr("B  Iniciar K PLAYER"), 190, 364, 260, 19, bg);
+   centered(tr("Sua escolha será salva neste aparelho."), 20, 412, 600, 12,
+            muted);
+@@ -48,11 +47,10 @@
+     "limitam os direitos concedidos pelas licenças de software livre. Sem "
+     "afiliação com a VideoLAN."};
+ static void draw_terms(void) {
+-  color(bg);
+-  SDL_RenderClear(renderer);
++  backdrop();
+   draw_header(tr("Termos de uso"));
+   label(tr("Termos de uso"), 28, 59, 28, textc, 570);
+-  rounded(20, 108, 600, 300, 12, panel);
++  panel_card(20, 108, 600, 300, 16);
+   label(tr(terms_titles[terms_page]), 38, 126, 20, accent, 560);
+   wrapped(tr(terms_text[terms_page]), 38, 169, 560, 16, 26, 8, textc);
+   char count[24];
+diff -ruN -x include -x vendor source/radio.h /tmp/kpnew/source/radio.h
+--- source/radio.h	2026-11-03 02:03:40.000000000 +0000
++++ /tmp/kpnew/source/radio.h	2026-11-10 02:09:01.053853376 +0000
+@@ -707,8 +707,7 @@
+ }
+ 
+ static void draw_radio(void) {
+-  color(bg);
+-  SDL_RenderClear(renderer);
++  backdrop();
+   draw_header(tr("RÁDIO ONLINE"));
+   pthread_mutex_lock(&radio_mutex);
+   bool loading = radio_loading;
+@@ -734,23 +733,19 @@
+ 
+   /* Player on the left, station browser on the right. */
+   radio_update_art(featured.favicon);
+-  rounded(16, 46, 224, 384, 10, panel);
+-  rounded(48, 62, 160, 150, 10, elevated);
++  panel_card(16, 46, 224, 384, 16);
++  /* Tuner: vinyl with live pulse; station logo on the label when known. */
++  bool on_air = playing_radio && active && !paused;
++  pulse(128, 128, 62, on_air);
++  vinyl(128, 128, 62, on_air);
+   if (radio_art_texture) {
+-  SDL_Rect art = {48, 62, 160, 150};
+-  SDL_RenderCopy(renderer, radio_art_texture, NULL, &art);
+-  } else {
+-  media_ui_circle(128, 132, 48, bg);
+-  media_ui_circle(128, 132, 9, accent);
+-  rect(125, 88, 6, 35, accent);
+-  color(accent);
+-  SDL_RenderDrawLine(renderer, 108, 99, 122, 116);
+-  SDL_RenderDrawLine(renderer, 148, 99, 134, 116);
+-  SDL_RenderDrawLine(renderer, 99, 91, 118, 113);
+-  SDL_RenderDrawLine(renderer, 157, 91, 138, 113);
++    fill_circle(128, 128, 30, textc);
++    SDL_Rect logo = {108, 108, 40, 40};
++    SDL_RenderCopy(renderer, radio_art_texture, NULL, &logo);
+   }
+-  centered(playing_radio ? tr("AO VIVO") : tr("RÁDIO ONLINE"), 58, 185,
+-           140, 10, playing_radio ? accent : muted);
++  rounded(78, 198, 100, 18, 9, on_air ? accent : elevated);
++  centered(playing_radio ? tr("AO VIVO") : tr("RÁDIO ONLINE"), 78, 201,
++           100, 10, on_air ? bg : muted);
+   if (featured.name[0]) {
+     centered(featured.name, 28, 226, 200, 17, textc);
+     centered(playing_radio && radio_nowplaying[0] ? radio_nowplaying :
+@@ -761,22 +756,18 @@
+     char technical[96];
+     snprintf(technical, sizeof(technical), "%s  •  %d kbps",
+              featured.codec[0] ? featured.codec : "STREAM", featured.bitrate);
+-    rounded(48, 296, 160, 23, 6, elevated);
+-    centered(technical, 52, 302, 152, 11, accent);
++    rounded(48, 292, 160, 23, 11, mix(elevated, accent, 0.15f));
++    centered(technical, 52, 298, 152, 11, accent);
++    visualizer(40, 322, 176, 12, 30, on_air);
+   } else
+     centered(loading ? tr("Buscando estações...")
+                      : tr("Nenhuma estação encontrada"),
+              28, 246, 200, 13, muted);
+-  int control_y = 352;
++  int control_y = 356;
+   media_ui_skip(86, control_y, false);
+-  media_ui_circle(128, control_y, 20, textc);
+-  if (playing_radio && active && !paused) {
+-    rect(121, control_y - 7, 4, 14, bg);
+-    rect(131, control_y - 7, 4, 14, bg);
+-  } else
+-    triangle(122, control_y - 8, 16, bg);
++  play_disc(128, control_y, 20, playing_radio && active && !paused);
+   media_ui_skip(170, control_y, true);
+-  rounded(48, 390, 160, 22, 6, elevated);
++  rounded(48, 390, 160, 22, 11, elevated);
+   const char *play_status = tr("B  Ouvir estação");
+   if (radio_retry_waiting) play_status = tr("Reconectando...");
+   if (radio_play_is_busy()) play_status = "Conectando...";
+@@ -786,7 +777,7 @@
+   }
+   centered(play_status, 52, 396, 152, 10, playing_radio ? accent : muted);
+ 
+-  rounded(252, 46, 372, 384, 10, panel);
++  panel_card(252, 46, 372, 384, 16);
+   label(tr(radio_filter == 5 ? "Rádio do Usuário" : radio_filter == 6 ? "Favoritas" : "Estações"), 264, 57, 16, textc, 235);
+   char station_count[48];
+   snprintf(station_count, sizeof(station_count), "%d %s", count,
+@@ -794,7 +785,7 @@
+   label(station_count, 516, 62, 11, muted, 96);
+   for (int i = 0; i < 7; i++) {
+     int x = 264 + i * 49;
+-    rounded(x, 82, 46, 23, 5, i == radio_filter ? accent : elevated);
++    pill(x, 82, 46, 23, i == radio_filter);
+     centered(tr(radio_filter_names[i]), x + 1, 88, 44, i == 5 ? 6 : 8,
+              i == radio_filter ? bg : muted);
+   }
+@@ -811,9 +802,7 @@
+     for (int row = 0; row < visible_count && row < 5; row++) {
+       int actual = offset_station + row, y = 115 + row * 56;
+       bool focus = actual == selected_station;
+-      rounded(264, y, 348, 49, 7, focus ? accent : elevated);
+-      if (focus)
+-        rounded(266, y + 2, 344, 45, 5, elevated);
++      card(264, y, 348, 49, 10, focus, elevated);
+       rounded(274, y + 13, 22, 22, 11,
+               (playing_radio && !strcmp(current_path, visible[row].url))
+                   ? accent
+diff -ruN -x include -x vendor source/skin.h /tmp/kpnew/source/skin.h
+--- source/skin.h	2026-11-09 14:32:59.000000000 +0000
++++ /tmp/kpnew/source/skin.h	2026-11-10 02:09:32.330854495 +0000
+@@ -1,5 +1,4 @@
+ /* 640 x 480 native adaptation of the supplied simulator. */
+-static SDL_Color elevated = {36, 36, 36, 255}, dim = {117, 117, 117, 255};
+ static void centered(const char *s, int x, int y, int w, int size,
+                      SDL_Color c) {
+   int n = measure(s, size);
+@@ -26,42 +25,30 @@
+   rounded(x + size - 7, y + size / 2, 7, size / 2, 3, c);
+ }
+ static void play_button(int x, int y, int size) {
+-  if (kp_atlases[KP_SPR_CONTROLS]) {
+-    rounded(x, y, size, size, size/2, elevated);
+-    kp_sprite(KP_SPR_CONTROLS, active && !paused ? KP_PAUSE : KP_PLAY,
+-              x+size/5, y+size/5, size*3/5, size*3/5);
+-    return;
+-  }
+-  rounded(x, y, size, size, size / 2, accent);
+-  if (active && !paused) {
+-    rect(x + size / 3, y + size / 3, 4, size / 3, bg);
+-    rect(x + size * 3 / 5, y + size / 3, 4, size / 3, bg);
+-  } else
+-    triangle(x + size / 3, y + size / 4, size / 2, bg);
++  play_disc(x + size / 2, y + size / 2, size / 2, active && !paused);
+ }
++/* Album art: the embedded cover when present, otherwise a vinyl disc. */
+ static void art(int x, int y, int size) {
+   if (cover_texture) {
+     SDL_Rect r = {x, y, size, size};
+     int crop = cover_w < cover_h ? cover_w : cover_h;
+     SDL_Rect source = {(cover_w - crop) / 2, (cover_h - crop) / 2, crop, crop};
++    glow_rect(x, y, size, size, 10, alpha(accent, 200), 6);
+     SDL_RenderCopy(renderer, cover_texture, crop > 0 ? &source : NULL, &r);
+-  } else {
+-    rounded(x, y, size, size, 8, (SDL_Color){29, 45, 36, 255});
+-    rounded(x + size / 7, y + size / 7, size * 5 / 7, size * 5 / 7,
+-            size * 5 / 14, bg);
+-    rounded(x + size * 3 / 8, y + size * 3 / 8, size / 4, size / 4, size / 8,
+-            accent);
+-  }
++  } else
++    vinyl(x + size / 2, y + size / 2, size / 2, active && !paused);
+ }
+ static void draw_header(const char *section) {
+   update_status();
+-  rect(0, 0, 640, 32, panel);
+-  rounded(14, 12, 7, 7, 3, accent);
+-  label("K PLAYER", 28, 8, 15, textc, 85);
++  rect(0, 0, 640, 32, alpha(panel, 215));
++  rect(0, 32, 640, 1, hairline());
++  glow_circle(18, 16, 4, accent, 4);
++  fill_circle(18, 16, 4, accent);
++  label("K PLAYER", 30, 8, 15, textc, 85);
+   label(KPLAYER_VERSION, 113, 10, 11, dim, 34);
+   label(top_location, 154, 10, 11, muted, 120);
+-  rounded(280, 6, 128, 20, 5, elevated);
+-  centered(section, 280, 9, 128, 12, muted);
++  rounded(272, 6, 144, 20, 10, elevated);
++  centered(section, 272, 9, 144, 11, muted);
+   label(clock_text, 526, 9, 12, muted, 50);
+   if (battery_percent >= 0) {
+     char s[16];
+@@ -110,7 +97,8 @@
+ static void media_ui_button_pill(const char *name, int x, int y, int width);
+ typedef struct { const char *key; const char *action; } FooterHint;
+ static void footer_hints(const FooterHint *hints, int count) {
+-  rect(0, 436, 640, 44, panel);
++  rect(0, 436, 640, 44, alpha(panel, 225));
++  rect(0, 436, 640, 1, hairline());
+   if (count <= 0) return;
+   int cols = count >= 6 ? (count + 1) / 2 : count;
+   int cell = 616 / cols;
+@@ -133,65 +121,87 @@
+           cell - width - 7);
+   }
+   if (SDL_GetTicks() < note_until) {
+-    rounded(30, 397, 580, 32, 7, elevated);
++    glow_rect(30, 397, 580, 32, 16, accent, 4);
++    rounded(30, 397, 580, 32, 16, elevated);
+     centered(status_note, 40, 405, 560, 13, accent);
+   }
+ }
+ static void progress(int x, int y, int w) {
+   long long len = duration_ms(), t = now_ms();
+   double p = len > 0 ? fmax(0, fmin(1, (double)t / len)) : 0;
+-  rounded(x, y, w, 4, 2, (SDL_Color){65, 65, 65, 255});
+-  if (p > 0)
+-    rect(x, y, (int)(w * p), 4, accent);
++  rounded(x, y, w, 4, 2, track_color());
++  int fill = (int)(w * p);
++  if (fill > 0) rounded(x, y, fill > 4 ? fill : 4, 4, 2, accent);
++  fill_circle(x + fill, y + 2, 5, textc);
++}
++/* Small arrow used on home tiles. */
++static void tile_arrow(int x, int y, SDL_Color c) {
++  color(c);
++  for (int k = 0; k < 2; k++) {
++    SDL_RenderDrawLine(renderer, x + k, y + 9, x + 9 + k, y);
++    SDL_RenderDrawLine(renderer, x + 3, y + k, x + 9, y + k);
++    SDL_RenderDrawLine(renderer, x + 9 - k, y, x + 9 - k, y + 6);
++  }
+ }
+ static void draw_home(void) {
+-  color(bg);
+-  SDL_RenderClear(renderer);
++  backdrop();
+   draw_header(tr("DASHBOARD"));
+-  label(tr("Central de Mídia Portátil"), 16, 66, 24, textc, 430);
+-  label(tr("Sua biblioteca. Seu ritmo. Em qualquer lugar."), 16, 102, 13, muted,
+-        430);
++  /* Hero: two-tone headline. */
++  const char *h1 = tr("Seu som."), *h2 = tr("Sua tela.");
++  label(h1, 18, 42, 29, textc, 300);
++  label(h2, 18 + (int)measure(h1, 29) + 10, 42, 29, muted, 300);
++  label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 82, 12,
++        muted, 600);
+   const char *names[] = {tr("Músicas"), tr("Vídeos"), tr("Arquivos"),
+                          tr("Rádio Online"), tr("IPTV"), "YouTube"},
+              *desc[] = {tr("Sua trilha sonora,"), tr("Cinema na palma"),
+-                        tr("Explore as pastas"), tr("Estações do mundo"), tr("Canais ao vivo"), tr("Vídeos online")},
+-             *desc2[] = {tr("com letras em sincronia."), tr("da sua mão."),
+-                         tr("do seu cartão SD."), tr("ao vivo pela internet."), "", ""},
+-             *tags[] = {tr("LRC Sync"), tr("Ocultar auto."),
+-                        tr("Mídias locais"), tr("Radio Browser"), tr("TV Online"), "PilasTube"};
+-  SDL_Color colors[] = {accent, accent, accent, accent, accent, accent};
++                        tr("Explore as pastas"), tr("Estações do mundo"),
++                        tr("Canais ao vivo"), tr("Vídeos online")},
++             *tags[] = {tr("LRC Sync"), tr("Ocultar auto."), tr("Mídias locais"),
++                        tr("Radio Browser"), tr("TV Online"), "PilasTube"};
+   for (int i = 0; i < 6; i++) {
+-    int x = 16 + (i % 3) * 208, y = 126 + (i / 3) * 106;
+-    rounded(x, y, 192, 96, 10, i == dash_focus ? accent : elevated);
+-    rounded(x + 2, y + 2, 188, 92, 8,
+-            i == dash_focus ? elevated : panel);
+-    if (!kp_sprite(KP_SPR_CATEGORIES, i == 5 ? 1 : i, x+13, y+18, 28, 28))
+-      icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 13, y + 18, 28, colors[i]);
+-    label(tags[i], x + 50, y + 13, 10, colors[i], 130);
+-    label(names[i], x + 50, y + 33, 16, textc, 136);
+-    label(desc[i], x + 50, y + 63, 10, muted, 136);
+-    (void)desc2;
+-  }
+-  rounded(16, 350, 608, 74, 10, panel);
+-  art(28, 367, 40);
+-  label(active ? title : tr("Pronto para dar o play"), 80, 365, 16, textc, 390);
++    int x = 16 + (i % 3) * 208, y = 104 + (i / 3) * 104;
++    bool focus = i == dash_focus;
++    if (focus) {
++      glow_rect(x, y, 192, 94, 16, accent, 6);
++      rounded(x, y, 192, 94, 16, accent);
++    } else
++      rounded(x, y, 192, 94, 16, hairline());
++    rounded_gradient(x + (focus ? 2 : 1), y + (focus ? 2 : 1), 192 - (focus ? 4 : 2),
++                     94 - (focus ? 4 : 2), focus ? 14 : 15,
++                     mix(elevated, accent, focus ? 0.22f : 0.10f), panel);
++    rounded(x + 12, y + 12, 38, 38, 12, alpha(bg, 150));
++    if (!kp_sprite(KP_SPR_CATEGORIES, i == 5 ? 1 : i, x + 17, y + 17, 28, 28))
++      icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 18, y + 18, 26, accent);
++    label(tags[i], x + 60, y + 14, 10, accent, 104);
++    tile_arrow(x + 170, y + 14, focus ? accent : dim);
++    label(names[i], x + 14, y + 54, 17, textc, 168);
++    label(desc[i], x + 14, y + 75, 10, muted, 168);
++  }
++  /* Now playing card. */
++  panel_card(16, 318, 608, 108, 18);
++  bool on = active && !paused;
++  art(30, 330, 84);
++  label(active ? (on ? tr("TOCANDO AGORA") : tr("PAUSADO")) : tr("NADA TOCANDO"),
++        130, 336, 10, active ? accent : dim, 300);
++  label(active ? title : tr("Pronto para dar o play"), 130, 352, 18, textc, 330);
+   label(active ? (artist[0] ? artist : tr("Reprodução local"))
+                : tr("Abra Músicas ou Vídeos para começar"),
+-        80, 391, 12, muted, 390);
+-  if (!kp_sprite(KP_SPR_CONTROLS, KP_PREV, 488, 376, 24, 24))
+-    label("|<", 492, 380, 16, muted, 25);
+-  play_button(530, 367, 40);
+-  if (!kp_sprite(KP_SPR_CONTROLS, KP_NEXT, 580, 376, 24, 24))
+-    label(">|", 586, 380, 16, muted, 25);
++        130, 379, 12, muted, 330);
++  visualizer(130, 400, 200, 14, 34, on);
++  if (!kp_sprite(KP_SPR_CONTROLS, KP_PREV, 484, 360, 24, 24))
++    label("|<", 488, 364, 16, muted, 25);
++  play_button(526, 350, 44);
++  if (!kp_sprite(KP_SPR_CONTROLS, KP_NEXT, 588, 360, 24, 24))
++    label(">|", 592, 364, 16, muted, 25);
+   const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Abrir"},
+       {"X", "Player"}, {"Y", "Opções"}, {"START", "Pausa"}};
+   footer_hints(hints, 5);
+ }
+ static void draw_menu(void) {
+-  color(bg);
+-  SDL_RenderClear(renderer);
++  backdrop();
+   draw_header(tr("BIBLIOTECA"));
+-  rounded(14, 46, 612, 68, 9, panel);
++  panel_card(14, 46, 612, 68, 14);
+   icon(2, 28, 59, 22, accent);
+   label(favorites_view   ? tr("Minhas favoritas")
+         : locations_view   ? tr("Escolha o local das suas mídias")
+@@ -200,16 +210,14 @@
+         62, 59, 15, textc, 548);
+   const char *tabs[] = {tr("Todos"), tr("Músicas"), tr("Vídeos")};
+   for (int i = 0; i < 3; i++) {
+-    rounded(28 + i * 100, 86, 92, 21, 5, i == category ? accent : elevated);
++    pill(28 + i * 100, 86, 92, 21, i == category);
+     centered(tabs[i], 28 + i * 100, 90, 92, 12, i == category ? bg : muted);
+   }
+   if (locations_view) {
+     for (int i = 0; i < 4; i++) {
+       int y = 126 + i * 66;
+       bool focus = i == location_selected;
+-      rounded(14, y, 612, 58, 8, focus ? accent : panel);
+-      if (focus)
+-        rounded(16, y + 2, 608, 54, 6, elevated);
++      card(14, y, 612, 58, 10, focus, panel);
+       icon(2, 28, y + 17, 26, focus ? accent : muted);
+       label(tr(location_names[i]), 68, y + 9, 18, textc, 380);
+       label(location_paths[i], 68, y + 34, 12, muted, 380);
+@@ -231,14 +239,12 @@
+     int i = offset + row, y = 126 + row * 49;
+     Item *it = &items[i];
+     bool focus = i == selected;
+-    rounded(14, y, 612, 44, 7, focus ? accent : panel);
+-    if (focus)
+-      rounded(16, y + 2, 608, 40, 5, elevated);
++    card(14, y, 612, 44, 9, focus, panel);
+     icon(it->dir                ? 2
+          : audio_file(it->name) ? 0
+                                 : 1,
+          28, y + 10, 24,
+-         it->dir ? (SDL_Color){251, 191, 36, 255}
++         it->dir ? accent
+          : focus ? accent
+                  : muted);
+     label(it->name, 66, y + 7, 16, textc, 442);
+@@ -335,11 +341,9 @@
+     } else
+       snprintf(full, sizeof(full), "%s", path);
+     bool playing = !dir && !strcmp(full, current_path);
+-    rounded(272, y, 340, 41, 6, focus ? accent : panel);
+-    if (focus)
+-      rounded(274, y + 2, 336, 37, 4, elevated);
++    card(272, y, 340, 41, 8, focus, panel);
+     if (dir)
+-      icon(2, 282, y + 12, 18, (SDL_Color){251, 191, 36, 255});
++      icon(2, 282, y + 12, 18, accent);
+     else if (playing) {
+       rect(284, y + 15, 3, 12, accent);
+       rect(289, y + 10, 3, 17, accent);
+@@ -356,16 +360,16 @@
+ }
+ #include "transport.h"
+ static void draw_music(void) {
+-  color(bg);
+-  SDL_RenderClear(renderer);
++  backdrop();
+   draw_header(tr("MÚSICAS"));
+-  rounded(16, 46, 232, 320, 10, panel);
+-  art(59, 58, 146);
+-  music_lines(title, 28, 213, 208, 17, 20, 2, textc, true);
+-  label(artist[0] ? artist : tr("Artista não informado"), 28, 255, 12,
+-        accent, 208);
+-  label(album[0] ? album : tr("Áudio local"), 28, 275, 11, muted, 208);
+-  rect(28, 298, 208, 1, elevated);
++  panel_card(16, 46, 232, 320, 16);
++  art(70, 58, 124);
++  music_lines(title, 28, 192, 208, 17, 20, 2, textc, true);
++  centered(artist[0] ? artist : tr("Artista não informado"), 28, 236, 208, 12,
++           accent);
++  centered(album[0] ? album : tr("Áudio local"), 28, 253, 208, 11, muted);
++  visualizer(36, 272, 192, 18, 30, active && !paused);
++  rect(28, 298, 208, 1, hairline());
+   char size[40], duration[32], detail[128];
+   media_ui_format_filesize(media_size_bytes, media_size_known, size,
+                            sizeof(size));
+@@ -388,11 +392,11 @@
+     label(bitrate_text, 28, 348, 11, accent, 208);
+   } else
+     label(tr("Analisando dados técnicos..."), 28, 330, 11, muted, 208);
+-  rounded(260, 46, 364, 320, 10, panel);
++  panel_card(260, 46, 364, 320, 16);
+   const char *tabs[] = {tr("Letras"), tr("Fila"), tr("Pasta")};
+   for (int i = 0; i < 3; i++) {
+     int x = 272 + i * 114;
+-    rounded(x, 58, 108, 28, 6, i == audio_panel ? accent : elevated);
++    pill(x, 58, 108, 28, i == audio_panel);
+     centered(tabs[i], x + 4, 65, 100, 14, i == audio_panel ? bg : muted);
+   }
+   if (audio_panel == 0) {
+@@ -471,11 +475,11 @@
+   }
+   if (show_osd && (SDL_GetTicks() < osd_until || paused || preview_mode)) {
+     draw_header(tr("VÍDEOS"));
+-    rounded(16, 46, 88, 28, 8, panel);
++    rounded(16, 46, 88, 28, 14, alpha(panel, 225));
+     label(tr("A  Voltar"), 29, 54, 13, textc, 66);
+-    rounded(450, 46, 174, 28, 8, panel);
++    rounded(450, 46, 174, 28, 14, alpha(panel, 225));
+     label(tr("Controles ocultam em 3s"), 461, 54, 11, muted, 158);
+-    rounded(16, 328, 608, 100, 16, panel);
++    rounded(16, 328, 608, 100, 18, alpha(panel, 235));
+     label(media_name, 32, 340, 18, textc, 400);
+     char a[32], b[32], s[80];
+     time_string(now_ms(), a, sizeof(a));
+diff -ruN -x include -x vendor source/transport.h /tmp/kpnew/source/transport.h
+--- source/transport.h	2026-11-03 14:36:53.000000000 +0000
++++ /tmp/kpnew/source/transport.h	2026-11-10 02:08:49.015852945 +0000
+@@ -65,12 +65,12 @@
+ }
+ static void draw_music_transport(void) {
+   const int x = 16, y = 374, w = 608, h = 100, left = 207, center = 219;
+-  rounded(x, y, w, h, 9, panel);
+-  rect(x + left, y + 8, 1, 42, elevated);
+-  rect(x + left + center, y + 8, 1, 42, elevated);
+-  rect(x + 12, y + 57, w - 24, 1, elevated);
+-  rounded(x + 8, y + 7, 42, 42, 6, (SDL_Color){29, 45, 36, 255});
+-  triangle(x + 22, y + 19, 16, accent);
++  panel_card(x, y, w, h, 16);
++  rect(x + left, y + 8, 1, 42, hairline());
++  rect(x + left + center, y + 8, 1, 42, hairline());
++  rect(x + 12, y + 57, w - 24, 1, hairline());
++  rounded(x + 8, y + 7, 42, 42, 12, mix(elevated, accent, 0.18f));
++  triangle(x + 23, y + 19, 16, accent);
+   const int info = x + 58, info_width = left - 62;
+   label(tr("A SEGUIR"), info, y + 6, 9, accent, info_width);
+   char next_title[512];
+@@ -79,19 +79,11 @@
+   int cx = x + left + center / 2, cy = y + 16;
+   media_ui_skip(cx - 29, cy, false);
+   media_ui_skip(cx + 29, cy, true);
+-  if (!kp_sprite(KP_SPR_CONTROLS, active && !paused ? KP_PAUSE : KP_PLAY,
+-                 cx-15, cy-15, 30, 30)) {
+-  media_ui_circle(cx, cy, 13, textc);
+-  if (active && !paused) {
+-    rect(cx - 5, cy - 6, 3, 12, bg);
+-    rect(cx + 2, cy - 6, 3, 12, bg);
+-  } else
+-    triangle(cx - 4, cy - 6, 12, bg);
+-  }
++  play_disc(cx, cy, 14, active && !paused);
+   long long t = now_ms(), duration = duration_ms();
+   double amount = media_ui_progress(t, duration);
+   const int barw = center - 86, barx = cx - barw / 2, bary = y + 40;
+-  rounded(barx, bary, barw, 4, 2, (SDL_Color){68, 72, 84, 255});
++  rounded(barx, bary, barw, 4, 2, track_color());
+   int fill = (int)(barw * amount);
+   if (fill)
+     rect(barx, bary, fill, 4, accent);
+@@ -108,7 +100,7 @@
+   int edge = x + w - 10, size_width = (int)ceil(measure(size, 11)),
+       badge_width = (int)ceil(measure(media_format, 11)) + 12;
+   int size_x = edge - size_width, badge_x = size_x - badge_width - 6;
+-  rounded(badge_x, y + 7, badge_width, 19, 4, elevated);
++  rounded(badge_x, y + 7, badge_width, 19, 9, mix(elevated, accent, 0.15f));
+   label(media_format, badge_x + 6, y + 10, 11, accent, badge_width - 12);
+   label(size, size_x, y + 10, 11, textc, size_width);
+   const int shortcuts_y = y + 78;
+@@ -121,7 +113,8 @@
+   media_ui_button_pill("SELECT", x + 424, shortcuts_y - 9, 52);
+   label(tr("Opções"), x + 486, shortcuts_y - 6, 12, muted, 90);
+   if (SDL_GetTicks() < note_until) {
+-    rounded(30, 397, 580, 32, 7, elevated);
++    glow_rect(30, 397, 580, 32, 16, accent, 4);
++    rounded(30, 397, 580, 32, 16, elevated);
+     centered(status_note, 40, 405, 560, 13, accent);
+   }
+ }
+diff -ruN -x include -x vendor source/youtube.h /tmp/kpnew/source/youtube.h
+--- source/youtube.h	2026-11-09 14:54:14.000000000 +0000
++++ /tmp/kpnew/source/youtube.h	2026-11-10 02:07:56.866851080 +0000
+@@ -136,7 +136,7 @@
+ }
+ static void draw_youtube(void) {
+   pthread_mutex_lock(&youtube_mutex); bool busy = youtube_busy; pthread_mutex_unlock(&youtube_mutex);
+-  color(bg); SDL_RenderClear(renderer); draw_header("VÍDEOS ONLINE");
++  backdrop(); draw_header("VÍDEOS ONLINE");
+   label("Busca no YouTube", 24, 56, 23, textc, 400);
+   rounded(24, 91, 592, 39, 7, panel); label(youtube_query[0] ? youtube_query : "Digite uma busca...", 36, 102, 15, textc, 560);
+   if (youtube_keyboard) {
+@@ -154,8 +154,7 @@
+     youtube_offset = (youtube_selected / 6) * 6;
+     for (int cell = 0; cell < 6 && youtube_offset + cell < youtube_count; cell++) {
+       int i = cell + youtube_offset, x = 24 + (cell % 3) * 199, y = 140 + (cell / 3) * 128;
+-      rounded(x, y, 190, 120, 6, i == youtube_selected ? accent : panel);
+-      rounded(x + 2, y + 2, 186, 116, 5, panel);
++      card(x, y, 190, 120, 10, i == youtube_selected, panel);
+       SDL_Rect thumb = {x + 5, y + 5, 180, 75};
+       if (youtube_items[i].thumb) SDL_RenderCopy(renderer, youtube_items[i].thumb, NULL, &thumb);
+       else { rounded(thumb.x, thumb.y, thumb.w, thumb.h, 4, elevated); centered("▶", thumb.x, thumb.y + 25, thumb.w, 18, muted); }
+@@ -167,7 +166,7 @@
+   const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Abrir"}, {"X", "Baixar"}, {"Y", "Busca"}, {"A", "Voltar"}};
+   footer_hints(hints, 5);
+   if (youtube_download_menu) {
+-    rounded(120, 151, 400, 166, 10, panel);
++    panel_card(120, 151, 400, 166, 16);
+     label("Baixar conteúdo", 138, 168, 19, textc, 360);
+     const char *choices[] = {"Vídeo com som", "Somente áudio"};
+     for (int i = 0; i < 2; i++) {

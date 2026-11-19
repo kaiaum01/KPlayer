@@ -20,6 +20,7 @@ Estas imagens foram renderizadas a partir das telas do programa em um computador
 
 ## O que o KPlayer oferece
 
+- **Vídeos online experimental:** pesquise e reproduza vídeos dentro do KPlayer com o extrator yt-dlp também utilizado pelo PilasTube. As demais funções do PilasTube ainda não foram portadas. Veja [detalhes e limitações](PILASTUBE-KPLAYER.md).
 - **Futebol experimental:** abra **Futebol** na tela inicial para consultar jogos ao vivo, placares e competições disponíveis no Golazo. Use o direcional para navegar, **Y** para atualizar e **A** para voltar. Precisa de internet; a disponibilidade de ligas e jogos depende da fonte do Golazo. Não transmite partidas. Se a atualização falhar, dados antigos são identificados como possivelmente desatualizados.
 - Reprodução local de músicas e vídeos, com codecs e plugins disponibilizados pelo sistema.
 - Busca de mídias em `kplayer/midias`, `/roms` e `/roms2`, além de navegação por pastas e indicador de carregamento.

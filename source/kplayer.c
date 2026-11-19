@@ -74,6 +74,7 @@ static void radio_cancel_retries(void);
 static int repeat_mode = 0;
 static bool shuffle_enabled = false;
 static bool playing_iptv = false;
+static bool youtube_playing = false;
 static long long resume_pending_ms = -1;
 static uint32_t resume_deadline;
 static uint32_t sleep_end;
@@ -161,6 +162,7 @@ static void triangle(int x, int y, int size, SDL_Color c) {
                        y + size / 2 + half);
   }
 }
+#include "modern.h"
 static const unsigned char *decode(const unsigned char *s, int *cp) {
   unsigned a = *s++;
   if (a < 128) {
@@ -301,16 +303,15 @@ static void loading_screen(const char *message, int found, bool force) {
   uint32_t tick = SDL_GetTicks();
   if (!force && tick - loading_last_frame < 80) return;
   loading_last_frame = tick;
-  color(bg);
-  SDL_RenderClear(renderer);
-  rounded(88, 142, 464, 190, 12, panel);
+  backdrop();
+  panel_card(88, 142, 464, 190, 18);
   const char *title_text = tr(message);
   int title_x = (W - (int)measure(title_text, 23)) / 2;
   label(title_text, title_x, 174, 23, textc, 410);
   const char *subtitle = tr("Aguarde, procurando arquivos...");
   int sub_x = (W - (int)measure(subtitle, 14)) / 2;
   label(subtitle, sub_x, 211, 14, muted, 410);
-  rounded(132, 248, 376, 14, 7, (SDL_Color){48, 48, 48, 255});
+  rounded(132, 248, 376, 14, 7, track_color());
   int segment = (int)((tick / 6) % 594);
   if (segment > 297) segment = 594 - segment;
   rounded(134 + segment, 250, 76, 10, 5, accent);
@@ -570,6 +571,7 @@ static void stop_media(void) {
   active = false;
   playing_radio = false;
   playing_iptv = false;
+  youtube_playing = false;
   if (player)
     libvlc_media_player_stop(player);
   pthread_mutex_lock(&video.mutex);
@@ -748,6 +750,7 @@ static void size_string(long long bytes, char *out, size_t n) {
   else
     snprintf(out, n, "%.1f MB", bytes / (1024.0 * 1024));
 }
+#include "sprites.h"
 #include "skin.h"
 typedef struct {
   const char *name;
@@ -767,6 +770,7 @@ static int theme_index;
 static void apply_theme(int index) {
   if (index < 0 || index >= THEME_COUNT) index = 0;
   theme_index = index;
+  kp_sprite_palette = index;
   const KpTheme *t = &themes[index];
   bg = t->background; panel = t->panel_color; elevated = t->raised;
   textc = t->text; muted = t->secondary; accent = t->highlight; dim = t->subdued;
@@ -776,6 +780,7 @@ static void save_settings(void);
 #include "radio.h"
 #include "iptv.h"
 #include "football.h"
+#include "youtube.h"
 // First-run screens use the skin drawing helpers.
 #include "onboarding.h"
 /* Update operations run off the SDL thread. Output is one fixed status line. */
@@ -922,10 +927,9 @@ static bool startup_update(void) {
         update_start();
       }
     }
-    color(bg);
-    SDL_RenderClear(renderer);
+    backdrop();
     label("K PLAYER", 48, 48, 30, accent, 544);
-    rounded(42, 120, 556, 240, 14, panel);
+    panel_card(42, 120, 556, 240, 18);
     if (busy) {
       label(tr(installing ? "Baixando e instalando..." : "Procurando atualizações..."), 68, 192, 24, textc, 505);
       label(tr("Aguarde..."), 68, 245, 18, muted, 500);
@@ -939,8 +943,8 @@ static bool startup_update(void) {
       snprintf(line, sizeof(line), "%s: %s", tr("Nova versão disponível"), tag);
       label(line, 68, 150, 22, accent, 500);
       label(tr("Deseja atualizar agora?"), 68, 200, 22, textc, 500);
-      rounded(160, 260, 140, 45, 8, yes ? accent : elevated);
-      rounded(340, 260, 140, 45, 8, !yes ? accent : elevated);
+      pill(160, 260, 140, 45, yes);
+      pill(340, 260, 140, 45, !yes);
       label(tr("Sim"), 205, 272, 20, yes ? bg : textc, 80);
       label(tr("Não"), 385, 272, 20, !yes ? bg : textc, 80);
       label(tr("Esquerda/Direita: escolher    B: confirmar"), 62, 390, 17, muted, 520);
@@ -982,8 +986,7 @@ static int option_group_for(int id) {
   return 0;
 }
 static void draw_options(void) {
-  color(bg);
-  SDL_RenderClear(renderer);
+  backdrop();
   draw_header(tr("OPÇÕES"));
   label(tr("Opções"), 24, 52, 25, textc, 500);
   const char *names[] = {
@@ -994,14 +997,14 @@ static void draw_options(void) {
   int group = option_group_for(option);
   for (int g = 0; g < 3; g++) {
     int x = 24 + g * 199;
-    rounded(x, 85, 194, 32, 7, g == group ? accent : panel);
+    pill(x, 85, 194, 32, g == group);
     centered(tr(option_group_names[g]), x + 5, 93, 184, 14,
              g == group ? bg : muted);
   }
   for (int row = 0; row < option_group_counts[group]; row++) {
     int i = option_groups[group][row];
     int y = 129 + row * 42;
-    rounded(24, y, 592, 37, 8, i == option ? elevated : panel);
+    card(24, y, 592, 37, 10, i == option, panel);
     label(names[i], 40, y + 10, 18, i == option ? accent : textc, 280);
     char value[256];
     switch (i) {
@@ -1300,8 +1303,8 @@ static void key(SDL_Keycode k, bool repeat) {
         radio_open();
       else if (dash_focus == 4)
         iptv_open();
-      else
-        football_open();
+      else if (dash_focus == 5)
+        youtube_open();
     } else if (k == SDLK_SPACE && !repeat && active)
       mode = playing_audio ? 4 : 1;
     else if (k == SDLK_m && !repeat)
@@ -1318,6 +1321,10 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (mode == 9) {
     if (!repeat) football_key(k);
+    return;
+  }
+  if (mode == 10) {
+    if (!repeat) youtube_key(k);
     return;
   }
   if (mode == 0) {
@@ -1405,11 +1412,19 @@ static void key(SDL_Keycode k, bool repeat) {
       seek_media(k == SDLK_LEFT ? -10000 : 10000);
     return;
   }
+  if (mode == 1 && youtube_playing && k == SDLK_m && !repeat && youtube_count) {
+    mode = 10;
+    youtube_keyboard = false;
+    youtube_download_selection = 0;
+    youtube_download_menu = true;
+    return;
+  }
   if (k == SDLK_BACKSPACE && !repeat) {
-    bool was_iptv = playing_iptv;
+    bool was_iptv = playing_iptv, was_youtube = youtube_playing;
     if (mode == 1)
       stop_media();
-    mode = was_iptv ? 8 : 3;
+    youtube_playing = false;
+    mode = was_youtube ? 10 : was_iptv ? 8 : 3;
     return;
   }
   if (k == SDLK_RETURN && !repeat)
@@ -1557,6 +1572,7 @@ int main(int argc, char **argv) {
   }
   SDL_RenderSetLogicalSize(renderer, W, H);
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  kp_sprites_load();
   if (!load_font()) {
     fprintf(stderr, "Fonte fonts/Interface.ttf ausente ou inválida\n");
     SDL_DestroyRenderer(renderer);
@@ -1578,7 +1594,22 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 5; i++)
       items[total++] =
           (Item){strdup(names[i]), strdup(names[i]), i < 2, 32500000};
-    if (!strcmp(argv[1], "--preview-welcome"))
+    if (!strcmp(argv[1], "--preview-youtube")) {
+      snprintf(youtube_query, sizeof(youtube_query), "MUSICA");
+      youtube_cursor = 38;
+      draw_youtube();
+    } else if (!strcmp(argv[1], "--preview-youtube-results")) {
+      youtube_keyboard = false; youtube_count = 3;
+      snprintf(youtube_query, sizeof(youtube_query), "MUSICA");
+      snprintf(youtube_items[0].title, sizeof(youtube_items[0].title), "Música para relaxar");
+      snprintf(youtube_items[0].channel, sizeof(youtube_items[0].channel), "Canal exemplo");
+      snprintf(youtube_items[1].title, sizeof(youtube_items[1].title), "Música ao vivo");
+      snprintf(youtube_items[1].channel, sizeof(youtube_items[1].channel), "Canal exemplo");
+      snprintf(youtube_items[2].title, sizeof(youtube_items[2].title), "Seleção de músicas");
+      snprintf(youtube_items[2].channel, sizeof(youtube_items[2].channel), "Canal exemplo");
+      snprintf(youtube_message, sizeof(youtube_message), "3 resultados");
+      draw_youtube();
+    } else if (!strcmp(argv[1], "--preview-welcome"))
       draw_welcome();
     else if (!strcmp(argv[1], "--preview-terms")) {
       if (argc > 4)
@@ -1629,6 +1660,20 @@ int main(int argc, char **argv) {
         snprintf(radio_stations[i].codec, sizeof(radio_stations[i].codec), "STREAM");
       radio_filter = 5;
       draw_radio();
+    } else if (!strcmp(argv[1], "--preview-iptv")) {
+      iptv_source = 1; iptv_count = 2;
+      snprintf(iptv_channels[0].name, sizeof(iptv_channels[0].name), "Canal exemplo");
+      snprintf(iptv_channels[0].group, sizeof(iptv_channels[0].group), "TV aberta");
+      snprintf(iptv_channels[1].name, sizeof(iptv_channels[1].name), "Outro canal");
+      draw_iptv();
+    } else if (!strcmp(argv[1], "--preview-football")) {
+      football_count = 1;
+      snprintf(football_matches[0].league, sizeof(football_matches[0].league), "Campeonato exemplo");
+      snprintf(football_matches[0].home, sizeof(football_matches[0].home), "Time A");
+      snprintf(football_matches[0].away, sizeof(football_matches[0].away), "Time B");
+      snprintf(football_matches[0].score, sizeof(football_matches[0].score), "1 - 0");
+      snprintf(football_matches[0].status, sizeof(football_matches[0].status), "45'");
+      draw_football();
     } else if (!strcmp(argv[1], "--preview-locations")) {
       show_locations();
       draw_menu();
@@ -1638,6 +1683,7 @@ int main(int argc, char **argv) {
       draw_home();
     bool ok = screenshot(argc > 2 ? argv[2] : "preview.bmp");
     SDL_RenderPresent(renderer);
+    kp_sprites_free();
     SDL_Quit();
     return ok ? 0 : 1;
   }
@@ -1690,6 +1736,7 @@ int main(int argc, char **argv) {
     }
     radio_poll_play();
     radio_retry_tick();
+    youtube_poll();
     if (active) {
       if (playing_radio) radio_update_nowplaying();
       if (resume_pending_ms >= 0) {
@@ -1708,13 +1755,14 @@ int main(int argc, char **argv) {
       if (playing_radio && state == libvlc_Playing) radio_note_playing();
       else if (playing_radio) radio_stable_since = 0;
       if (state == libvlc_Error) {
-        bool was_iptv = playing_iptv;
+        bool was_iptv = playing_iptv, was_youtube = youtube_playing;
         bool was_radio = playing_radio;
         if (was_radio) { active = false; playing_radio = false; paused = false; radio_schedule_retry(); }
         else stop_media();
         notify(tr("Falha na reprodução. Consulte log.txt"));
         if (was_radio)
           mode = 7;
+        else if (was_youtube) { youtube_playing = false; mode = 10; }
         else if (was_iptv) mode = 8;
       } else if (state == libvlc_Ended) {
         if (playing_radio) {
@@ -1723,6 +1771,8 @@ int main(int argc, char **argv) {
           paused = false;
           radio_schedule_retry();
           mode = 7;
+        } else if (youtube_playing) {
+          stop_media(); youtube_playing = false; mode = 10;
         } else if (playing_iptv) {
           stop_media();
           mode = 8;
@@ -1754,6 +1804,8 @@ int main(int argc, char **argv) {
       draw_football();
     else if (mode == 8)
       draw_iptv();
+    else if (mode == 10)
+      draw_youtube();
     else
       draw_menu();
     SDL_RenderPresent(renderer);
@@ -1783,6 +1835,7 @@ int main(int argc, char **argv) {
     SDL_DestroyTexture(cover_texture);
   if (radio_art_texture)
     SDL_DestroyTexture(radio_art_texture);
+  kp_sprites_free();
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();

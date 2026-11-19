@@ -40,7 +40,7 @@ static void football_refresh(void) {
   if (!pthread_create(&t, NULL, football_worker, NULL)) pthread_detach(t);
   else { pthread_mutex_lock(&football_mutex); football_busy = false; football_done = true; football_ok = false; pthread_mutex_unlock(&football_mutex); }
 }
-static void football_open(void) { football_read(); football_stale = true; mode = 9; football_refresh(); }
+static void __attribute__((unused)) football_open(void) { football_read(); football_stale = true; mode = 9; football_refresh(); }
 static void football_key(SDL_Keycode k) {
   if (k == SDLK_BACKSPACE) mode = 3;
   else if (k == SDLK_m) football_refresh();
@@ -50,14 +50,14 @@ static void football_key(SDL_Keycode k) {
 static void draw_football(void) {
   pthread_mutex_lock(&football_mutex); bool busy = football_busy, done = football_done, ok = football_ok; football_done = false; pthread_mutex_unlock(&football_mutex);
   if (done) { if (ok) { football_read(); football_stale = false; } else { football_stale = true; notify(tr("Não foi possível atualizar placares")); } }
-  color(bg); SDL_RenderClear(renderer); draw_header(tr("FUTEBOL"));
+  backdrop(); draw_header(tr("FUTEBOL"));
   label(tr("Jogos ao vivo"), 24, 52, 24, textc, 420);
   if (!football_count) centered(busy ? tr("Carregando placares...") : football_stale ? tr("Sem dados atualizados") : tr("Nenhum jogo ao vivo"), 24, 190, 592, 18, muted);
   if (football_selected < football_offset) football_offset = football_selected;
   if (football_selected >= football_offset + 6) football_offset = football_selected - 5;
   for (int row = 0; row < 6 && football_offset + row < football_count; row++) {
     int i = football_offset + row, y = 86 + row * 52; FootballMatch *m = &football_matches[i];
-    rounded(24, y, 592, 47, 7, i == football_selected ? elevated : panel);
+    card(24, y, 592, 47, 10, i == football_selected, panel);
     label(m->league, 35, y + 4, 10, accent, 420);
     label(m->home, 35, y + 21, 14, textc, 190);
     centered(m->score, 225, y + 20, 85, 14, textc);

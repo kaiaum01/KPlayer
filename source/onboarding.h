@@ -1,14 +1,14 @@
 /* First-run flow and readable in-app usage notices. */
 static int terms_page = 0, terms_return = 5;
 static void app_logo(int x, int y) {
-  rounded(x, y, 76, 76, 20, accent);
+  glow_rect(x, y, 76, 76, 22, accent, 8);
+  rounded(x, y, 76, 76, 22, accent);
   label("K", x + 14, y + 9, 49, bg, 44);
   triangle(x + 50, y + 29, 20, bg);
 }
 static void draw_welcome(void) {
-  color(bg);
-  SDL_RenderClear(renderer);
-  rounded(430, 16, 194, 30, 8, elevated);
+  backdrop();
+  rounded(430, 16, 194, 30, 15, elevated);
   centered(tr("Y  Termos de uso"), 438, 23, 178, 13, muted);
   app_logo(282, 54);
   centered("K PLAYER", 20, 147, 600, 33, textc);
@@ -18,17 +18,17 @@ static void draw_welcome(void) {
   for (int i = 0; i < 3; i++) {
     int x = 24 + i * 200;
     bool chosen = i == language;
-    rounded(x, 264, 192, 66, 10, chosen ? accent : elevated);
-    rounded(x + 2, 266, 188, 62, 8,
-            chosen ? elevated : panel);
+    card(x, 264, 192, 66, 12, chosen, panel);
     label(codes[i], x + 14, 275, 12, chosen ? accent : muted, 162);
     label(language_names[i], x + 14, 297, 18, textc, 164);
   }
-  rounded(180, 352, 280, 44, 12, accent);
+  glow_rect(180, 352, 280, 44, 22, accent, 6);
+  rounded(180, 352, 280, 44, 22, accent);
   centered(tr("B  Iniciar K PLAYER"), 190, 364, 260, 19, bg);
   centered(tr("Sua escolha será salva neste aparelho."), 20, 412, 600, 12,
            muted);
-  footer(tr("Direcional: idioma    B: iniciar    SELECT: opções"));
+  const FooterHint hints[] = {{"DIR", "Idioma"}, {"B", "Iniciar"}, {"Y", "Termos"}};
+  footer_hints(hints, 3);
 }
 static const char *terms_titles[] = {
     "Sobre o aplicativo", "Seus arquivos e preferências", "Licenças e avisos"};
@@ -47,17 +47,17 @@ static const char *terms_text[] = {
     "limitam os direitos concedidos pelas licenças de software livre. Sem "
     "afiliação com a VideoLAN."};
 static void draw_terms(void) {
-  color(bg);
-  SDL_RenderClear(renderer);
+  backdrop();
   draw_header(tr("Termos de uso"));
   label(tr("Termos de uso"), 28, 59, 28, textc, 570);
-  rounded(20, 108, 600, 300, 12, panel);
+  panel_card(20, 108, 600, 300, 16);
   label(tr(terms_titles[terms_page]), 38, 126, 20, accent, 560);
   wrapped(tr(terms_text[terms_page]), 38, 169, 560, 16, 26, 8, textc);
   char count[24];
   snprintf(count, sizeof(count), "%d / 3", terms_page + 1);
   centered(count, 270, 416, 100, 12, muted);
-  footer(tr("A Voltar    Esquerda/Direita Páginas"));
+  const FooterHint hints[] = {{"A", "Voltar"}, {"DIR", "Páginas"}};
+  footer_hints(hints, 2);
 }
 static void open_terms(int from) {
   terms_return = from;

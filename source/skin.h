@@ -1,11 +1,12 @@
 /* 640 x 480 native adaptation of the supplied simulator. */
-static SDL_Color elevated = {36, 36, 36, 255}, dim = {117, 117, 117, 255};
 static void centered(const char *s, int x, int y, int w, int size,
                      SDL_Color c) {
   int n = measure(s, size);
   label(s, x + (n < w ? (w - n) / 2 : 0), y, size, c, w);
 }
 static void icon(int kind, int x, int y, int size, SDL_Color c) {
+  if (kp_sprite(KP_SPR_CATEGORIES, kind == 2 ? 2 : kind == 1 ? 1 : 0,
+                x-2, y-2, size+4, size+4)) return;
   if (kind == 2) {
     rounded(x, y + size / 4, size, size * 3 / 5, 3, c);
     rect(x + 2, y + size / 8, size / 2, size / 4, c);
@@ -24,36 +25,30 @@ static void icon(int kind, int x, int y, int size, SDL_Color c) {
   rounded(x + size - 7, y + size / 2, 7, size / 2, 3, c);
 }
 static void play_button(int x, int y, int size) {
-  rounded(x, y, size, size, size / 2, accent);
-  if (active && !paused) {
-    rect(x + size / 3, y + size / 3, 4, size / 3, bg);
-    rect(x + size * 3 / 5, y + size / 3, 4, size / 3, bg);
-  } else
-    triangle(x + size / 3, y + size / 4, size / 2, bg);
+  play_disc(x + size / 2, y + size / 2, size / 2, active && !paused);
 }
+/* Album art: the embedded cover when present, otherwise a vinyl disc. */
 static void art(int x, int y, int size) {
   if (cover_texture) {
     SDL_Rect r = {x, y, size, size};
     int crop = cover_w < cover_h ? cover_w : cover_h;
     SDL_Rect source = {(cover_w - crop) / 2, (cover_h - crop) / 2, crop, crop};
+    glow_rect(x, y, size, size, 10, alpha(accent, 200), 6);
     SDL_RenderCopy(renderer, cover_texture, crop > 0 ? &source : NULL, &r);
-  } else {
-    rounded(x, y, size, size, 8, (SDL_Color){29, 45, 36, 255});
-    rounded(x + size / 7, y + size / 7, size * 5 / 7, size * 5 / 7,
-            size * 5 / 14, bg);
-    rounded(x + size * 3 / 8, y + size * 3 / 8, size / 4, size / 4, size / 8,
-            accent);
-  }
+  } else
+    vinyl(x + size / 2, y + size / 2, size / 2, active && !paused);
 }
 static void draw_header(const char *section) {
   update_status();
-  rect(0, 0, 640, 32, panel);
-  rounded(14, 12, 7, 7, 3, accent);
-  label("K PLAYER", 28, 8, 15, textc, 85);
+  rect(0, 0, 640, 32, alpha(panel, 215));
+  rect(0, 32, 640, 1, hairline());
+  glow_circle(18, 16, 4, accent, 4);
+  fill_circle(18, 16, 4, accent);
+  label("K PLAYER", 30, 8, 15, textc, 85);
   label(KPLAYER_VERSION, 113, 10, 11, dim, 34);
   label(top_location, 154, 10, 11, muted, 120);
-  rounded(280, 6, 128, 20, 5, elevated);
-  centered(section, 280, 9, 128, 12, muted);
+  rounded(272, 6, 144, 20, 10, elevated);
+  centered(section, 272, 9, 144, 11, muted);
   label(clock_text, 526, 9, 12, muted, 50);
   if (battery_percent >= 0) {
     char s[16];
@@ -97,104 +92,116 @@ static int wrapped(const char *text, int x, int y, int width, int size,
   }
   return row;
 }
-static void footer(const char *s) {
-  rect(0, 436, 640, 44, panel);
-  char hints[2048];
-  size_t out = 0;
-  for (size_t i = 0; s[i] && out + 6 < sizeof(hints);) {
-    if (s[i] == ' ' && s[i + 1] == ' ') {
-      while (s[i] == ' ')
-        i++;
-      memcpy(hints + out, " • ", 5);
-      out += 5;
-    } else
-      hints[out++] = s[i++];
-  }
-  hints[out] = 0;
-  wrapped(hints, 14, 442, 612, 12, 18, 2, muted);
-  if (SDL_GetTicks() < note_until) {
-    rounded(30, 397, 580, 32, 7, elevated);
-    centered(status_note, 40, 405, 560, 13, accent);
-  }
-}
 /* Same controller badges as the music transport, arranged in equal cells. */
 static void media_ui_button_circle(const char *name, int cx, int cy);
 static void media_ui_button_pill(const char *name, int x, int y, int width);
 typedef struct { const char *key; const char *action; } FooterHint;
 static void footer_hints(const FooterHint *hints, int count) {
-  rect(0, 436, 640, 44, panel);
-  int cell = 616 / count;
+  rect(0, 436, 640, 44, alpha(panel, 225));
+  rect(0, 436, 640, 1, hairline());
+  if (count <= 0) return;
+  int cols = count >= 6 ? (count + 1) / 2 : count;
+  int cell = 616 / cols;
   for (int i = 0; i < count; i++) {
-    int x = 12 + i * cell;
-    int width = (int)strlen(hints[i].key) == 1 ? 18 :
+    int x = 12 + (i % cols) * cell;
+    int cy = count >= 6 ? 447 + (i / cols) * 20 : 458;
+    int width = (int)strlen(hints[i].key) == 1 ? 24 :
                 (int)ceil(measure(hints[i].key, 9)) + 12;
-    if (width < 18) width = 18;
-    if (strlen(hints[i].key) == 1)
-      media_ui_button_circle(hints[i].key, x + 9, 458);
+    if (width < 26) width = 26;
+    int id = !strcmp(hints[i].key,"DIR") ? 0 : !strcmp(hints[i].key,"A") ? 1 :
+             !strcmp(hints[i].key,"B") ? 2 : !strcmp(hints[i].key,"X") ? 3 :
+             !strcmp(hints[i].key,"Y") ? 4 : !strcmp(hints[i].key,"SELECT") ? 6 : -1;
+    if (count >= 6 && id >= 0 && kp_sprite(KP_SPR_BUTTONS, id, x + 3, cy - 9, 18, 18)) {
+      /* Two-line footers keep each sprite inside its own 20-pixel row. */
+    } else if (strlen(hints[i].key) == 1)
+      media_ui_button_circle(hints[i].key, x + 13, cy);
     else
-      media_ui_button_pill(hints[i].key, x, 449, width);
-    label(tr(hints[i].action), x + width + 4, 452, 11, muted,
+      media_ui_button_pill(hints[i].key, x, cy - 9, width);
+    label(tr(hints[i].action), x + width + 4, cy - 6, count >= 6 ? 11 : 12, muted,
           cell - width - 7);
   }
   if (SDL_GetTicks() < note_until) {
-    rounded(30, 397, 580, 32, 7, elevated);
+    glow_rect(30, 397, 580, 32, 16, accent, 4);
+    rounded(30, 397, 580, 32, 16, elevated);
     centered(status_note, 40, 405, 560, 13, accent);
   }
 }
 static void progress(int x, int y, int w) {
   long long len = duration_ms(), t = now_ms();
   double p = len > 0 ? fmax(0, fmin(1, (double)t / len)) : 0;
-  rounded(x, y, w, 4, 2, (SDL_Color){65, 65, 65, 255});
-  if (p > 0)
-    rect(x, y, (int)(w * p), 4, accent);
+  rounded(x, y, w, 4, 2, track_color());
+  int fill = (int)(w * p);
+  if (fill > 0) rounded(x, y, fill > 4 ? fill : 4, 4, 2, accent);
+  fill_circle(x + fill, y + 2, 5, textc);
+}
+/* Small arrow used on home tiles. */
+static void tile_arrow(int x, int y, SDL_Color c) {
+  color(c);
+  for (int k = 0; k < 2; k++) {
+    SDL_RenderDrawLine(renderer, x + k, y + 9, x + 9 + k, y);
+    SDL_RenderDrawLine(renderer, x + 3, y + k, x + 9, y + k);
+    SDL_RenderDrawLine(renderer, x + 9 - k, y, x + 9 - k, y + 6);
+  }
 }
 static void draw_home(void) {
-  color(bg);
-  SDL_RenderClear(renderer);
+  backdrop();
   draw_header(tr("DASHBOARD"));
-  label(tr("Central de Mídia Portátil"), 16, 66, 24, textc, 430);
-  label(tr("Sua biblioteca. Seu ritmo. Em qualquer lugar."), 16, 102, 13, muted,
-        430);
-  rounded(457, 72, 167, 26, 7, elevated);
-  centered(disk_text, 463, 79, 155, 12, muted);
+  /* Hero: two-tone headline. */
+  const char *h1 = tr("Seu som."), *h2 = tr("Sua tela.");
+  label(h1, 18, 42, 29, textc, 300);
+  label(h2, 18 + (int)measure(h1, 29) + 10, 42, 29, muted, 300);
+  label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 82, 12,
+        muted, 600);
   const char *names[] = {tr("Músicas"), tr("Vídeos"), tr("Arquivos"),
-                         tr("Rádio Online"), tr("IPTV"), tr("Futebol")},
+                         tr("Rádio Online"), tr("IPTV"), "YouTube"},
              *desc[] = {tr("Sua trilha sonora,"), tr("Cinema na palma"),
-                        tr("Explore as pastas"), tr("Estações do mundo"), tr("Canais ao vivo"), tr("Jogos ao vivo")},
-             *desc2[] = {tr("com letras em sincronia."), tr("da sua mão."),
-                         tr("do seu cartão SD."), tr("ao vivo pela internet."), "", ""},
-             *tags[] = {tr("LRC Sync"), tr("Ocultar auto."),
-                        tr("Mídias locais"), tr("Radio Browser"), tr("TV Online"), "Golazo"};
-  SDL_Color colors[] = {accent, accent, accent, accent, accent, accent};
+                        tr("Explore as pastas"), tr("Estações do mundo"),
+                        tr("Canais ao vivo"), tr("Vídeos online")},
+             *tags[] = {tr("LRC Sync"), tr("Ocultar auto."), tr("Mídias locais"),
+                        tr("Radio Browser"), tr("TV Online"), "PilasTube"};
   for (int i = 0; i < 6; i++) {
-    int x = 16 + (i % 3) * 208, y = 126 + (i / 3) * 106;
-    rounded(x, y, 192, 96, 10, i == dash_focus ? accent : elevated);
-    rounded(x + 2, y + 2, 188, 92, 8,
-            i == dash_focus ? elevated : panel);
-    icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 12, y + 17, 28, colors[i]);
-    label(tags[i], x + 50, y + 13, 10, colors[i], 130);
-    label(names[i], x + 50, y + 33, 16, textc, 136);
-    label(desc[i], x + 12, y + 63, 10, muted, 170);
-    (void)desc2;
+    int x = 16 + (i % 3) * 208, y = 104 + (i / 3) * 104;
+    bool focus = i == dash_focus;
+    if (focus) {
+      glow_rect(x, y, 192, 94, 16, accent, 6);
+      rounded(x, y, 192, 94, 16, accent);
+    } else
+      rounded(x, y, 192, 94, 16, hairline());
+    rounded_gradient(x + (focus ? 2 : 1), y + (focus ? 2 : 1), 192 - (focus ? 4 : 2),
+                     94 - (focus ? 4 : 2), focus ? 14 : 15,
+                     mix(elevated, accent, focus ? 0.22f : 0.10f), panel);
+    rounded(x + 12, y + 12, 38, 38, 12, alpha(bg, 150));
+    if (!kp_sprite(KP_SPR_CATEGORIES, i == 5 ? 1 : i, x + 17, y + 17, 28, 28))
+      icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 18, y + 18, 26, accent);
+    label(tags[i], x + 60, y + 14, 10, accent, 104);
+    tile_arrow(x + 170, y + 14, focus ? accent : dim);
+    label(names[i], x + 14, y + 54, 17, textc, 168);
+    label(desc[i], x + 14, y + 75, 10, muted, 168);
   }
-  rounded(16, 350, 608, 74, 10, panel);
-  art(28, 367, 40);
-  label(active ? title : tr("Pronto para dar o play"), 80, 365, 16, textc, 390);
+  /* Now playing card. */
+  panel_card(16, 318, 608, 108, 18);
+  bool on = active && !paused;
+  art(30, 330, 84);
+  label(active ? (on ? tr("TOCANDO AGORA") : tr("PAUSADO")) : tr("NADA TOCANDO"),
+        130, 336, 10, active ? accent : dim, 300);
+  label(active ? title : tr("Pronto para dar o play"), 130, 352, 18, textc, 330);
   label(active ? (artist[0] ? artist : tr("Reprodução local"))
                : tr("Abra Músicas ou Vídeos para começar"),
-        80, 391, 12, muted, 390);
-  label("|<", 492, 380, 16, muted, 25);
-  play_button(530, 367, 40);
-  label(">|", 586, 380, 16, muted, 25);
+        130, 379, 12, muted, 330);
+  visualizer(130, 400, 200, 14, 34, on);
+  if (!kp_sprite(KP_SPR_CONTROLS, KP_PREV, 484, 360, 24, 24))
+    label("|<", 488, 364, 16, muted, 25);
+  play_button(526, 350, 44);
+  if (!kp_sprite(KP_SPR_CONTROLS, KP_NEXT, 588, 360, 24, 24))
+    label(">|", 592, 364, 16, muted, 25);
   const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Abrir"},
-      {"X", "Player"}, {"Y/SELECT", "Opções"}, {"START", "Pausa"}};
+      {"X", "Player"}, {"Y", "Opções"}, {"START", "Pausa"}};
   footer_hints(hints, 5);
 }
 static void draw_menu(void) {
-  color(bg);
-  SDL_RenderClear(renderer);
+  backdrop();
   draw_header(tr("BIBLIOTECA"));
-  rounded(14, 46, 612, 68, 9, panel);
+  panel_card(14, 46, 612, 68, 14);
   icon(2, 28, 59, 22, accent);
   label(favorites_view   ? tr("Minhas favoritas")
         : locations_view   ? tr("Escolha o local das suas mídias")
@@ -203,16 +210,14 @@ static void draw_menu(void) {
         62, 59, 15, textc, 548);
   const char *tabs[] = {tr("Todos"), tr("Músicas"), tr("Vídeos")};
   for (int i = 0; i < 3; i++) {
-    rounded(28 + i * 100, 86, 92, 21, 5, i == category ? accent : elevated);
+    pill(28 + i * 100, 86, 92, 21, i == category);
     centered(tabs[i], 28 + i * 100, 90, 92, 12, i == category ? bg : muted);
   }
   if (locations_view) {
     for (int i = 0; i < 4; i++) {
       int y = 126 + i * 66;
       bool focus = i == location_selected;
-      rounded(14, y, 612, 58, 8, focus ? accent : panel);
-      if (focus)
-        rounded(16, y + 2, 608, 54, 6, elevated);
+      card(14, y, 612, 58, 10, focus, panel);
       icon(2, 28, y + 17, 26, focus ? accent : muted);
       label(tr(location_names[i]), 68, y + 9, 18, textc, 380);
       label(location_paths[i], 68, y + 34, 12, muted, 380);
@@ -221,8 +226,9 @@ static void draw_menu(void) {
     }
     label(tr("Selecione um local. Y verifica novamente os cartões."), 18, 420,
           12, muted, 604);
-    footer(tr("B Abrir   A Início   Esq/Dir Filtro   X Player   Y Atualizar   "
-              "SELECT Opções"));
+    const FooterHint hints[] = {{"B", "Abrir"}, {"A", "Início"}, {"DIR", "Filtro"},
+                                {"X", "Player"}, {"Y", "Atualizar"}, {"SELECT", "Opções"}};
+    footer_hints(hints, 6);
     return;
   }
   if (selected < offset)
@@ -233,14 +239,12 @@ static void draw_menu(void) {
     int i = offset + row, y = 126 + row * 49;
     Item *it = &items[i];
     bool focus = i == selected;
-    rounded(14, y, 612, 44, 7, focus ? accent : panel);
-    if (focus)
-      rounded(16, y + 2, 608, 40, 5, elevated);
+    card(14, y, 612, 44, 9, focus, panel);
     icon(it->dir                ? 2
          : audio_file(it->name) ? 0
                                 : 1,
          28, y + 10, 24,
-         it->dir ? (SDL_Color){251, 191, 36, 255}
+         it->dir ? accent
          : focus ? accent
                  : muted);
     label(it->name, 66, y + 7, 16, textc, 442);
@@ -265,8 +269,9 @@ static void draw_menu(void) {
   snprintf(count, sizeof(count), tr("%d / %d itens"), total ? selected + 1 : 0,
            total);
   label(count, 18, 420, 11, dim, 200);
-  footer(tr("B Abrir   A Voltar   Esq/Dir Filtro   X Player   Y Atualizar   "
-            "SELECT Opções"));
+  const FooterHint hints[] = {{"B", "Abrir"}, {"A", "Voltar"}, {"DIR", "Filtro"},
+                              {"X", "Player"}, {"Y", "Atualizar"}, {"SELECT", "Opções"}};
+  footer_hints(hints, 6);
 }
 /* Aligned audio screen: one album card, one switchable pane, one transport. */
 static void music_lines(const char *text, int x, int y, int width, int size,
@@ -336,11 +341,9 @@ static void draw_audio_rows(bool files) {
     } else
       snprintf(full, sizeof(full), "%s", path);
     bool playing = !dir && !strcmp(full, current_path);
-    rounded(272, y, 340, 41, 6, focus ? accent : panel);
-    if (focus)
-      rounded(274, y + 2, 336, 37, 4, elevated);
+    card(272, y, 340, 41, 8, focus, panel);
     if (dir)
-      icon(2, 282, y + 12, 18, (SDL_Color){251, 191, 36, 255});
+      icon(2, 282, y + 12, 18, accent);
     else if (playing) {
       rect(284, y + 15, 3, 12, accent);
       rect(289, y + 10, 3, 17, accent);
@@ -357,16 +360,16 @@ static void draw_audio_rows(bool files) {
 }
 #include "transport.h"
 static void draw_music(void) {
-  color(bg);
-  SDL_RenderClear(renderer);
+  backdrop();
   draw_header(tr("MÚSICAS"));
-  rounded(16, 46, 232, 320, 10, panel);
-  art(59, 58, 146);
-  music_lines(title, 28, 213, 208, 17, 20, 2, textc, true);
-  label(artist[0] ? artist : tr("Artista não informado"), 28, 255, 12,
-        accent, 208);
-  label(album[0] ? album : tr("Áudio local"), 28, 275, 11, muted, 208);
-  rect(28, 298, 208, 1, elevated);
+  panel_card(16, 46, 232, 320, 16);
+  art(70, 58, 124);
+  music_lines(title, 28, 192, 208, 17, 20, 2, textc, true);
+  centered(artist[0] ? artist : tr("Artista não informado"), 28, 236, 208, 12,
+           accent);
+  centered(album[0] ? album : tr("Áudio local"), 28, 253, 208, 11, muted);
+  visualizer(36, 272, 192, 18, 30, active && !paused);
+  rect(28, 298, 208, 1, hairline());
   char size[40], duration[32], detail[128];
   media_ui_format_filesize(media_size_bytes, media_size_known, size,
                            sizeof(size));
@@ -389,11 +392,11 @@ static void draw_music(void) {
     label(bitrate_text, 28, 348, 11, accent, 208);
   } else
     label(tr("Analisando dados técnicos..."), 28, 330, 11, muted, 208);
-  rounded(260, 46, 364, 320, 10, panel);
+  panel_card(260, 46, 364, 320, 16);
   const char *tabs[] = {tr("Letras"), tr("Fila"), tr("Pasta")};
   for (int i = 0; i < 3; i++) {
     int x = 272 + i * 114;
-    rounded(x, 58, 108, 28, 6, i == audio_panel ? accent : elevated);
+    pill(x, 58, 108, 28, i == audio_panel);
     centered(tabs[i], x + 4, 65, 100, 14, i == audio_panel ? bg : muted);
   }
   if (audio_panel == 0) {
@@ -472,11 +475,11 @@ static void draw_video(void) {
   }
   if (show_osd && (SDL_GetTicks() < osd_until || paused || preview_mode)) {
     draw_header(tr("VÍDEOS"));
-    rounded(16, 46, 88, 28, 8, panel);
+    rounded(16, 46, 88, 28, 14, alpha(panel, 225));
     label(tr("A  Voltar"), 29, 54, 13, textc, 66);
-    rounded(450, 46, 174, 28, 8, panel);
+    rounded(450, 46, 174, 28, 14, alpha(panel, 225));
     label(tr("Controles ocultam em 3s"), 461, 54, 11, muted, 158);
-    rounded(16, 328, 608, 100, 16, panel);
+    rounded(16, 328, 608, 100, 18, alpha(panel, 235));
     label(media_name, 32, 340, 18, textc, 400);
     char a[32], b[32], s[80];
     time_string(now_ms(), a, sizeof(a));
@@ -488,7 +491,8 @@ static void draw_video(void) {
     label("-10s     +10s", 82, 397, 13, textc, 140);
     snprintf(s, sizeof(s), "%s", tr("SELECT Opções"));
     label(s, 420, 397, 13, muted, 190);
-    footer(tr("B / START Pausa   Esq/Dir 10s   X Ocultar   A Voltar   SELECT "
-              "Opções"));
+    const FooterHint hints[] = {{"B", "Pausa"}, {"DIR", "10s"}, {"X", "Ocultar"},
+                                {"A", "Voltar"}, {youtube_playing ? "Y" : "SELECT", youtube_playing ? "Baixar" : "Opções"}};
+    footer_hints(hints, 5);
   }
 }

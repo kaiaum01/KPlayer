@@ -707,8 +707,7 @@ static void radio_retry_tick(void) {
 }
 
 static void draw_radio(void) {
-  color(bg);
-  SDL_RenderClear(renderer);
+  backdrop();
   draw_header(tr("RÁDIO ONLINE"));
   pthread_mutex_lock(&radio_mutex);
   bool loading = radio_loading;
@@ -734,23 +733,19 @@ static void draw_radio(void) {
 
   /* Player on the left, station browser on the right. */
   radio_update_art(featured.favicon);
-  rounded(16, 46, 224, 384, 10, panel);
-  rounded(48, 62, 160, 150, 10, elevated);
+  panel_card(16, 46, 224, 384, 16);
+  /* Tuner: vinyl with live pulse; station logo on the label when known. */
+  bool on_air = playing_radio && active && !paused;
+  pulse(128, 128, 62, on_air);
+  vinyl(128, 128, 62, on_air);
   if (radio_art_texture) {
-  SDL_Rect art = {48, 62, 160, 150};
-  SDL_RenderCopy(renderer, radio_art_texture, NULL, &art);
-  } else {
-  media_ui_circle(128, 132, 48, bg);
-  media_ui_circle(128, 132, 9, accent);
-  rect(125, 88, 6, 35, accent);
-  color(accent);
-  SDL_RenderDrawLine(renderer, 108, 99, 122, 116);
-  SDL_RenderDrawLine(renderer, 148, 99, 134, 116);
-  SDL_RenderDrawLine(renderer, 99, 91, 118, 113);
-  SDL_RenderDrawLine(renderer, 157, 91, 138, 113);
+    fill_circle(128, 128, 30, textc);
+    SDL_Rect logo = {108, 108, 40, 40};
+    SDL_RenderCopy(renderer, radio_art_texture, NULL, &logo);
   }
-  centered(playing_radio ? tr("AO VIVO") : tr("RÁDIO ONLINE"), 58, 185,
-           140, 10, playing_radio ? accent : muted);
+  rounded(78, 198, 100, 18, 9, on_air ? accent : elevated);
+  centered(playing_radio ? tr("AO VIVO") : tr("RÁDIO ONLINE"), 78, 201,
+           100, 10, on_air ? bg : muted);
   if (featured.name[0]) {
     centered(featured.name, 28, 226, 200, 17, textc);
     centered(playing_radio && radio_nowplaying[0] ? radio_nowplaying :
@@ -761,22 +756,18 @@ static void draw_radio(void) {
     char technical[96];
     snprintf(technical, sizeof(technical), "%s  •  %d kbps",
              featured.codec[0] ? featured.codec : "STREAM", featured.bitrate);
-    rounded(48, 296, 160, 23, 6, elevated);
-    centered(technical, 52, 302, 152, 11, accent);
+    rounded(48, 292, 160, 23, 11, mix(elevated, accent, 0.15f));
+    centered(technical, 52, 298, 152, 11, accent);
+    visualizer(40, 322, 176, 12, 30, on_air);
   } else
     centered(loading ? tr("Buscando estações...")
                      : tr("Nenhuma estação encontrada"),
              28, 246, 200, 13, muted);
-  int control_y = 352;
+  int control_y = 356;
   media_ui_skip(86, control_y, false);
-  media_ui_circle(128, control_y, 20, textc);
-  if (playing_radio && active && !paused) {
-    rect(121, control_y - 7, 4, 14, bg);
-    rect(131, control_y - 7, 4, 14, bg);
-  } else
-    triangle(122, control_y - 8, 16, bg);
+  play_disc(128, control_y, 20, playing_radio && active && !paused);
   media_ui_skip(170, control_y, true);
-  rounded(48, 390, 160, 22, 6, elevated);
+  rounded(48, 390, 160, 22, 11, elevated);
   const char *play_status = tr("B  Ouvir estação");
   if (radio_retry_waiting) play_status = tr("Reconectando...");
   if (radio_play_is_busy()) play_status = "Conectando...";
@@ -786,7 +777,7 @@ static void draw_radio(void) {
   }
   centered(play_status, 52, 396, 152, 10, playing_radio ? accent : muted);
 
-  rounded(252, 46, 372, 384, 10, panel);
+  panel_card(252, 46, 372, 384, 16);
   label(tr(radio_filter == 5 ? "Rádio do Usuário" : radio_filter == 6 ? "Favoritas" : "Estações"), 264, 57, 16, textc, 235);
   char station_count[48];
   snprintf(station_count, sizeof(station_count), "%d %s", count,
@@ -794,7 +785,7 @@ static void draw_radio(void) {
   label(station_count, 516, 62, 11, muted, 96);
   for (int i = 0; i < 7; i++) {
     int x = 264 + i * 49;
-    rounded(x, 82, 46, 23, 5, i == radio_filter ? accent : elevated);
+    pill(x, 82, 46, 23, i == radio_filter);
     centered(tr(radio_filter_names[i]), x + 1, 88, 44, i == 5 ? 6 : 8,
              i == radio_filter ? bg : muted);
   }
@@ -811,9 +802,7 @@ static void draw_radio(void) {
     for (int row = 0; row < visible_count && row < 5; row++) {
       int actual = offset_station + row, y = 115 + row * 56;
       bool focus = actual == selected_station;
-      rounded(264, y, 348, 49, 7, focus ? accent : elevated);
-      if (focus)
-        rounded(266, y + 2, 344, 45, 5, elevated);
+      card(264, y, 348, 49, 10, focus, elevated);
       rounded(274, y + 13, 22, 22, 11,
               (playing_radio && !strcmp(current_path, visible[row].url))
                   ? accent

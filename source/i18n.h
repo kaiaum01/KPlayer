@@ -7,6 +7,13 @@ typedef struct {
   const char *pt, *en, *es;
 } Translation;
 static const Translation translations[] = {
+    {"Instale o PilasTube em ports primeiro", "Install PilasTube in ports first", "Instala PilasTube en ports primero"},
+    {"Seu som.", "Your sound.", "Tu sonido."},
+    {"Sua tela.", "Your screen.", "Tu pantalla."},
+    {"Músicas, vídeos, rádios e TV ao vivo num player só.", "Music, videos, radio and live TV in one player.", "Música, videos, radio y TV en vivo en un solo reproductor."},
+    {"TOCANDO AGORA", "NOW PLAYING", "SONANDO AHORA"},
+    {"PAUSADO", "PAUSED", "EN PAUSA"},
+    {"NADA TOCANDO", "NOTHING PLAYING", "NADA SONANDO"},
     {"Futebol", "Football", "Fútbol"},
     {"FUTEBOL", "FOOTBALL", "FÚTBOL"},
     {"Jogos ao vivo", "Live matches", "Partidos en vivo"},

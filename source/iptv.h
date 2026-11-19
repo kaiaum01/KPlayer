@@ -176,7 +176,7 @@ static void draw_iptv(void) {
   pthread_mutex_unlock(&iptv_fetch_mutex);
   if (done && completed_source == iptv_source) { if (ok) iptv_reload(); else notify(tr("Lista indisponível; usando cache")); }
   else if (done && iptv_source && !iptv_count) iptv_fetch_start();
-  color(bg); SDL_RenderClear(renderer); draw_header(tr("IPTV"));
+  backdrop(); draw_header(tr("IPTV"));
   label(iptv_source == 1 ? tr("IPTV Brasil") : iptv_source == 2 ? tr("IPTV Mundo") : tr("Listas próprias"), 24, 52, 24, textc, 430);
   if (!iptv_count) {
     centered(tr("Nenhum canal encontrado"), 25, 170, 590, 20, muted);
@@ -184,7 +184,7 @@ static void draw_iptv(void) {
   } else {
     if (iptv_selected < iptv_offset) iptv_offset = iptv_selected;
     IptvChannel *channel = &iptv_channels[iptv_selected];
-    rounded(24, 86, 200, 310, 9, panel);
+    panel_card(24, 86, 200, 310, 16);
     rounded(47, 102, 154, 120, 8, elevated);
     radio_update_art(channel->logo);
     if (radio_art_texture && !strcmp(radio_art_display_url, channel->logo)) {
@@ -198,8 +198,7 @@ static void draw_iptv(void) {
     if (iptv_selected >= iptv_offset + 6) iptv_offset = iptv_selected - 5;
     for (int row = 0; row < 6 && iptv_offset + row < iptv_count; row++) {
       int index = iptv_offset + row, y = 86 + row * 51;
-      rounded(238, y, 378, 45, 7, index == iptv_selected ? accent : panel);
-      if (index == iptv_selected) rounded(240, y + 2, 374, 41, 6, elevated);
+      card(238, y, 378, 45, 10, index == iptv_selected, panel);
       char number[24]; snprintf(number, sizeof(number), "%d", index + 1);
       label(number, 249, y + 14, 13, muted, 40);
       label(iptv_channels[index].name, 290, y + 13, 15, textc, 310);
@@ -207,5 +206,7 @@ static void draw_iptv(void) {
   }
   if (radio_play_is_busy()) label(tr("Conectando canal..."), 24, 417, 13, accent, 500);
   else if (busy && fetching_source == iptv_source) label(tr("Atualizando canais..."), 24, 417, 13, accent, 500);
-  footer(tr("Cima/Baixo Navegar   B Assistir   X Fonte   Y Atualizar   A Voltar"));
+  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Assistir"}, {"X", "Fonte"},
+                              {"Y", "Atualizar"}, {"A", "Voltar"}};
+  footer_hints(hints, 5);
 }
