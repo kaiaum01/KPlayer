@@ -8,7 +8,7 @@
         android:allowBackup="true"
         android:label="KPlayer (Beta)"
         android:theme="@style/Theme.KPlayer"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
