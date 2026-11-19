@@ -404,7 +404,7 @@ int main(void) {
   automatic_roots[2].path = "/this-path-does-not-exist-kplayer";
   automatic_roots[3].path = "/this-path-does-not-exist-kplayer";
   category = 1;
-  rescan_automatic_media(); /* o índice é cacheado: força nova leitura das pastas de teste */
+  scan_automatic_media();
   assert(automatic_view && total == 1 &&
          !strcmp(items[0].name, "Grande.flac") && items[0].size >= 60 * 1024 &&
          !strcmp(items[0].path, automatic_track));
@@ -433,8 +433,6 @@ int main(void) {
   automatic_roots[1].path = auto1;
   automatic_roots[2].path = auto2;
   automatic_roots[3].path = auto3;
-  clear_cached_media();
-  media_preloaded = false;
   clear_items();
   unlink(automatic_track);
   assert(scan_music_folder(card2));

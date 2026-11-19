@@ -1,71 +1,87 @@
-name: KPlayer - Android
+name: Compilar KPlayer Android
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-    paths:
-      - "android/**"
-      - "source/**"
-      - ".github/workflows/android-build.yml"
+    branches: [main, master]
+    tags: ['v*']
   pull_request:
-    branches: [main]
-    paths:
-      - "android/**"
-      - "source/**"
-      - ".github/workflows/android-build.yml"
+    branches: [main, master]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-android:
-    name: Android APK
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
+  build-apk:
+    name: Gerar APK Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Baixar o código
+        uses: actions/checkout@v7
 
-      - name: Check Android project
-        id: android-project
+      - name: Localizar o projeto Android
+        id: project
         shell: bash
         run: |
-          if [[ -f android/gradlew && ( -f android/settings.gradle || -f android/settings.gradle.kts ) ]]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
+          if [ -f "gradlew" ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          elif [ -f "android/gradlew" ]; then
+            echo "dir=android" >> "$GITHUB_OUTPUT"
           else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::O repositório ainda não contém um projeto Android Gradle (android/gradlew + settings.gradle). Nenhum APK será gerado nesta execução."
+            echo "Gradle Wrapper não encontrado."
+            exit 1
           fi
 
-      - name: Set up Java
-        if: steps.android-project.outputs.ready == 'true'
-        uses: actions/setup-java@v4
+      - name: Configurar Java 17
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-      - name: Set up Android SDK
-        if: steps.android-project.outputs.ready == 'true'
-        uses: android-actions/setup-android@v3
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v6
 
-      - name: Install Android NDK
-        if: steps.android-project.outputs.ready == 'true'
-        run: sdkmanager "ndk;27.2.12479018"
+      - name: Permitir execução do Gradle Wrapper
+        shell: bash
+        run: chmod +x "${{ steps.project.outputs.dir }}/gradlew"
 
-      - name: Build debug APK
-        if: steps.android-project.outputs.ready == 'true'
-        working-directory: android
+      - name: Compilar APK Debug
+        shell: bash
         run: |
-          chmod +x ./gradlew
-          ./gradlew --no-daemon assembleDebug
+          cd "${{ steps.project.outputs.dir }}"
+          ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Upload APK
-        if: steps.android-project.outputs.ready == 'true'
-        uses: actions/upload-artifact@v4
+      - name: Preparar APK
+        id: apk
+        shell: bash
+        run: |
+          SOURCE="${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk"
+          TARGET="${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/KPlayer-Android-Beta.apk"
+          test -f "$SOURCE"
+          cp "$SOURCE" "$TARGET"
+          echo "path=$TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Disponibilizar APK nos artefatos
+        uses: actions/upload-artifact@v7
         with:
-          name: KPlayer-Android-debug
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: KPlayer-Android-Beta-${{ github.run_number }}
+          path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
           retention-days: 30
+          compression-level: 0
+
+      - name: Anexar APK à Release da tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --title "KPlayer Android ${GITHUB_REF_NAME}" --generate-notes
+          gh release upload "${GITHUB_REF_NAME}" "${{ steps.apk.outputs.path }}" --clobber
