@@ -51,8 +51,6 @@ jobs:
             -I source/include source/kplayer.c -o ports/kplayer/kplayer \
             -ldl -lpthread -lm
           file ports/kplayer/kplayer
-      - name: Testar atualizador simulado
-        run: python3 -m unittest discover -s tests -p test_updater.py -v
       - name: Testar conversão dos placares
         run: python3 -m unittest discover -s tests -p test_football.py -v
       - name: Criar pacote instalável

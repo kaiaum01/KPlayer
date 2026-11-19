@@ -14,7 +14,9 @@ export function VideoScreen({
   location,
   title,
   src,
+  fallbackUrls,
   isLive,
+  sectionLabel,
   fit,
   rate,
   paused,
@@ -33,7 +35,9 @@ export function VideoScreen({
   location: string;
   title: string;
   src: string;
+  fallbackUrls?: string[];
   isLive: boolean;
+  sectionLabel?: string;
   fit: VideoFit;
   rate: number;
   paused: boolean;
@@ -50,8 +54,36 @@ export function VideoScreen({
   const [curMs, setCurMs] = useState(0);
   const [durMs, setDurMs] = useState(0);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [sourceIdx, setSourceIdx] = useState(0);
   const [osdVisible, setOsdVisible] = useState(true);
   const hideTimer = useRef<number | null>(null);
+
+  const candidates = React.useMemo(() => {
+    const out: string[] = [];
+    for (const u of [src, ...(fallbackUrls ?? [])]) {
+      if (u && !out.includes(u)) out.push(u);
+    }
+    return out;
+  }, [src, fallbackUrls]);
+
+  const activeUrl = candidates[sourceIdx] ?? '';
+
+  useEffect(() => {
+    setSourceIdx(0);
+    setCurMs(0);
+    setDurMs(0);
+    setErrMsg(null);
+  }, [src, fallbackUrls]);
+
+  const advanceMirrorOrFail = React.useCallback(() => {
+    setSourceIdx((prev) => {
+      if (prev + 1 < candidates.length) {
+        return prev + 1;
+      }
+      setErrMsg(tr('Não foi possível abrir o canal', lang));
+      return prev;
+    });
+  }, [candidates.length, lang]);
 
   const bumpOsd = () => {
     setOsdVisible(true);
@@ -66,23 +98,28 @@ export function VideoScreen({
     return () => {
       if (hideTimer.current) window.clearTimeout(hideTimer.current);
     };
-  }, [src, paused, showOsd]);
+  }, [activeUrl, paused, showOsd]);
 
   useEffect(() => {
     const video = localRef.current;
     videoRefExternal.current = video;
-    if (!video || !src) return;
+    if (!video || !activeUrl) return;
 
     setErrMsg(null);
     let hls: Hls | null = null;
-    const isHls = src.toLowerCase().includes('.m3u8') || isLive;
+    const lower = activeUrl.toLowerCase();
+    const isHls =
+      lower.includes('.m3u8') ||
+      lower.includes('master.txt') ||
+      lower.includes('playlist.m3u') ||
+      lower.includes('/hls/');
     const streamSrc =
-      src.startsWith('http://') || (src.startsWith('https://') && isLive)
-        ? `/api/stream?url=${encodeURIComponent(src)}`
-        : src;
+      activeUrl.startsWith('http://') || activeUrl.startsWith('https://')
+        ? `/api/stream?url=${encodeURIComponent(activeUrl)}`
+        : activeUrl;
 
     if (isHls && Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      hls = new Hls({ enableWorker: true, lowLatencyMode: isLive });
       hls.loadSource(streamSrc);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -90,7 +127,8 @@ export function VideoScreen({
       });
       hls.on(Hls.Events.ERROR, (_ev, data) => {
         if (data.fatal) {
-          setErrMsg(tr('Não foi possível abrir o canal', lang));
+          hls?.destroy();
+          advanceMirrorOrFail();
         }
       });
     } else {
@@ -104,7 +142,7 @@ export function VideoScreen({
       video.removeAttribute('src');
       video.load();
     };
-  }, [src, isLive, lang, videoRefExternal]);
+  }, [activeUrl, isLive, videoRefExternal, advanceMirrorOrFail]);
 
   useEffect(() => {
     const video = localRef.current;
@@ -138,7 +176,7 @@ export function VideoScreen({
           if (Number.isFinite(v.duration)) setDurMs(v.duration * 1000);
         }}
         onEnded={onEnded}
-        onError={() => setErrMsg(tr('Não foi possível abrir o canal', lang))}
+        onError={advanceMirrorOrFail}
       />
 
       {errMsg && (
@@ -157,7 +195,7 @@ export function VideoScreen({
           <div className="absolute top-0 left-0 right-0 z-20">
             <HeaderBar
               theme={theme}
-              section={isLive ? tr('IPTV', lang) : tr('VÍDEOS', lang)}
+              section={sectionLabel ?? (isLive ? tr('IPTV', lang) : tr('VÍDEOS', lang))}
               location={location}
             />
           </div>

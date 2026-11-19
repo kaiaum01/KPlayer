@@ -30,6 +30,7 @@
 - **Dedicated Media Folders (Fast Boot, Zero SD Overhead):** No more scanning the entire SD card (ROMs/BIOS/saves are skipped). KPlayer indexes exclusively:
   - **Music:** `/roms/bgmusic` (SD1) and `/roms2/bgmusic` (SD2)
   - **Videos:** `/roms/videos` (SD1) and `/roms2/videos` (SD2)
+- **IPTV with Canais & Filmes e séries:** Built-in fetching and playback for **Canais** (`https://canais-saimo.pages.dev/`) and **Filmes e séries** (`https://filmes-saimo.pages.dev/`) with artwork, categories, and fast switching via `X` or D-pad.
 - **dArkOS / EmulationStation Port Artwork & XML Metadata:** `KPlayer-v2.0.0-R36S.zip` ships with a custom 640×480 cover (`images/KPlayer-image.png`), ready-to-use `gamelist.xml`, and a standalone `kplayer/KPlayer-metadata.xml` snippet to merge with existing ports.
 
 ---
@@ -43,7 +44,7 @@
 | ![Dashboard v2.0.0](docs/images/readme-home.png) | ![Music player v2.0.0](docs/images/readme-audio.png) |
 | **Placar da Bola — Live Matches** | **Placar da Bola — Match Statistics** |
 | ![Placar da Bola](docs/images/readme-football.png) | ![Match detail stats](docs/images/readme-football-detail.png) |
-| **Online Radio** | **Live IPTV (Brazil / World / Local)** |
+| **Online Radio** | **IPTV (Canais · Filmes e séries)** |
 | ![Online radio](docs/images/readme-radio.png) | ![IPTV](docs/images/readme-iptv.png) |
 | **Dedicated Folders (SD1 / SD2)** | **Video Player (libVLC)** |
 | ![Dedicated library folders](docs/images/readme-library.png) | ![Video player](docs/images/readme-video.png) |
@@ -67,11 +68,10 @@
 | **Music (+ `.lrc`)** | `/roms/bgmusic` | `/roms2/bgmusic` | MP3, FLAC, OGG, WAV, M4A, AAC, OPUS |
 | **Videos** | `/roms/videos` | `/roms2/videos` | MP4, MKV, AVI, MOV, WEBM |
 | **User Radio** | `ports/kplayer/radios_usuario/` | — | `.pls`, `.m3u`, `.m3u8`, `.asx` |
-| **Local IPTV** | `ports/kplayer/iptv/` | — | `.m3u`, `.m3u8` |
 
 4. Refresh the Ports list in EmulationStation and launch **Ports → KPlayer v2.0.0**.
 
-> **Requirements:** ARM64 R36S running dArkOS with PortMaster, SDL2, ALSA, and compatible VLC plugins in `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Online Radio, IPTV, Placar da Bola, and updates require internet access. See [docs/INSTALL.md](docs/INSTALL.md) for full details.
+> **Requirements:** ARM64 R36S running dArkOS with PortMaster, SDL2, ALSA, and compatible VLC plugins in `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Online Radio, IPTV, and Placar da Bola require internet access. See [docs/INSTALL.md](docs/INSTALL.md) for full details.
 
 ---
 

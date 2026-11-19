@@ -30,6 +30,12 @@ Para não sobrecarregar o R36S varrendo pastas de ROMs, BIOS e saves, o KPlayer 
 - **Músicas (somente áudio):** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
 - **Vídeos (somente vídeo):** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
 
+### IPTV — Canais + Filmes e séries (sem auto-atualizador)
+- Sistema de atualização automática removido completamente para um boot mais limpo e rápido.
+- IPTV atualizado com leitura e reprodução direta das duas listas:
+  - **Canais:** `https://canais-saimo.pages.dev/`
+  - **Filmes e séries:** `https://filmes-saimo.pages.dev/` (filmes e episódios de séries com capa e reprodução direta no player).
+
 ### Capa do Port e Metadados XML para dArkOS / EmulationStation
 O pacote **`KPlayer-v2.0.0-R36S.zip`** já traz tudo pronto para o KPlayer aparecer bonito no menu **Ports** do R36S:
 - `images/KPlayer-image.png` (640×480 PNG — também em `kplayer/cover.png`)
@@ -57,7 +63,7 @@ O pacote **`KPlayer-v2.0.0-R36S.zip`** já traz tudo pronto para o KPlayer apare
 
 | Arquivo | Tamanho | SHA-256 |
 | :--- | :---: | :--- |
-| `KPlayer-v2.0.0-R36S.zip` | 6.7 MB (`7.011.063 bytes`) | `7733a29cf0ca3c226ffd7f2e94218eaf69446162390f3ca5430788fea1045b0b` |
+| `KPlayer-v2.0.0-R36S.zip` | 6.7 MB (`7.006.362 bytes`) | `332eb575876f27f1cc50537119ac185c62b13ea8b543dc8b9dd94f929f585ed6` |
 
 ---
 
@@ -68,5 +74,6 @@ O pacote **`KPlayer-v2.0.0-R36S.zip`** já traz tudo pronto para o KPlayer apare
 - Redesigned slim animated welcome screen with unified language capsule and live 7-color theme dots.
 - **Placar da Bola** (SofaScore-style live football scores, match stats, minute-by-minute events, and lineups).
 - Re-centered music transport bar and sharpened icons.
+- **IPTV (`Canais` & `Filmes e séries`):** Direct fetching and playback from `https://canais-saimo.pages.dev/` and `https://filmes-saimo.pages.dev/`; auto-updater completely removed.
 - Dedicated fast-loading media folders: `/roms/bgmusic` & `/roms2/bgmusic` (audio only), `/roms/videos` & `/roms2/videos` (video only).
 - Bundled 640×480 dArkOS port cover (`images/KPlayer-image.png`), `gamelist.xml`, and mergeable `kplayer/KPlayer-metadata.xml`.

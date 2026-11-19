@@ -547,23 +547,24 @@ def render_radio():
 def render_iptv():
     c = Canvas()
     c.header("IPTV")
-    c.text(24, 42, "IPTV Ao Vivo", 20, TEXT, bold=True)
-    tabs = [("Brasil", True), ("Mundo", False), ("Listas Locais", False)]
+    c.text(24, 40, "Canais", 19, TEXT, bold=True)
+    c.text(24, 62, "https://canais-saimo.pages.dev/", 10, MUTED)
+    tabs = [("Canais", True), ("Filmes e séries", False)]
     for i, (t, act) in enumerate(tabs):
-        tx = 290 + i * 112
-        c.rrect(tx, 44, 104, 24, 12, ACCENT if act else ELEV)
-        c.text(tx + 52, 50, t, 11, BG if act else MUTED, bold=act, align="Center")
+        tx = 356 + i * 134
+        c.rrect(tx, 44, 126, 26, 13, ACCENT if act else ELEV)
+        c.text(tx + 63, 51, t, 11, BG if act else MUTED, bold=act, align="Center")
 
     channels = [
-        ("TV Cultura HD", "Educativo • Brasil • HLS 720p", True),
-        ("Record News", "Notícias • Brasil • HLS 720p", False),
-        ("CNN Brasil Live", "Notícias • Brasil • HLS 1080p", False),
-        ("SBT ao Vivo", "Entretenimento • Brasil • HLS", False),
-        ("Canal Futura", "Cultura • Brasil • HLS 720p", False),
-        ("AgroMais TV", "Variedades • Brasil • HLS", False),
+        ("CAZE TV (ST)", "ESPORTES • HLS ao vivo", True),
+        ("N SPORTS (OT)", "ESPORTES • HLS ao vivo", False),
+        ("ESPN 2 (S46)", "ESPN • Canal ao vivo", False),
+        ("COMBATE (S46)", "ESPORTES • Canal ao vivo", False),
+        ("WARNER CHANNEL (S79)", "FILMES E SÉRIES • Canal ao vivo", False),
+        ("AXN (S79)", "FILMES E SÉRIES • Canal ao vivo", False),
     ]
     for i, (nm, desc, sel) in enumerate(channels):
-        y = 80 + i * 56
+        y = 82 + i * 56
         c.rrect(20, y, 600, 50, 11, "#19261E" if sel else PANEL, ACCENT if sel else BORDER, 2 if sel else 1)
         c.rrect(32, y + 10, 38, 30, 7, ACCENT_SOFT if sel else ELEV)
         c.text(51, y + 18, "TV", 11, ACCENT if sel else MUTED, bold=True, align="Center")
@@ -572,7 +573,7 @@ def render_iptv():
         c.rrect(536, y + 15, 70, 20, 10, ACCENT if sel else ELEV)
         c.text(571, y + 19, "AO VIVO", 9, BG if sel else MUTED, bold=True, align="Center")
 
-    c.footer([("DIR", "Navegar"), ("B", "Assistir"), ("X", "Fonte"), ("Y", "Atualizar"), ("A", "Voltar")])
+    c.footer([("DIR", "Navegar"), ("B", "Assistir"), ("X", "Alternar"), ("Y", "Atualizar"), ("A", "Voltar")])
     c.render([DOCS_IMG / "readme-iptv.png", PREVIEWS / "06-iptv.png"])
 
 

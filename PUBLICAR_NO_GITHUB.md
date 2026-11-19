@@ -55,6 +55,6 @@ release: KPlayer v2.0.0 for R36S / dArkOS
 
 ## 4. Verificação do Pacote Gerado
 
-- **ZIP instalável:** `releases/KPlayer-v2.0.0-R36S.zip` (`7.011.063 bytes`)
-- **SHA-256:** `7733a29cf0ca3c226ffd7f2e94218eaf69446162390f3ca5430788fea1045b0b`
-- **Conteúdo do ZIP:** `KPlayer.sh`, `gamelist.xml`, `images/KPlayer-image.png`, `kplayer/kplayer` (ARM64), `kplayer/cover.png`, `kplayer/KPlayer-metadata.xml`, `kplayer/lib/libvlc*`, `kplayer/football_fetch.py`, `kplayer/golazo`, `kplayer/updater.py`, fontes, sprites, rádios de exemplo e licenças.
+- **ZIP instalável:** `releases/KPlayer-v2.0.0-R36S.zip` (`7.006.362 bytes`)
+- **SHA-256:** `332eb575876f27f1cc50537119ac185c62b13ea8b543dc8b9dd94f929f585ed6`
+- **Conteúdo do ZIP:** `KPlayer.sh`, `gamelist.xml`, `images/KPlayer-image.png`, `kplayer/kplayer` (ARM64), `kplayer/cover.png`, `kplayer/KPlayer-metadata.xml`, `kplayer/lib/libvlc*`, `kplayer/football_fetch.py`, `kplayer/golazo`, `kplayer/iptv_fetch.py`, fontes, sprites, rádios de exemplo e licenças.

@@ -1,16 +1,16 @@
-/* Separate local, Brazil and world lists; downloads never block rendering. */
+/* Two Saimo IPTV sources: Canais and Filmes e séries; downloads run off-thread. */
 #define IPTV_MAX_CHANNELS 2048
-#define IPTV_BR_CACHE "iptv/.iptvcom-br.m3u8"
-#define IPTV_WORLD_CACHE "iptv/.iptvcom-world.m3u8"
-#define IPTV_BR_URL "https://raw.githubusercontent.com/iptv-com/iptv/main/lists/brazil.m3u"
-#define IPTV_WORLD_URL "https://raw.githubusercontent.com/iptv-com/iptv/main/lists/world.m3u"
+#define IPTV_CANAIS_CACHE "iptv/.saimo-canais.m3u8"
+#define IPTV_FILMES_CACHE "iptv/.saimo-filmes.m3u8"
+#define IPTV_CANAIS_URL "https://canais-saimo.pages.dev/"
+#define IPTV_FILMES_URL "https://filmes-saimo.pages.dev/"
 typedef struct { char name[128]; char url[1024]; char logo[1024]; char group[128]; char id[128]; } IptvChannel;
 static IptvChannel iptv_channels[IPTV_MAX_CHANNELS];
 static int iptv_count, iptv_selected, iptv_offset;
 static pthread_mutex_t iptv_fetch_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool iptv_fetch_busy, iptv_fetch_done, iptv_fetch_ok;
 static int iptv_fetch_source, iptv_done_source;
-static int iptv_source;
+static int iptv_source; /* 0 = Canais, 1 = Filmes e séries */
 
 static void iptv_attribute(const char *line, const char *key, char *out, size_t cap) {
   out[0] = 0;
@@ -43,7 +43,9 @@ static int iptv_read_list(const char *path, IptvChannel *out, int count, int max
     while (*p == ' ' || *p == '\t') p++;
     if (!strncasecmp(p, "#EXTINF:", 8)) {
       const char *comma = strchr(p, ',');
-      snprintf(name, sizeof(name), "%s", comma && comma[1] ? comma + 1 : "");
+      const char *raw_name = comma && comma[1] ? comma + 1 : "";
+      while (*raw_name == ' ' || *raw_name == '\t') raw_name++;
+      snprintf(name, sizeof(name), "%s", raw_name);
       iptv_attribute(p, "tvg-logo", logo, sizeof(logo));
       iptv_attribute(p, "group-title", group, sizeof(group));
       iptv_attribute(p, "tvg-id", id, sizeof(id));
@@ -69,40 +71,24 @@ static int iptv_read_list(const char *path, IptvChannel *out, int count, int max
 static void iptv_reload(void) {
   mkdir("iptv", 0755);
   iptv_count = iptv_selected = iptv_offset = 0;
-  if (iptv_source) {
-    const char *cache = iptv_source == 1 ? IPTV_BR_CACHE : IPTV_WORLD_CACHE;
-    iptv_count = iptv_read_list(cache, iptv_channels, 0, IPTV_MAX_CHANNELS);
-    return;
-  }
-  DIR *dir = opendir("iptv");
-  if (!dir) return;
-  struct dirent *e;
-  while (iptv_count < IPTV_MAX_CHANNELS && (e = readdir(dir))) {
-    if (e->d_name[0] == '.' || !playlist_file(e->d_name)) continue;
-    char path[PATH_MAX];
-    if (snprintf(path, sizeof(path), "iptv/%s", e->d_name) >= (int)sizeof(path)) continue;
-    iptv_count = iptv_read_list(path, iptv_channels, iptv_count, IPTV_MAX_CHANNELS);
-  }
-  closedir(dir);
+  const char *cache = iptv_source == 0 ? IPTV_CANAIS_CACHE : IPTV_FILMES_CACHE;
+  iptv_count = iptv_read_list(cache, iptv_channels, 0, IPTV_MAX_CHANNELS);
 }
 
 static void *iptv_fetch_worker(void *unused) {
   int source = (int)(intptr_t)unused;
-  if (source != 1 && source != 2) return NULL;
-  const char *cache = source == 1 ? IPTV_BR_CACHE : IPTV_WORLD_CACHE;
-  const char *url = source == 1 ? IPTV_BR_URL : IPTV_WORLD_URL;
+  if (source != 0 && source != 1) return NULL;
+  const char *cache = source == 0 ? IPTV_CANAIS_CACHE : IPTV_FILMES_CACHE;
+  const char *mode_arg = source == 0 ? "canais" : "filmes";
   bool ok = false;
-  char tmp[] = "iptv/.iptvcom-XXXXXX";
+  char tmp[] = "iptv/.saimo-XXXXXX";
   int fd = mkstemp(tmp);
   if (fd >= 0) {
     close(fd);
-    char *args[] = {"curl", "--silent", "--show-error", "--fail", "--location",
-      "--max-time", "30", "--connect-timeout", "8", "--max-redirs", "3",
-      "--max-filesize", "4194304", "--proto", "=https", "--proto-redir", "=https",
-      "--output", tmp, "--", (char *)url, NULL};
+    char *args[] = {"python3", "./iptv_fetch.py", (char *)mode_arg, tmp, NULL};
     pid_t child, result;
     int status = 0;
-    if (posix_spawnp(&child, "curl", NULL, NULL, args, environ) == 0) {
+    if (posix_spawnp(&child, "python3", NULL, NULL, args, environ) == 0) {
       do { result = waitpid(child, &status, 0); } while (result < 0 && errno == EINTR);
       IptvChannel *sample = malloc(sizeof(*sample));
       if (sample && result == child && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
@@ -119,7 +105,6 @@ static void *iptv_fetch_worker(void *unused) {
 }
 
 static void iptv_fetch_start(void) {
-  if (iptv_source == 0) return;
   pthread_mutex_lock(&iptv_fetch_mutex);
   if (iptv_fetch_busy) { pthread_mutex_unlock(&iptv_fetch_mutex); return; }
   iptv_fetch_busy = true; iptv_fetch_done = false; iptv_fetch_source = iptv_source;
@@ -135,13 +120,12 @@ static void iptv_fetch_start(void) {
 }
 
 static void iptv_open(void) {
-  if (iptv_source != 1 || !iptv_count) {
-    iptv_source = 1;
-    iptv_reload();
-    if (!iptv_count) iptv_fetch_start();
-  }
+  if (iptv_source < 0 || iptv_source > 1) iptv_source = 0;
+  iptv_reload();
+  if (!iptv_count) iptv_fetch_start();
   mode = 8;
 }
+
 static void iptv_play_selected(void) {
   if (!iptv_count) return;
   if (!iptv_channels[iptv_selected].url[0]) { notify(tr("Canal sem fluxo direto compatível")); return; }
@@ -161,33 +145,47 @@ static void iptv_play_selected(void) {
   }
   mode = 8;
 }
+
 static void iptv_key(SDL_Keycode k) {
   if (k == SDLK_UP && iptv_count) iptv_selected = (iptv_selected + iptv_count - 1) % iptv_count;
   else if (k == SDLK_DOWN && iptv_count) iptv_selected = (iptv_selected + 1) % iptv_count;
   else if (k == SDLK_RETURN) iptv_play_selected();
-  else if (k == SDLK_SPACE && !radio_play_is_busy()) {
-    iptv_source = (iptv_source + 1) % 3;
+  else if ((k == SDLK_SPACE || k == SDLK_LEFT || k == SDLK_RIGHT) && !radio_play_is_busy()) {
+    iptv_source = iptv_source == 0 ? 1 : 0;
     iptv_reload();
-    if (iptv_source && !iptv_count) iptv_fetch_start();
+    if (!iptv_count) iptv_fetch_start();
   }
   else if (k == SDLK_m && !radio_play_is_busy()) {
     iptv_reload(); iptv_fetch_start();
   }
   else if (k == SDLK_BACKSPACE && !radio_play_is_busy()) mode = 3;
 }
+
 static void draw_iptv(void) {
   pthread_mutex_lock(&iptv_fetch_mutex);
   bool busy = iptv_fetch_busy, done = iptv_fetch_done, ok = iptv_fetch_ok;
   int completed_source = iptv_done_source, fetching_source = iptv_fetch_source;
   iptv_fetch_done = false;
   pthread_mutex_unlock(&iptv_fetch_mutex);
-  if (done && completed_source == iptv_source) { if (ok) iptv_reload(); else notify(tr("Lista indisponível; usando cache")); }
-  else if (done && iptv_source && !iptv_count) iptv_fetch_start();
+  if (done && completed_source == iptv_source) {
+    if (ok) iptv_reload();
+    else notify(tr("Lista indisponível; usando cache"));
+  } else if (done && !iptv_count) {
+    iptv_fetch_start();
+  }
   backdrop(); draw_header(tr("IPTV"));
-  label(iptv_source == 1 ? tr("IPTV Brasil") : iptv_source == 2 ? tr("IPTV Mundo") : tr("Listas próprias"), 24, 52, 24, textc, 430);
+  label(iptv_source == 0 ? tr("Canais") : tr("Filmes e séries"), 24, 42, 22, textc, 280);
+  label(iptv_source == 0 ? IPTV_CANAIS_URL : IPTV_FILMES_URL, 24, 67, 10, dim, 340);
+
+  /* Two option pills: Canais | Filmes e séries */
+  pill(372, 46, 104, 24, iptv_source == 0);
+  centered(tr("Canais"), 374, 52, 100, 11, iptv_source == 0 ? bg : muted);
+  pill(484, 46, 132, 24, iptv_source == 1);
+  centered(tr("Filmes e séries"), 486, 52, 128, 11, iptv_source == 1 ? bg : muted);
+
   if (!iptv_count) {
-    centered(tr("Nenhum canal encontrado"), 25, 170, 590, 20, muted);
-    centered(iptv_source ? tr("Pressione Y para atualizar") : tr("Coloque listas M3U/M3U8 em ports/kplayer/iptv"), 25, 210, 590, 14, muted);
+    centered(busy ? tr("Carregando lista...") : tr("Nenhum item encontrado"), 25, 175, 590, 20, muted);
+    centered(tr("Pressione Y para atualizar"), 25, 212, 590, 14, muted);
   } else {
     if (iptv_selected < iptv_offset) iptv_offset = iptv_selected;
     IptvChannel *channel = &iptv_channels[iptv_selected];
@@ -197,23 +195,25 @@ static void draw_iptv(void) {
     if (radio_art_texture && !strcmp(radio_art_display_url, channel->logo)) {
       SDL_Rect dst = {52, 107, 144, 110}; SDL_RenderCopy(renderer, radio_art_texture, NULL, &dst);
     } else centered(tr("Sem imagem"), 52, 150, 144, 14, muted);
-    centered(channel->name, 35, 235, 178, 16, textc);
+    centered(channel->name, 35, 235, 178, 15, textc);
     label(tr("Categoria"), 36, 276, 12, muted, 170);
-    label(channel->group[0] ? channel->group : "--", 36, 295, 14, textc, 170);
-    label("ID", 36, 327, 12, muted, 170);
-    label(channel->id[0] ? channel->id : "--", 36, 346, 12, muted, 170);
+    label(channel->group[0] ? channel->group : "--", 36, 295, 13, textc, 170);
+    label(iptv_source == 0 ? "ID" : tr("Detalhes"), 36, 327, 12, muted, 170);
+    label(channel->id[0] ? channel->id : "--", 36, 346, 12, accent, 170);
     if (iptv_selected >= iptv_offset + 6) iptv_offset = iptv_selected - 5;
     for (int row = 0; row < 6 && iptv_offset + row < iptv_count; row++) {
       int index = iptv_offset + row, y = 86 + row * 51;
       card(238, y, 378, 45, 10, index == iptv_selected, panel);
       char number[24]; snprintf(number, sizeof(number), "%d", index + 1);
-      label(number, 249, y + 14, 13, muted, 40);
-      label(iptv_channels[index].name, 290, y + 13, 15, textc, 310);
+      label(number, 249, y + 14, 13, index == iptv_selected ? accent : muted, 40);
+      label(iptv_channels[index].name, 290, y + 8, 14, textc, 310);
+      if (iptv_channels[index].group[0])
+        label(iptv_channels[index].group, 290, y + 27, 10, muted, 310);
     }
   }
   if (radio_play_is_busy()) label(tr("Conectando canal..."), 24, 417, 13, accent, 500);
-  else if (busy && fetching_source == iptv_source) label(tr("Atualizando canais..."), 24, 417, 13, accent, 500);
-  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Assistir"}, {"X", "Fonte"},
+  else if (busy && fetching_source == iptv_source) label(tr("Carregando lista..."), 24, 417, 13, accent, 500);
+  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Assistir"}, {"X", "Alternar"},
                               {"Y", "Atualizar"}, {"A", "Voltar"}};
   footer_hints(hints, 5);
 }

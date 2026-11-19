@@ -32,7 +32,7 @@ files = [
     runtime / "kplayer.gptk",
     runtime / "cover.png",
     runtime / "KPlayer-metadata.xml",
-    runtime / "updater.py",
+    runtime / "iptv_fetch.py",
     runtime / "football_fetch.py",
     runtime / "golazo",
     runtime / "fonts" / "Interface.ttf",
@@ -59,7 +59,7 @@ files += sorted((runtime / "licencas").glob("*.txt"))
 EXECUTABLE_NAMES = {
     "KPlayer.sh",
     "kplayer",
-    "updater.py",
+    "iptv_fetch.py",
     "football_fetch.py",
     "golazo",
 }
@@ -81,27 +81,6 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out
     out.write(BASE / "LICENSE", "LICENSE")
     out.writestr("kplayer/installed-version.txt", VERSION + "\n")
     out.writestr("kplayer/app-version.txt", VERSION + "\n")
-    out.writestr(
-        "kplayer/update-manifest.json",
-        json.dumps(
-            {
-                "schema": 1,
-                "version": VERSION,
-                "update_files": [
-                    "kplayer/kplayer",
-                    "kplayer/kplayer.gptk",
-                    "kplayer/football_fetch.py",
-                    "kplayer/lib/libvlc.so.5",
-                    "kplayer/lib/libvlccore.so.9",
-                    "kplayer/fonts/Interface.ttf",
-                    "kplayer/fonts/Bold.ttf",
-                    "kplayer/sprites/botoes.png",
-                    "kplayer/sprites/categorias.png",
-                    "kplayer/sprites/controles.png",
-                ],
-            }
-        ),
-    )
     out.writestr(
         "SOURCE.txt",
         (

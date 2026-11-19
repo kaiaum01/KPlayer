@@ -113,32 +113,36 @@ int main(void) {
   assert(unlink(iptv_file) == 0);
   assert(unlink(radio_file) == 0 && unlink(radio_asx) == 0 && unlink(radio_m3u) == 0);
   assert(rmdir(radio_dir) == 0);
-  /* Exercise successful and failed catalogue downloads without network. */
+  /* Exercise successful and failed Saimo IPTV downloads without network. */
   char test_cwd[PATH_MAX], fetch_dir[] = "/tmp/kplayer-iptv-XXXXXX";
   assert(getcwd(test_cwd, sizeof(test_cwd)) && mkdtemp(fetch_dir));
   assert(chdir(fetch_dir) == 0 && mkdir("iptv", 0755) == 0);
-  rf = fopen("curl", "w"); assert(rf);
-  fputs("#!/bin/sh\nout=\nwhile [ $# -gt 0 ]; do\n"
-        "  if [ \"$1\" = --output ]; then shift; out=$1; fi\n  shift\ndone\n"
+  rf = fopen("python3", "w"); assert(rf);
+  fputs("#!/bin/sh\nout=$3\n"
         "if [ \"$KP_TEST_FAIL\" = 1 ]; then exit 1; fi\n"
-        "printf '#EXTM3U\\n#EXTINF:-1,Free Test\\nhttps://example.org/live.m3u8\\n' > \"$out\"\n", rf);
-  fclose(rf); assert(chmod("curl", 0755) == 0);
+        "if [ \"$2\" = filmes ]; then\n"
+        "  printf '#EXTM3U\\n#EXTINF:-1 tvg-id=\"Filme • DUB\" group-title=\"Em alta\",Filme Teste\\nhttps://example.org/movie.mp4\\n' > \"$out\"\n"
+        "else\n"
+        "  printf '#EXTM3U\\n#EXTINF:-1 tvg-id=\"Canal\" group-title=\"ESPORTES\",Canal Teste\\nhttps://example.org/live.m3u8\\n' > \"$out\"\n"
+        "fi\n", rf);
+  fclose(rf); assert(chmod("python3", 0755) == 0);
   const char *old_path = getenv("PATH");
   char *saved_path = old_path ? strdup(old_path) : NULL;
   assert(setenv("PATH", fetch_dir, 1) == 0);
   unsetenv("KP_TEST_FAIL");
-  iptv_fetch_worker((void *)(intptr_t)1);
-  assert(iptv_fetch_ok && iptv_read_list(IPTV_BR_CACHE, channels, 0, 4) == 1);
-  assert(!strcmp(channels[0].name, "Free Test"));
+  iptv_fetch_worker((void *)(intptr_t)0);
+  assert(iptv_fetch_ok && iptv_read_list(IPTV_CANAIS_CACHE, channels, 0, 4) == 1);
+  assert(!strcmp(channels[0].name, "Canal Teste"));
   assert(setenv("KP_TEST_FAIL", "1", 1) == 0);
-  iptv_fetch_worker((void *)(intptr_t)1);
-  assert(!iptv_fetch_ok && iptv_read_list(IPTV_BR_CACHE, channels, 0, 4) == 1);
+  iptv_fetch_worker((void *)(intptr_t)0);
+  assert(!iptv_fetch_ok && iptv_read_list(IPTV_CANAIS_CACHE, channels, 0, 4) == 1);
   unsetenv("KP_TEST_FAIL");
-  iptv_fetch_worker((void *)(intptr_t)2);
-  assert(iptv_fetch_ok && iptv_read_list(IPTV_WORLD_CACHE, channels, 0, 4) == 1);
+  iptv_fetch_worker((void *)(intptr_t)1);
+  assert(iptv_fetch_ok && iptv_read_list(IPTV_FILMES_CACHE, channels, 0, 4) == 1);
+  assert(!strcmp(channels[0].name, "Filme Teste"));
   if (saved_path) { assert(setenv("PATH", saved_path, 1) == 0); free(saved_path); }
   else unsetenv("PATH");
-  assert(unlink(IPTV_BR_CACHE) == 0 && unlink(IPTV_WORLD_CACHE) == 0 && rmdir("iptv") == 0 && unlink("curl") == 0);
+  assert(unlink(IPTV_CANAIS_CACHE) == 0 && unlink(IPTV_FILMES_CACHE) == 0 && rmdir("iptv") == 0 && unlink("python3") == 0);
   assert(chdir(test_cwd) == 0 && rmdir(fetch_dir) == 0);
   char original_dir[PATH_MAX], theme_dir[] = "/tmp/kplayer-theme-XXXXXX";
   assert(getcwd(original_dir, sizeof(original_dir)) && mkdtemp(theme_dir));

@@ -776,6 +776,7 @@ static void apply_theme(int index) {
   textc = t->text; muted = t->secondary; accent = t->highlight; dim = t->subdued;
 }
 static void save_settings(void);
+extern char **environ;
 // Online radio uses the same skin primitives and libVLC player.
 #include "radio.h"
 #include "iptv.h"
@@ -783,176 +784,6 @@ static void save_settings(void);
 #include "splash.h"
 // First-run screens use the skin drawing helpers.
 #include "onboarding.h"
-/* Update operations run off the SDL thread. Output is one fixed status line. */
-static pthread_mutex_t update_mutex = PTHREAD_MUTEX_INITIALIZER;
-static bool update_busy = false;
-static bool update_cancel_requested = false;
-static int update_status_code = 0; /* 0 idle, 1 new, 2 latest, 3 done, 4 error */
-static char update_tag[32];
-extern char **environ;
-static void *update_worker(void *argument) {
-  bool installing = (intptr_t)argument != 0;
-  char tag[32];
-  pthread_mutex_lock(&update_mutex);
-  snprintf(tag, sizeof(tag), "%s", update_tag);
-  pthread_mutex_unlock(&update_mutex);
-  int pipes[2], status = -1;
-  char line[80] = {0};
-  size_t used = 0;
-  if (pipe(pipes) == 0) {
-    posix_spawn_file_actions_t actions;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);
-    posix_spawn_file_actions_addclose(&actions, pipes[0]);
-    posix_spawn_file_actions_addclose(&actions, pipes[1]);
-    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "log.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
-    char *argv[] = {"python3", "./updater.py", installing ? "install" : "check", installing ? tag : NULL, NULL};
-    pid_t pid;
-    int spawned = posix_spawnp(&pid, "python3", &actions, NULL, argv, environ);
-    posix_spawn_file_actions_destroy(&actions);
-    close(pipes[1]);
-    if (!spawned) {
-      int flags = fcntl(pipes[0], F_GETFL, 0);
-      if (flags >= 0) fcntl(pipes[0], F_SETFL, flags | O_NONBLOCK);
-      struct timespec start, now;
-      clock_gettime(CLOCK_MONOTONIC, &start);
-      bool signalled = false;
-      for (;;) {
-        if (used + 1 < sizeof(line)) {
-          ssize_t n = read(pipes[0], line + used, sizeof(line) - used - 1);
-          if (n > 0) used += (size_t)n;
-        }
-        pid_t done = waitpid(pid, &status, WNOHANG);
-        if (done == pid) break;
-        if (done < 0 && errno != EINTR) { status = -1; break; }
-        pthread_mutex_lock(&update_mutex);
-        bool cancel = update_cancel_requested;
-        pthread_mutex_unlock(&update_mutex);
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        if (!signalled && (cancel || now.tv_sec - start.tv_sec >= 90)) {
-          kill(pid, SIGTERM);
-          signalled = true;
-        }
-        struct timespec pause = {0, 50000000};
-        nanosleep(&pause, NULL);
-      }
-      if (used + 1 < sizeof(line)) {
-        ssize_t n = read(pipes[0], line + used, sizeof(line) - used - 1);
-        if (n > 0) used += (size_t)n;
-      }
-      line[used] = 0;
-    }
-    close(pipes[0]);
-  }
-  pthread_mutex_lock(&update_mutex);
-  if (status == 0 && !strncmp(line, "NEW v", 5)) {
-    size_t n = strcspn(line + 4, "\r\n");
-    bool valid = n > 1 && n < sizeof(update_tag);
-    for (size_t i = 1; valid && i < n; i++)
-      if (!isdigit((unsigned char)line[4 + i]) && line[4 + i] != '.') valid = false;
-    if (valid) {
-      memcpy(update_tag, line + 4, n); update_tag[n] = 0;
-      update_status_code = 1;
-    } else update_status_code = 4;
-  } else if (status == 0 && !strncmp(line, "LATEST", 6)) update_status_code = 2;
-  else if (status == 0 && !strncmp(line, "OK ", 3)) update_status_code = 3;
-  else update_status_code = 4;
-  update_busy = false;
-  pthread_mutex_unlock(&update_mutex);
-  return NULL;
-}
-static bool update_is_busy(void) {
-  pthread_mutex_lock(&update_mutex);
-  bool busy = update_busy;
-  pthread_mutex_unlock(&update_mutex);
-  return busy;
-}
-static void update_start(void) {
-  pthread_mutex_lock(&update_mutex);
-  if (update_busy) { pthread_mutex_unlock(&update_mutex); return; }
-  bool install = update_status_code == 1;
-  update_cancel_requested = false;
-  update_busy = true;
-  pthread_mutex_unlock(&update_mutex);
-  pthread_t worker;
-  if (pthread_create(&worker, NULL, update_worker, (void *)(intptr_t)install) == 0)
-    pthread_detach(worker);
-  else {
-    pthread_mutex_lock(&update_mutex);
-    update_busy = false; update_status_code = 4;
-    pthread_mutex_unlock(&update_mutex);
-  }
-}
-static void update_cancel(void) {
-  pthread_mutex_lock(&update_mutex);
-  if (update_busy) update_cancel_requested = true;
-  pthread_mutex_unlock(&update_mutex);
-}
-/* Runs before the main menu; failed/offline checks never prevent startup. */
-static bool startup_update(void) {
-  bool installing = false, yes = false;
-  update_start();
-  for (;;) {
-    bool busy;
-    int status;
-    char tag[sizeof(update_tag)];
-    pthread_mutex_lock(&update_mutex);
-    busy = update_busy;
-    status = update_status_code;
-    snprintf(tag, sizeof(tag), "%s", update_tag);
-    pthread_mutex_unlock(&update_mutex);
-    if (!busy && !installing && status != 1) return false;
-    if (!busy && installing && status == 3) return true;
-
-    SDL_Event e;
-    while (SDL_PollEvent(&e)) {
-      if (e.type == SDL_QUIT && !busy) return false;
-      if (e.type == SDL_QUIT && busy) { update_cancel(); continue; }
-      if (e.type != SDL_KEYDOWN || e.key.repeat) continue;
-      SDL_Keycode k = e.key.keysym.sym;
-      if (busy) {
-        if (k == SDLK_BACKSPACE || k == SDLK_ESCAPE) update_cancel();
-        continue;
-      }
-      if (installing) {
-        if (k == SDLK_RETURN || k == SDLK_BACKSPACE || k == SDLK_ESCAPE)
-          return false;
-      } else if (k == SDLK_LEFT || k == SDLK_RIGHT || k == SDLK_UP || k == SDLK_DOWN) {
-        yes = !yes;
-      } else if (k == SDLK_BACKSPACE || k == SDLK_ESCAPE) {
-        return false;
-      } else if (k == SDLK_RETURN) {
-        if (!yes) return false;
-        installing = true;
-        update_start();
-      }
-    }
-    backdrop();
-    label("K PLAYER", 48, 48, 30, accent, 544);
-    panel_card(42, 120, 556, 240, 18);
-    if (busy) {
-      label(tr(installing ? "Baixando e instalando..." : "Procurando atualizações..."), 68, 192, 24, textc, 505);
-      label(tr("Aguarde..."), 68, 245, 18, muted, 500);
-      label(tr("A Cancelar"), 68, 280, 16, muted, 500);
-    } else if (installing) {
-      label(tr("Não foi possível atualizar"), 68, 175, 24, textc, 500);
-      label(tr("Erro; consulte log.txt"), 68, 225, 18, muted, 500);
-      label(tr("B Continuar"), 68, 280, 18, accent, 500);
-    } else {
-      char line[100];
-      snprintf(line, sizeof(line), "%s: %s", tr("Nova versão disponível"), tag);
-      label(line, 68, 150, 22, accent, 500);
-      label(tr("Deseja atualizar agora?"), 68, 200, 22, textc, 500);
-      pill(160, 260, 140, 45, yes);
-      pill(340, 260, 140, 45, !yes);
-      label(tr("Sim"), 205, 272, 20, yes ? bg : textc, 80);
-      label(tr("Não"), 385, 272, 20, !yes ? bg : textc, 80);
-      label(tr("Esquerda/Direita: escolher    B: confirmar"), 62, 390, 17, muted, 520);
-    }
-    SDL_RenderPresent(renderer);
-    SDL_Delay(33);
-  }
-}
 static void track_label(bool subtitle, char *out, size_t n) {
   int id =
       subtitle ? libvlc_video_get_spu(player) : libvlc_audio_get_track(player);
@@ -975,9 +806,9 @@ static void track_label(bool subtitle, char *out, size_t n) {
 static const int option_groups[][8] = {
   {0, 1, 2, 3, 4, 12, 16, -1},
   {7, 13, 14, 17, -1, -1, -1, -1},
-  {5, 9, 11, 10, 15, 6, 8, -1}
+  {5, 9, 11, 15, 6, 8, -1, -1}
 };
-static const int option_group_counts[] = {7, 4, 7};
+static const int option_group_counts[] = {7, 4, 6};
 static const char *option_group_names[] = {"Reprodução", "Biblioteca", "Geral"};
 static int option_group_for(int id) {
   for (int g = 0; g < 3; g++)
@@ -993,7 +824,7 @@ static void draw_options(void) {
       tr("Velocidade"),    tr("Formato da imagem"), tr("Faixa de áudio"),
       tr("Legendas"),      tr("Modo de repetição"), tr("Idioma"),
       tr("Termos de uso"), tr("Favoritar faixa"),   tr("Sair do KPlayer"),
-      tr("Tema"), tr("Atualização"), tr("Localização por IP"), tr("Aleatório"), tr("Minhas favoritas"), tr("Retomar mídia"), tr("Timer de sono"), tr("Equalizador"), tr("IPTV")};
+      tr("Tema"), "", tr("Localização por IP"), tr("Aleatório"), tr("Minhas favoritas"), tr("Retomar mídia"), tr("Timer de sono"), tr("Equalizador"), tr("IPTV")};
   int group = option_group_for(option);
   for (int g = 0; g < 3; g++) {
     int x = 24 + g * 199;
@@ -1042,16 +873,6 @@ static void draw_options(void) {
       break;
     case 9:
       snprintf(value, sizeof(value), "%s", tr(themes[theme_index].name));
-      break;
-    case 10:
-      pthread_mutex_lock(&update_mutex);
-      if (update_busy) snprintf(value, sizeof(value), "%s", tr("Aguarde..."));
-      else if (update_status_code == 1) snprintf(value, sizeof(value), "%s: %s", update_tag, tr("B Atualizar"));
-      else if (update_status_code == 2) snprintf(value, sizeof(value), "%s", tr("Versão atual"));
-      else if (update_status_code == 3) snprintf(value, sizeof(value), "%s", tr("Reinicie o KPlayer"));
-      else if (update_status_code == 4) snprintf(value, sizeof(value), "%s", tr("Erro; consulte log.txt"));
-      else snprintf(value, sizeof(value), "%s", tr("B Verificar"));
-      pthread_mutex_unlock(&update_mutex);
       break;
     case 11:
       snprintf(value, sizeof(value), "%s", tr(network_location_enabled ? "Ativada" : "Desativada"));
@@ -1154,9 +975,6 @@ static void change_option(int dir) {
     apply_theme((theme_index + dir + THEME_COUNT) % THEME_COUNT);
     save_settings();
     break;
-  case 10:
-    update_start();
-    break;
   case 11:
     network_location_enabled = !network_location_enabled;
     if (network_location_enabled) network_location_start();
@@ -1220,11 +1038,6 @@ static void open_options(void) {
   option = 0;
 }
 static void key(SDL_Keycode k, bool repeat) {
-  if (update_is_busy()) {
-    if (!repeat && (k == SDLK_BACKSPACE || k == SDLK_ESCAPE)) update_cancel();
-    if (!repeat) notify(tr("Aguarde..."));
-    return;
-  }
   if (radio_play_is_busy()) {
     if (mode == 8 && !repeat) { iptv_key(k); return; }
     if (mode == 7 && k != SDLK_ESCAPE && k != SDLK_F1 && k != SDLK_TAB)
@@ -1699,11 +1512,7 @@ int main(int argc, char **argv) {
   mode = onboarding_done ? 3 : 5;
   load_settings();
   load_favorites();
-  bool restart_after_update = startup_update();
-  if (restart_after_update) running = 0;
-  else {
-    run_boot_splash();
-  }
+  run_boot_splash();
   while (running) {
     uint32_t frame = SDL_GetTicks();
     if (sleep_choice && (int32_t)(frame - sleep_end) >= 0) {
@@ -1715,8 +1524,7 @@ int main(int argc, char **argv) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) {
-        if (update_is_busy()) update_cancel();
-        else if (!radio_play_is_busy()) running = 0;
+        if (!radio_play_is_busy()) running = 0;
       }
       else if (e.type == SDL_KEYDOWN)
         key(e.key.keysym.sym, e.key.repeat != 0);
@@ -1821,5 +1629,5 @@ int main(int argc, char **argv) {
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();
-  return restart_after_update ? 42 : 0;
+  return 0;
 }

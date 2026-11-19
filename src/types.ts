@@ -54,6 +54,8 @@ export interface RadioStation {
 export interface IptvChannel {
   name: string;
   url: string;
+  fallbackUrls?: string[];
+  mediaType?: 'live' | 'movie' | 'series';
   logo: string;
   group: string;
   id: string;

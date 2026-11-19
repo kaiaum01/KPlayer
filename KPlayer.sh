@@ -1,10 +1,10 @@
 #!/bin/bash
-# K PLAYER 1.0.0 - dArkOS / Debian 13 ARM64 / PortMaster
+# K PLAYER - dArkOS / Debian 13 ARM64 / PortMaster
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)" || exit 1
 GAMEDIR="$script_dir/kplayer"
 cd "$GAMEDIR" || exit 1
 exec > "$GAMEDIR/log.txt" 2>&1
-printf 'K PLAYER nativo 1.0.0\n'
+printf 'K PLAYER nativo\n'
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 controlfolder=""
 for candidate in /opt/system/Tools/PortMaster /opt/tools/PortMaster "$XDG_DATA_HOME/PortMaster" "$script_dir/PortMaster" /roms/ports/PortMaster; do
@@ -33,22 +33,11 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-# Never execute a potentially half-installed binary before recovery.
-if [ -e "$GAMEDIR/.kplayer-update-transaction.json" ] || [ -L "$GAMEDIR/.kplayer-update-transaction.json" ]; then
-    if ! command -v python3 >/dev/null 2>&1 || ! python3 ./updater.py recover; then
-        printf 'Falha ao recuperar atualização; preserve o cartão e consulte log.txt.\n'
-        exit 1
-    fi
-fi
 chmod +x ./kplayer
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
-while :; do
-    ./kplayer
-    result=$?
-    # A successful in-app update requests a clean restart of the new binary.
-    [ "$result" -eq 42 ] || break
-done
+./kplayer
+result=$?
 printf 'K PLAYER finalizado: codigo %s\n' "$result"
 exit "$result"

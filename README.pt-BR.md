@@ -30,6 +30,7 @@
 - **Pastas Dedicadas (carregamento ultrarrápido):** sem varrer o cartão SD inteiro nem passar por ROMs/BIOS/saves. O KPlayer indexa exclusivamente:
   - **Músicas:** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
   - **Vídeos:** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
+- **IPTV com Canais + Filmes e Séries:** leitura e reprodução direta no player das duas listas integradas — **Canais** (`https://canais-saimo.pages.dev/`) e **Filmes e séries** (`https://filmes-saimo.pages.dev/`), com capas, categorias e troca rápida via `X` ou direcional.
 - **Capa do Port e Metadados XML para dArkOS / EmulationStation:** o pacote `KPlayer-v2.0.0-R36S.zip` já inclui a capa oficial 640×480 (`images/KPlayer-image.png`), `gamelist.xml` pronto para uso e `kplayer/KPlayer-metadata.xml` para mesclar com seus outros ports.
 
 ---
@@ -43,7 +44,7 @@
 | ![Dashboard v2.0.0](docs/images/readme-home.png) | ![Player de música v2.0.0](docs/images/readme-audio.png) |
 | **Placar da Bola — Jogos ao Vivo** | **Placar da Bola — Estatísticas da Partida** |
 | ![Placar da Bola](docs/images/readme-football.png) | ![Detalhes da partida](docs/images/readme-football-detail.png) |
-| **Rádio Online** | **IPTV Ao Vivo (Brasil / Mundo / Local)** |
+| **Rádio Online** | **IPTV (Canais · Filmes e séries)** |
 | ![Rádio Online](docs/images/readme-radio.png) | ![IPTV](docs/images/readme-iptv.png) |
 | **Pastas Dedicadas (SD1 / SD2)** | **Player de Vídeo (libVLC)** |
 | ![Biblioteca dedicada](docs/images/readme-library.png) | ![Player de vídeo](docs/images/readme-video.png) |
@@ -67,11 +68,10 @@
 | **Músicas (+ `.lrc`)** | `/roms/bgmusic` | `/roms2/bgmusic` | MP3, FLAC, OGG, WAV, M4A, AAC, OPUS |
 | **Vídeos** | `/roms/videos` | `/roms2/videos` | MP4, MKV, AVI, MOV, WEBM |
 | **Rádios pessoais** | `ports/kplayer/radios_usuario/` | — | `.pls`, `.m3u`, `.m3u8`, `.asx` |
-| **Listas IPTV locais** | `ports/kplayer/iptv/` | — | `.m3u`, `.m3u8` |
 
 4. Reinicie o EmulationStation (ou atualize a lista de jogos) e abra **Ports → KPlayer v2.0.0**.
 
-> **Requisitos:** R36S ARM64 com dArkOS e PortMaster, SDL2, ALSA e plugins VLC compatíveis em `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio Online, IPTV, Placar da Bola e atualizações exigem conexão com a internet. Veja o guia completo em [docs/INSTALL.md](docs/INSTALL.md).
+> **Requisitos:** R36S ARM64 com dArkOS e PortMaster, SDL2, ALSA e plugins VLC compatíveis em `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio Online, IPTV e Placar da Bola exigem conexão com a internet. Veja o guia completo em [docs/INSTALL.md](docs/INSTALL.md).
 
 ---
 
@@ -99,7 +99,7 @@ O volume é controlado diretamente pelos botões físicos do console. Confira o 
 - **3 idiomas integrados:** Português (BR), English e Español.
 - **Metadados ID3 locais:** lê título, artista, álbum, capa embutida (JPEG/PNG) e letras sincronizadas/embutidas (`.lrc` / USLT) sem depender de internet.
 - **Fila, Repetição, Aleatório, Favoritas, Timer de sono, Retomar mídia e Equalizador libVLC.**
-- **Atualizador experimental integrado:** verifica novas releases públicas no GitHub com validação de integridade SHA-256 e confirmação do usuário.
+- **IPTV Saimo integrado:** `Canais` (`https://canais-saimo.pages.dev/`) e `Filmes e séries` (`https://filmes-saimo.pages.dev/`) com cache local em `ports/kplayer/iptv/` e reprodução direta via libVLC.
 
 ---
 

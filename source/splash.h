@@ -206,7 +206,7 @@ static void run_boot_splash(void) {
 
   /* Phase 3: Kick off background preloads for Radio, IPTV and Placar da Bola. */
   radio_refresh();
-  iptv_source = 1;
+  iptv_source = 0;
   iptv_reload();
   iptv_fetch_start();
   football_read();

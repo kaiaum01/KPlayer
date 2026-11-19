@@ -23,6 +23,8 @@ interface RadioStation {
 interface IptvChannel {
   name: string;
   url: string;
+  fallbackUrls?: string[];
+  mediaType?: 'live' | 'movie' | 'series';
   logo: string;
   group: string;
   id: string;
@@ -157,6 +159,7 @@ function parseIptvM3u(content: string, max = 2048): IptvChannel[] {
       out.push({
         name: name || `Canal ${out.length + 1}`,
         url: line,
+        mediaType: 'live',
         logo,
         group,
         id,
@@ -167,6 +170,294 @@ function parseIptvM3u(content: string, max = 2048): IptvChannel[] {
       id = '';
     }
   }
+  return out;
+}
+
+const SAIMO_CANAIS_BASE = 'https://canais-saimo.pages.dev/';
+const SAIMO_FILMES_BASE = 'https://filmes-saimo.pages.dev/';
+
+async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'KPlayer-R36S/2.0.0' },
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
+function resolveSaimoToken(token: string, bases: Map<string, string>): string {
+  const t = token.trim();
+  if (!t) return '';
+  if (t.startsWith('http://') || t.startsWith('https://')) {
+    return t.includes('desativado.invalid') ? '' : t;
+  }
+  const colon = t.indexOf(':');
+  if (colon <= 0) return '';
+  const bid = t.slice(0, colon).trim();
+  let rest = t.slice(colon + 1).trim();
+  const base = bases.get(bid);
+  if (!base || !rest || base.includes('desativado.invalid')) return '';
+  const low = rest.toLowerCase();
+  if (!low.includes('.mp4') && !low.includes('.m3u8') && !low.includes('.mkv') && !low.includes('.ts') && !low.includes('?')) {
+    rest += '.mp4';
+  }
+  return base + rest;
+}
+
+function rankSaimoUrls(tokens: string[], bases: Map<string, string>): string[] {
+  const seen = new Set<string>();
+  const resolved: string[] = [];
+  for (const tok of tokens) {
+    const u = resolveSaimoToken(tok, bases);
+    if (u && !seen.has(u)) {
+      seen.add(u);
+      resolved.push(u);
+    }
+  }
+  resolved.sort((a, b) => {
+    const score = (u: string) => {
+      let s = 0;
+      if (u.startsWith('https://')) s += 4;
+      if (u.includes('nixplay')) s += 3;
+      if (u.toLowerCase().endsWith('.mp4') || u.toLowerCase().includes('.m3u8')) s += 2;
+      return s;
+    };
+    return score(b) - score(a);
+  });
+  return resolved;
+}
+
+function parseSaimoMovieUrls(cols: string[], bases: Map<string, string>): { urls: string[]; lang: string } {
+  const dubTokens: string[] = [];
+  const legTokens: string[] = [];
+  for (const raw of cols) {
+    const col = raw.trim();
+    if (col.startsWith('dub=')) dubTokens.push(...col.slice(4).split(','));
+    else if (col.startsWith('leg=')) legTokens.push(...col.slice(4).split(','));
+  }
+  const dub = rankSaimoUrls(dubTokens, bases);
+  const leg = rankSaimoUrls(legTokens, bases);
+  if (dub.length > 0) {
+    const merged = [...dub, ...leg.filter((u) => !dub.includes(u))];
+    return { urls: merged, lang: 'DUB' };
+  }
+  if (leg.length > 0) return { urls: leg, lang: 'LEG' };
+  return { urls: [], lang: '' };
+}
+
+function saimoLetterSlug(letter: string): string {
+  const ch = letter.trim().toUpperCase();
+  return ch.length === 1 && ch >= 'A' && ch <= 'Z' ? ch : '%23';
+}
+
+async function fetchSaimoFilmesCatalog(): Promise<IptvChannel[]> {
+  const [indiceText, destaquesText] = await Promise.all([
+    fetchTextTimeout(`${SAIMO_FILMES_BASE}indice.txt`, 14_000),
+    fetchTextTimeout(`${SAIMO_FILMES_BASE}destaques.txt`, 14_000),
+  ]);
+
+  const bases = new Map<string, string>();
+  for (const raw of indiceText.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line.startsWith('base:')) continue;
+    const parts = line.slice(5).trim().split(/\s+/);
+    if (parts.length >= 2) bases.set(parts[0], parts.slice(1).join(' '));
+  }
+
+  let capaBase = 'https://image.tmdb.org/t/p/w342';
+  let shelf = 'Em alta';
+  const featured: Array<{
+    kind: 'f' | 's';
+    title: string;
+    letter: string;
+    year: string;
+    logo: string;
+    group: string;
+  }> = [];
+  const movieLetters = new Set<string>();
+  const seriesLetters = new Set<string>();
+
+  for (const raw of destaquesText.split(/\r?\n/)) {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (trimmed.startsWith('capa:')) {
+      capaBase = trimmed.slice(5).trim();
+      continue;
+    }
+    const cols = raw.replace(/\r$/, '').split('\t');
+    if (cols[0] === 'fila' && cols.length >= 2) {
+      shelf = cols[1].trim() || 'Destaques';
+      continue;
+    }
+    if ((cols[0] === 'f' || cols[0] === 's') && cols.length >= 3) {
+      const kind = cols[0];
+      const title = cols[1].trim();
+      const letter = (cols[2].trim().toUpperCase() || '#');
+      const year = (cols[3] ?? '').trim();
+      const poster = (cols[4] ?? '').trim();
+      const logo = poster.startsWith('/') ? capaBase + poster : poster;
+      featured.push({ kind, title, letter, year, logo, group: shelf });
+      if (kind === 'f') movieLetters.add(letter);
+      else seriesLetters.add(letter);
+    }
+  }
+
+  const movieMap = new Map<string, { urls: string[]; lang: string }>();
+  const extraMovies: Array<{ title: string; urls: string[]; lang: string }> = [];
+  const seriesShardMap = new Map<string, string>();
+
+  await Promise.all([
+    ...Array.from(movieLetters).map(async (ltr) => {
+      try {
+        const txt = await fetchTextTimeout(`${SAIMO_FILMES_BASE}filmes-${saimoLetterSlug(ltr)}.txt`, 14_000);
+        let extrasAdded = 0;
+        for (const raw of txt.split(/\r?\n/)) {
+          const cols = raw.replace(/\r$/, '').split('\t');
+          if (cols.length < 2) continue;
+          const title = cols[0].trim();
+          const parsed = parseSaimoMovieUrls(cols.slice(1), bases);
+          if (parsed.urls.length > 0) {
+            movieMap.set(`${ltr}:${title.toLowerCase()}`, parsed);
+            if (extrasAdded < 20) {
+              extraMovies.push({ title, urls: parsed.urls, lang: parsed.lang });
+              extrasAdded++;
+            }
+          }
+        }
+      } catch {
+        // Ignore missing shard
+      }
+    }),
+    ...Array.from(seriesLetters).map(async (ltr) => {
+      try {
+        const txt = await fetchTextTimeout(`${SAIMO_FILMES_BASE}series-${saimoLetterSlug(ltr)}.txt`, 14_000);
+        for (const raw of txt.split(/\r?\n/)) {
+          const cols = raw.replace(/\r$/, '').split('\t');
+          if (cols.length >= 3) {
+            seriesShardMap.set(`${ltr}:${cols[0].trim().toLowerCase()}`, cols[2].trim());
+          }
+        }
+      } catch {
+        // Ignore missing index
+      }
+    }),
+  ]);
+
+  const neededShards = new Set<string>();
+  for (const item of featured) {
+    if (item.kind !== 's') continue;
+    const shard = seriesShardMap.get(`${item.letter}:${item.title.toLowerCase()}`);
+    if (shard) neededShards.add(`${item.letter}\t${shard}`);
+  }
+
+  const seriesEpisodes = new Map<
+    string,
+    Array<{ season: string; ep: string; lang: string; urls: string[] }>
+  >();
+
+  await Promise.all(
+    Array.from(neededShards).map(async (key) => {
+      const [ltr, shard] = key.split('\t');
+      try {
+        const txt = await fetchTextTimeout(
+          `${SAIMO_FILMES_BASE}series-${saimoLetterSlug(ltr)}-${encodeURIComponent(shard)}.txt`,
+          14_000
+        );
+        let curTitle = '';
+        for (const raw of txt.split(/\r?\n/)) {
+          if (raw.startsWith('@')) {
+            curTitle = raw.slice(1).trim().toLowerCase();
+            if (!seriesEpisodes.has(`${ltr}:${curTitle}`)) {
+              seriesEpisodes.set(`${ltr}:${curTitle}`, []);
+            }
+            continue;
+          }
+          if (!curTitle) continue;
+          const cols = raw.replace(/\r$/, '').split('\t');
+          if (cols.length < 4) continue;
+          const season = cols[0].trim();
+          const ep = cols[1].trim();
+          if (season === '0' && ep === '0') continue;
+          const lang = cols[2].trim().toUpperCase();
+          const urls = rankSaimoUrls(cols[3].split(','), bases);
+          if (urls.length > 0) {
+            const list = seriesEpisodes.get(`${ltr}:${curTitle}`)!;
+            if (list.length < 6) list.push({ season, ep, lang, urls });
+          }
+        }
+      } catch {
+        // Ignore shard error
+      }
+    })
+  );
+
+  const out: IptvChannel[] = [];
+  const seen = new Set<string>();
+  const MAX_ITEMS = 1200;
+
+  for (const item of featured) {
+    if (out.length >= MAX_ITEMS) break;
+    const lk = `${item.letter}:${item.title.toLowerCase()}`;
+    if (item.kind === 'f') {
+      const hit = movieMap.get(lk);
+      if (!hit || hit.urls.length === 0) continue;
+      const dedup = `f:${item.title.toLowerCase()}`;
+      if (seen.has(dedup)) continue;
+      seen.add(dedup);
+      out.push({
+        name: item.title,
+        url: hit.urls[0],
+        fallbackUrls: hit.urls.slice(1),
+        mediaType: 'movie',
+        logo: item.logo,
+        group: item.group,
+        id: item.year ? `Filme • ${item.year} • ${hit.lang}` : `Filme • ${hit.lang}`,
+      });
+    } else {
+      const eps = seriesEpisodes.get(lk) ?? [];
+      for (const e of eps) {
+        if (out.length >= MAX_ITEMS) break;
+        const epTag = `T${e.season}E${e.ep}`;
+        const dedup = `s:${item.title.toLowerCase()}:${epTag}`;
+        if (seen.has(dedup)) continue;
+        seen.add(dedup);
+        out.push({
+          name: `${item.title} (${epTag})`,
+          url: e.urls[0],
+          fallbackUrls: e.urls.slice(1),
+          mediaType: 'series',
+          logo: item.logo,
+          group: item.group,
+          id: `Série • ${epTag} • ${e.lang}`,
+        });
+      }
+    }
+  }
+
+  for (const m of extraMovies) {
+    if (out.length >= MAX_ITEMS) break;
+    const dedup = `f:${m.title.toLowerCase()}`;
+    if (seen.has(dedup)) continue;
+    seen.add(dedup);
+    out.push({
+      name: m.title,
+      url: m.urls[0],
+      fallbackUrls: m.urls.slice(1),
+      mediaType: 'movie',
+      logo: '',
+      group: 'Catálogo de Filmes',
+      id: `Filme • ${m.lang}`,
+    });
+  }
+
   return out;
 }
 
@@ -318,34 +609,37 @@ async function createServer() {
   });
 
   app.get('/api/iptv', async (req, res) => {
-    const source = req.query.source === 'world' ? 'world' : 'br';
+    const source = req.query.source === 'filmes' ? 'filmes' : 'canais';
     const force = req.query.refresh === '1';
     const cached = iptvCache.get(source);
     if (!force && cached && Date.now() - cached.ts < 10 * 60_000) {
-      return res.json({ channels: cached.data });
+      return res.json({
+        source,
+        sourceUrl: source === 'filmes' ? SAIMO_FILMES_BASE : SAIMO_CANAIS_BASE,
+        channels: cached.data,
+      });
     }
 
-    const url =
-      source === 'world'
-        ? 'https://raw.githubusercontent.com/iptv-com/iptv/main/lists/world.m3u'
-        : 'https://raw.githubusercontent.com/iptv-com/iptv/main/lists/brazil.m3u';
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
     try {
-      const r = await fetch(url, {
-        signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.0.0' },
+      const channels =
+        source === 'filmes'
+          ? await fetchSaimoFilmesCatalog()
+          : parseIptvM3u(await fetchTextTimeout(`${SAIMO_CANAIS_BASE}canais.txt`, 15_000), 2048);
+      if (channels.length > 0) {
+        iptvCache.set(source, { ts: Date.now(), data: channels });
+      }
+      return res.json({
+        source,
+        sourceUrl: source === 'filmes' ? SAIMO_FILMES_BASE : SAIMO_CANAIS_BASE,
+        channels: channels.length > 0 ? channels : cached?.data ?? [],
       });
-      clearTimeout(timer);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const text = await r.text();
-      const channels = parseIptvM3u(text, 2048);
-      iptvCache.set(source, { ts: Date.now(), data: channels });
-      return res.json({ channels });
     } catch {
-      clearTimeout(timer);
-      return res.json({ channels: cached?.data ?? [], stale: true });
+      return res.json({
+        source,
+        sourceUrl: source === 'filmes' ? SAIMO_FILMES_BASE : SAIMO_CANAIS_BASE,
+        channels: cached?.data ?? [],
+        stale: true,
+      });
     }
   });
 
@@ -717,43 +1011,66 @@ async function createServer() {
     const controller = new AbortController();
     req.on('close', () => controller.abort());
     try {
+      const headers: Record<string, string> = {
+        'User-Agent': 'KPlayer-R36S/2.0.0',
+        Accept: '*/*',
+      };
+      if (typeof req.headers.range === 'string' && req.headers.range.startsWith('bytes=')) {
+        headers.Range = req.headers.range;
+      }
+
       const upstream = await fetch(target, {
         signal: controller.signal,
         redirect: 'follow',
-        headers: {
-          'User-Agent': 'KPlayer-R36S/2.0.0',
-          Accept: '*/*',
-        },
+        headers,
       });
       if (!upstream.ok || !upstream.body) {
         return res.status(upstream.status || 502).end();
       }
-      const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'no-store');
 
-      // Rewrite relative URLs inside M3U8 manifests so HLS playback works through proxy
-      if (
-        contentType.includes('mpegurl') ||
-        target.toLowerCase().includes('.m3u8')
-      ) {
+      const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+      const lowerTarget = target.toLowerCase();
+      const isPlaylist =
+        contentType.toLowerCase().includes('mpegurl') ||
+        lowerTarget.includes('.m3u8') ||
+        lowerTarget.includes('master.txt');
+
+      if (isPlaylist) {
         const text = await upstream.text();
         const base = new URL(upstream.url || target);
+        const proxify = (rawUrl: string) => {
+          try {
+            const abs = new URL(rawUrl, base).toString();
+            return `/api/stream?url=${encodeURIComponent(abs)}`;
+          } catch {
+            return rawUrl;
+          }
+        };
         const rewritten = text
           .split(/\r?\n/)
           .map((line) => {
             const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#')) return line;
-            try {
-              const abs = new URL(trimmed, base).toString();
-              return `/api/stream?url=${encodeURIComponent(abs)}`;
-            } catch {
-              return line;
+            if (!trimmed) return line;
+            if (trimmed.startsWith('#')) {
+              return line.replace(/URI="([^"]+)"/g, (_m, u: string) => `URI="${proxify(u)}"`);
             }
+            return proxify(trimmed);
           })
           .join('\n');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'no-store');
         return res.send(rewritten);
       }
+
+      res.status(upstream.status);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'no-store');
+      const acceptRanges = upstream.headers.get('accept-ranges');
+      const contentRange = upstream.headers.get('content-range');
+      const contentLength = upstream.headers.get('content-length');
+      if (acceptRanges) res.setHeader('Accept-Ranges', acceptRanges);
+      if (contentRange) res.setHeader('Content-Range', contentRange);
+      if (contentLength) res.setHeader('Content-Length', contentLength);
 
       const nodeStream = Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]);
       nodeStream.on('error', () => {
