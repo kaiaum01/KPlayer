@@ -11,19 +11,6 @@ android {
         versionCode 3
         versionName '0.1.2-beta'
     }
-    signingConfigs {
-        debugConfig {
-            storeFile file("${rootDir}/debug.keystore")
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }
-    }
-    buildTypes {
-        debug {
-            signingConfig signingConfigs.debugConfig
-        }
-    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
