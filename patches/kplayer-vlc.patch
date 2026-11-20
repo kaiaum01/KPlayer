@@ -1,0 +1,32 @@
+--- a/src/libvlc.c
++++ b/src/libvlc.c
+@@ -269,14 +269,14 @@
+      * (in place of VLC main()) *here*. */
+     var_Create( p_libvlc, "user-agent", VLC_VAR_STRING );
+     var_SetString( p_libvlc, "user-agent",
+-                   "VLC media player (LibVLC "VERSION")" );
++                   "K PLAYER (LibVLC "VERSION")" );
+     var_Create( p_libvlc, "http-user-agent", VLC_VAR_STRING );
+     var_SetString( p_libvlc, "http-user-agent",
+                    "VLC/"PACKAGE_VERSION" LibVLC/"PACKAGE_VERSION );
+     var_Create( p_libvlc, "app-icon-name", VLC_VAR_STRING );
+     var_SetString( p_libvlc, "app-icon-name", PACKAGE_NAME );
+     var_Create( p_libvlc, "app-id", VLC_VAR_STRING );
+-    var_SetString( p_libvlc, "app-id", "org.VideoLAN.VLC" );
++    var_SetString( p_libvlc, "app-id", "io.kplayer.R36S" );
+     var_Create( p_libvlc, "app-version", VLC_VAR_STRING );
+     var_SetString( p_libvlc, "app-version", PACKAGE_VERSION );
+ 
+--- a/include/vlc_plugin.h
++++ b/include/vlc_plugin.h
+@@ -188,8 +188,8 @@
+ /**
+  * Current plugin ABI version
+  */
+-# define MODULE_SYMBOL 3_0_0f
+-# define MODULE_SUFFIX "__3_0_0f"
++# define MODULE_SYMBOL 3_0_0ft64
++# define MODULE_SUFFIX "__3_0_0ft64"
+ 
+ /*****************************************************************************
+  * Add a few defines. You do not want to read this section. Really.

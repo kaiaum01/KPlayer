@@ -1,0 +1,25 @@
+PORTUGUÊS (BR) — TERMOS DE USO
+
+K PLAYER é um reprodutor independente para suas músicas e vídeos. Não inclui conteúdo de terceiros. Use mídias que você tenha direito de acessar. A compatibilidade e o desempenho dependem do arquivo, dos codecs e do aparelho.
+
+O explorador permite ler mídias nas pastas acessíveis do aparelho. Idioma, opções e favoritos são salvos na pasta do K PLAYER. Preserve seus arquivos e configurações ao atualizar. Você pode mudar o idioma e consultar estes avisos em Opções.
+
+Este software é fornecido sem garantia, nos limites das licenças aplicáveis. O K PLAYER utiliza VLC, SDL2, stb e Inter. As licenças estão na pasta licencas e o código-fonte acompanha o pacote. Estes avisos não limitam os direitos concedidos pelas licenças de software livre. Sem afiliação com a VideoLAN.
+
+
+ENGLISH — TERMS OF USE
+
+K PLAYER is an independent player for your music and videos. It does not include third-party media. Use media you have the right to access. Compatibility and performance depend on the file, codecs and device.
+
+The browser reads media from accessible folders on your device. Language, settings and favorites are saved in the K PLAYER folder. Keep your files and settings when updating. You can change the language and read these notices in Settings.
+
+This software is provided without warranty to the extent stated in its applicable licenses. K PLAYER uses VLC, SDL2, stb and Inter. Licenses are in the licencas folder and source code is included in the package. These notices do not restrict rights granted by free software licenses. Not affiliated with VideoLAN.
+
+
+ESPAÑOL — TÉRMINOS DE USO
+
+K PLAYER es un reproductor independiente para tu música y vídeos. No incluye contenido de terceros. Usa medios a los que tengas derecho de acceso. La compatibilidad y el rendimiento dependen del archivo, los códecs y el dispositivo.
+
+El explorador lee archivos de las carpetas accesibles del dispositivo. El idioma, los ajustes y los favoritos se guardan en la carpeta de K PLAYER. Conserva tus archivos y ajustes al actualizar. Puedes cambiar el idioma y consultar estos avisos en Ajustes.
+
+Este software se proporciona sin garantía en los términos de sus licencias aplicables. K PLAYER utiliza VLC, SDL2, stb e Inter. Las licencias están en la carpeta licencas y el código fuente acompaña al paquete. Estos avisos no limitan los derechos de las licencias de software libre. Sin afiliación con VideoLAN.
