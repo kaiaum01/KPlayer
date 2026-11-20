@@ -1,7 +1,0 @@
-<resources>
-    <string name="app_name">KPlayer (Beta)</string>
-    <string name="welcome">Bienvenido a KPlayer</string>
-    <string name="choose_language">Elige tu idioma</string>
-    <string name="terms">Términos de uso</string>
-    <string name="continue_text">Continuar</string>
-</resources>

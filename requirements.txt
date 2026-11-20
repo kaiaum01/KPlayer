@@ -1,2 +1,0 @@
-python-vlc==3.0.21203
-pyinstaller==6.11.1
