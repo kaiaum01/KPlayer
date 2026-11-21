@@ -442,6 +442,7 @@ static void draw_music(void) {
 }
 
 static void draw_video(void) {
+  begin_full_screen_pass();
   color((SDL_Color){0, 0, 0, 255});
   SDL_RenderClear(renderer);
   pthread_mutex_lock(&video.mutex);
@@ -460,17 +461,21 @@ static void draw_video(void) {
       SDL_UpdateTexture(video_texture, NULL, video.pixels, video.pitch);
   }
   pthread_mutex_unlock(&video.mutex);
+  int vw = display_adaptive_active ? dev_w : W;
+  int vh = display_adaptive_active ? dev_h : H;
   if (video_texture) {
     double scale = fit == 1
-                       ? fmax((double)W / texture_w, (double)H / texture_h)
-                       : fmin((double)W / texture_w, (double)H / texture_h);
-    SDL_Rect r = {(W - (int)(texture_w * scale)) / 2,
-                  (H - (int)(texture_h * scale)) / 2, (int)(texture_w * scale),
+                       ? fmax((double)vw / texture_w, (double)vh / texture_h)
+                       : fmin((double)vw / texture_w, (double)vh / texture_h);
+    SDL_Rect r = {(vw - (int)(texture_w * scale)) / 2,
+                  (vh - (int)(texture_h * scale)) / 2, (int)(texture_w * scale),
                   (int)(texture_h * scale)};
     if (fit == 2)
-      r = (SDL_Rect){0, 0, W, H};
+      r = (SDL_Rect){0, 0, vw, vh};
     SDL_RenderCopy(renderer, video_texture, NULL, &r);
-  } else {
+  }
+  begin_ui_pass();
+  if (!video_texture) {
     centered(preview_mode ? tr("PRÉVIA DA INTERFACE")
                           : tr("Carregando vídeo..."),
              16, 210, 608, 22, (SDL_Color){220,220,220,255});

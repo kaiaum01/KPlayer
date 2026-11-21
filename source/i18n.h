@@ -501,6 +501,10 @@ static const Translation translations[] = {
     {"Este software é fornecido sem garantia, nos limites das licenças aplicáveis (GPL-2.0-or-later). O K PLAYER utiliza VLC/libVLC, SDL2, stb e fontes livres. As licenças estão na pasta licencas e o código-fonte acompanha o pacote. Sem afiliação com VideoLAN, PortMaster ou SofaScore.",
      "This software is provided without warranty to the extent stated in its applicable licenses (GPL-2.0-or-later). K PLAYER uses VLC/libVLC, SDL2, stb and open fonts. Licenses are in the licencas folder and source code accompanies the package. Not affiliated with VideoLAN, PortMaster or SofaScore.",
      "Este software se proporciona sin garantía según sus licencias aplicables (GPL-2.0-or-later). K PLAYER utiliza VLC/libVLC, SDL2, stb y fuentes libres. Las licencias están en licencas y el código fuente acompaña el paquete. Sin afiliación con VideoLAN, PortMaster o SofaScore."},
+    {"Adaptação de tela", "Screen adaptation", "Adaptación de pantalla"},
+    {"Auto (Adaptativo)", "Auto (Adaptive)", "Auto (Adaptativo)"},
+    {"Preencher tela", "Fill screen", "Llenar pantalla"},
+    {"Clássico 4:3", "Classic 4:3", "Clásico 4:3"},
 };
 static const char *tr(const char *pt) {
   if (language == 0)

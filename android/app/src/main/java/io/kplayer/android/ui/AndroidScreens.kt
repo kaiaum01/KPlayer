@@ -9,18 +9,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -154,15 +160,22 @@ fun TransparencyNoticeScreen(
     onOpenTerms: () -> Unit,
     onBack: () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bg)
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
+        contentAlignment = Alignment.Center,
     ) {
-        VinylEmblem(palette = palette, sizeDp = 76)
+        Column(
+            modifier = Modifier
+                .widthIn(max = 520.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            VinylEmblem(palette = palette, sizeDp = 76)
         Spacer(Modifier.height(18.dp))
         Text(
             text = "Aviso de Transparência",
@@ -246,6 +259,7 @@ fun TransparencyNoticeScreen(
                 Text("Voltar", color = palette.muted, fontSize = 13.sp)
             }
         }
+        }
     }
 }
 
@@ -256,6 +270,8 @@ fun HomePortraitScreen(
     audioTracks: List<AudioTrack>,
     videos: List<VideoItem>,
     matches: List<FootballMatch>,
+    isWide: Boolean = false,
+    deviceProfile: String = "Adaptativo",
     onOpenTab: (AndroidTab) -> Unit,
     onOpenVideos: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -267,7 +283,12 @@ fun HomePortraitScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bg),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 148.dp),
+        contentPadding = PaddingValues(
+            start = if (isWide) 24.dp else 18.dp,
+            end = if (isWide) 24.dp else 18.dp,
+            top = 14.dp,
+            bottom = if (isWide) 96.dp else 148.dp,
+        ),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {
@@ -280,23 +301,25 @@ fun HomePortraitScreen(
                     Text(
                         text = "KPlayer",
                         color = palette.text,
-                        fontSize = 26.sp,
+                        fontSize = if (isWide) 28.sp else 26.sp,
                         fontWeight = FontWeight.ExtraBold,
                     )
                     Text(
-                        text = "Android Retrato · v2.0.2",
+                        text = "Android $deviceProfile · v2.0.3",
                         color = palette.muted,
                         fontSize = 12.sp,
                     )
                 }
-                IconButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(palette.panel),
-                ) {
-                    Icon(Icons.Rounded.Settings, contentDescription = "Opções", tint = palette.text)
+                if (!isWide) {
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(palette.panel),
+                    ) {
+                        Icon(Icons.Rounded.Settings, contentDescription = "Opções", tint = palette.text)
+                    }
                 }
             }
         }
@@ -362,10 +385,13 @@ fun HomePortraitScreen(
             }
         }
 
-        // 2x3 Modern Quick Access Grid
+        // Adaptive Quick Access Grid (2x2+1 on compact phones, 5-column or 3+2 strip on wide screens)
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            if (isWide) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     HomeModuleCard(
                         palette = palette,
                         title = "Músicas",
@@ -382,8 +408,6 @@ fun HomePortraitScreen(
                         modifier = Modifier.weight(1f),
                         onClick = onOpenVideos,
                     )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     HomeModuleCard(
                         palette = palette,
                         title = "IPTV",
@@ -394,21 +418,68 @@ fun HomePortraitScreen(
                     )
                     HomeModuleCard(
                         palette = palette,
-                        title = "Rádio Online",
+                        title = "Rádio",
                         subtitle = "Brasil e Mundo",
                         icon = { Icon(Icons.Rounded.Radio, null, tint = palette.accent) },
                         modifier = Modifier.weight(1f),
                         onClick = { onOpenTab(AndroidTab.RADIO) },
                     )
+                    HomeModuleCard(
+                        palette = palette,
+                        title = "Placar",
+                        subtitle = "${matches.count { it.state == "live" }} ao vivo",
+                        icon = { Icon(Icons.Rounded.SportsSoccer, null, tint = palette.accent) },
+                        modifier = Modifier.weight(1f),
+                        onClick = { onOpenTab(AndroidTab.FOOTBALL) },
+                    )
                 }
-                HomeModuleCard(
-                    palette = palette,
-                    title = "Placar da Bola",
-                    subtitle = "${matches.count { it.state == "live" }} ao vivo · ${matches.size} jogos",
-                    icon = { Icon(Icons.Rounded.SportsSoccer, null, tint = palette.accent) },
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { onOpenTab(AndroidTab.FOOTBALL) },
-                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        HomeModuleCard(
+                            palette = palette,
+                            title = "Músicas",
+                            subtitle = "${audioTracks.size} faixas · LRC",
+                            icon = { Icon(Icons.Rounded.LibraryMusic, null, tint = palette.accent) },
+                            modifier = Modifier.weight(1f),
+                            onClick = { onOpenTab(AndroidTab.MUSIC) },
+                        )
+                        HomeModuleCard(
+                            palette = palette,
+                            title = "Vídeos",
+                            subtitle = "${videos.size} arquivos",
+                            icon = { Icon(Icons.Rounded.Movie, null, tint = palette.accent) },
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenVideos,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        HomeModuleCard(
+                            palette = palette,
+                            title = "IPTV",
+                            subtitle = "Canais · Filmes · Séries",
+                            icon = { Icon(Icons.Rounded.Tv, null, tint = palette.accent) },
+                            modifier = Modifier.weight(1f),
+                            onClick = { onOpenTab(AndroidTab.IPTV) },
+                        )
+                        HomeModuleCard(
+                            palette = palette,
+                            title = "Rádio Online",
+                            subtitle = "Brasil e Mundo",
+                            icon = { Icon(Icons.Rounded.Radio, null, tint = palette.accent) },
+                            modifier = Modifier.weight(1f),
+                            onClick = { onOpenTab(AndroidTab.RADIO) },
+                        )
+                    }
+                    HomeModuleCard(
+                        palette = palette,
+                        title = "Placar da Bola",
+                        subtitle = "${matches.count { it.state == "live" }} ao vivo · ${matches.size} jogos",
+                        icon = { Icon(Icons.Rounded.SportsSoccer, null, tint = palette.accent) },
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onOpenTab(AndroidTab.FOOTBALL) },
+                    )
+                }
             }
         }
 
@@ -537,6 +608,8 @@ fun MusicLibraryPortraitScreen(
     tracks: List<AudioTrack>,
     favorites: Set<String>,
     playback: PlaybackUiState,
+    gridColumns: Int = 1,
+    bottomInsetDp: Int = 148,
     onPlayTrack: (AudioTrack, List<AudioTrack>) -> Unit,
     onRescan: () -> Unit,
     onOpenNowPlaying: () -> Unit,
@@ -555,7 +628,7 @@ fun MusicLibraryPortraitScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bg)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = if (gridColumns > 1) 24.dp else 16.dp),
     ) {
         Spacer(Modifier.height(12.dp))
         Row(
@@ -600,9 +673,11 @@ fun MusicLibraryPortraitScreen(
                 )
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = 148.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(gridColumns.coerceAtLeast(1)),
+                contentPadding = PaddingValues(bottom = bottomInsetDp.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(filtered, key = { it.id }) { track ->
                     TrackListRow(
@@ -625,6 +700,8 @@ fun FullNowPlayingSheet(
     palette: KPlayerThemePalette,
     playback: PlaybackUiState,
     isFavorite: Boolean,
+    isWide: Boolean = false,
+    availableHeightDp: Int = 720,
     onClose: () -> Unit,
     onToggleFavorite: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -637,10 +714,17 @@ fun FullNowPlayingSheet(
     onSelectSleep: (Int) -> Unit,
 ) {
     var subPanel by remember { mutableStateOf("art") } // art | lyrics | queue | eq
+    var wideSidePanel by remember { mutableStateOf("lyrics") } // lyrics | queue | eq
     val track = playback.activeTrack
     val radio = playback.activeRadio
     val title = track?.title ?: radio?.name ?: "Sem mídia"
     val subtitle = track?.let { "${it.artist} · ${it.format}" } ?: radio?.let { "${it.country} · ${it.codec}" } ?: ""
+    val vinylSize = when {
+        isWide && availableHeightDp < 480 -> 136
+        isWide -> 212
+        availableHeightDp < 640 -> 184
+        else -> 248
+    }
 
     Column(
         modifier = Modifier
@@ -650,7 +734,7 @@ fun FullNowPlayingSheet(
                     listOf(palette.elevated, palette.bg, palette.bg),
                 ),
             )
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = if (isWide) 24.dp else 20.dp, vertical = 14.dp),
     ) {
         // Top Bar
         Row(
@@ -676,220 +760,440 @@ fun FullNowPlayingSheet(
             }
         }
 
-        // Centerpiece: Artwork OR Synced Lyrics OR Queue OR Equalizer
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentAlignment = Alignment.Center,
-        ) {
-            when (subPanel) {
-                "lyrics" -> {
-                    val lines = track?.lrcLines.orEmpty()
-                    if (lines.isEmpty()) {
-                        Text(
-                            text = "Nenhuma letra .LRC sincronizada encontrada para esta faixa.",
-                            color = palette.muted,
-                            textAlign = TextAlign.Center,
+        if (isWide) {
+            // Adaptive 2-Pane Layout for Landscape Phones, Foldables & Tablets
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    VinylEmblem(
+                        palette = palette,
+                        sizeDp = vinylSize,
+                        artUri = track?.artUri ?: radio?.favicon?.takeIf { it.isNotBlank() },
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = title,
+                        color = palette.text,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        text = subtitle,
+                        color = palette.muted,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (radio == null) {
+                        val dur = playback.durationMs.coerceAtLeast(1L)
+                        Slider(
+                            value = (playback.positionMs.toFloat() / dur.toFloat()).coerceIn(0f, 1f),
+                            onValueChange = { frac -> onSeek((frac * dur).toLong()) },
+                            colors = SliderDefaults.colors(
+                                thumbColor = palette.accent,
+                                activeTrackColor = palette.accent,
+                                inactiveTrackColor = palette.elevated,
+                            ),
                         )
-                    } else {
-                        val activeIdx = lines.indexOfLast { it.timeMs <= playback.positionMs }
-                        LazyColumn(
-                            contentPadding = PaddingValues(vertical = 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            items(lines.indices.toList()) { i ->
-                                val active = i == activeIdx
-                                Text(
-                                    text = lines[i].text,
-                                    color = if (active) palette.accent else palette.muted.copy(alpha = 0.65f),
-                                    fontSize = if (active) 20.sp else 15.sp,
-                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onSeek(lines[i].timeMs) }
-                                        .padding(vertical = 4.dp),
-                                )
-                            }
+                            Text(formatDuration(playback.positionMs), color = palette.dim, fontSize = 11.sp)
+                            Text(formatDuration(playback.durationMs), color = palette.dim, fontSize = 11.sp)
                         }
                     }
-                }
-
-                "queue" -> {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize(),
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        items(playback.queue, key = { it.id }) { qTrack ->
-                            TrackListRow(
-                                palette = palette,
-                                track = qTrack,
-                                isActive = qTrack.id == track?.id,
-                                onClick = {},
+                        IconButton(onClick = onToggleShuffle, modifier = Modifier.size(44.dp)) {
+                            Icon(Icons.Rounded.Shuffle, contentDescription = "Aleatório", tint = if (playback.shuffle) palette.accent else palette.muted)
+                        }
+                        IconButton(onClick = onPrev, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Rounded.SkipPrevious, contentDescription = "Anterior", tint = palette.text, modifier = Modifier.size(30.dp))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(58.dp)
+                                .clip(CircleShape)
+                                .background(palette.accent)
+                                .clickable(onClick = onTogglePlay),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = "Tocar/Pausar",
+                                tint = palette.bg,
+                                modifier = Modifier.size(32.dp),
+                            )
+                        }
+                        IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Rounded.SkipNext, contentDescription = "Próxima", tint = palette.text, modifier = Modifier.size(30.dp))
+                        }
+                        IconButton(onClick = onCycleRepeat, modifier = Modifier.size(44.dp)) {
+                            Icon(
+                                if (playback.repeatMode == RepeatMode.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                contentDescription = "Repetição",
+                                tint = if (playback.repeatMode != RepeatMode.OFF) palette.accent else palette.muted,
                             )
                         }
                     }
                 }
 
-                "eq" -> {
-                    Column(
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(palette.panel)
+                        .border(1.dp, palette.text.copy(alpha = 0.08f), RoundedCornerShape(22.dp))
+                        .padding(16.dp),
+                ) {
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Equalizador", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(EqPreset.entries) { preset ->
-                                val selected = playback.eqPreset == preset
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (selected) palette.accent else palette.panel,
-                                    modifier = Modifier.clickable { onSelectEq(preset) },
-                                ) {
-                                    Text(
-                                        text = preset.label,
-                                        color = if (selected) palette.bg else palette.text,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                    )
-                                }
+                        listOf("lyrics" to "Letras", "queue" to "Fila", "eq" to "EQ & Sono").forEach { (key, label) ->
+                            val active = wideSidePanel == key
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (active) palette.accent else palette.elevated,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { wideSidePanel = key },
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (active) palette.bg else palette.text,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                )
                             }
                         }
-                        Spacer(Modifier.height(10.dp))
-                        Text("Timer de sono", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(listOf(0, 15, 30, 60, 90)) { mins ->
-                                val selected = playback.sleepMinutes == mins
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (selected) palette.accent else palette.panel,
-                                    modifier = Modifier.clickable { onSelectSleep(mins) },
-                                ) {
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                        when (wideSidePanel) {
+                            "queue" -> {
+                                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
+                                    items(playback.queue, key = { it.id }) { qTrack ->
+                                        TrackListRow(palette = palette, track = qTrack, isActive = qTrack.id == track?.id, onClick = {})
+                                    }
+                                }
+                            }
+                            "eq" -> {
+                                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Equalizador", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(EqPreset.entries) { preset ->
+                                            val selected = playback.eqPreset == preset
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = if (selected) palette.accent else palette.elevated,
+                                                modifier = Modifier.clickable { onSelectEq(preset) },
+                                            ) {
+                                                Text(
+                                                    text = preset.label,
+                                                    color = if (selected) palette.bg else palette.text,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("Timer de sono", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(listOf(0, 15, 30, 60, 90)) { mins ->
+                                            val selected = playback.sleepMinutes == mins
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = if (selected) palette.accent else palette.elevated,
+                                                modifier = Modifier.clickable { onSelectSleep(mins) },
+                                            ) {
+                                                Text(
+                                                    text = if (mins == 0) "Desligado" else "${mins} min",
+                                                    color = if (selected) palette.bg else palette.text,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else -> {
+                                val lines = track?.lrcLines.orEmpty()
+                                if (lines.isEmpty()) {
                                     Text(
-                                        text = if (mins == 0) "Desligado" else "${mins} min",
-                                        color = if (selected) palette.bg else palette.text,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        text = "Nenhuma letra .LRC sincronizada encontrada para esta faixa.",
+                                        color = palette.muted,
+                                        textAlign = TextAlign.Center,
                                     )
+                                } else {
+                                    val activeIdx = lines.indexOfLast { it.timeMs <= playback.positionMs }
+                                    LazyColumn(
+                                        contentPadding = PaddingValues(vertical = 12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        items(lines.indices.toList()) { i ->
+                                            val active = i == activeIdx
+                                            Text(
+                                                text = lines[i].text,
+                                                color = if (active) palette.accent else palette.muted.copy(alpha = 0.65f),
+                                                fontSize = if (active) 19.sp else 14.sp,
+                                                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { onSeek(lines[i].timeMs) }
+                                                    .padding(vertical = 4.dp),
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            }
+        } else {
+            // Compact Portrait Phone Layout (Thumb-Zone Ergonomics)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                when (subPanel) {
+                    "lyrics" -> {
+                        val lines = track?.lrcLines.orEmpty()
+                        if (lines.isEmpty()) {
+                            Text(
+                                text = "Nenhuma letra .LRC sincronizada encontrada para esta faixa.",
+                                color = palette.muted,
+                                textAlign = TextAlign.Center,
+                            )
+                        } else {
+                            val activeIdx = lines.indexOfLast { it.timeMs <= playback.positionMs }
+                            LazyColumn(
+                                contentPadding = PaddingValues(vertical = 24.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                items(lines.indices.toList()) { i ->
+                                    val active = i == activeIdx
+                                    Text(
+                                        text = lines[i].text,
+                                        color = if (active) palette.accent else palette.muted.copy(alpha = 0.65f),
+                                        fontSize = if (active) 20.sp else 15.sp,
+                                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onSeek(lines[i].timeMs) }
+                                            .padding(vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
 
-                else -> {
-                    VinylEmblem(
-                        palette = palette,
-                        sizeDp = 248,
-                        artUri = track?.artUri ?: radio?.favicon?.takeIf { it.isNotBlank() },
-                    )
+                    "queue" -> {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            items(playback.queue, key = { it.id }) { qTrack ->
+                                TrackListRow(
+                                    palette = palette,
+                                    track = qTrack,
+                                    isActive = qTrack.id == track?.id,
+                                    onClick = {},
+                                )
+                            }
+                        }
+                    }
+
+                    "eq" -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text("Equalizador", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(EqPreset.entries) { preset ->
+                                    val selected = playback.eqPreset == preset
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (selected) palette.accent else palette.panel,
+                                        modifier = Modifier.clickable { onSelectEq(preset) },
+                                    ) {
+                                        Text(
+                                            text = preset.label,
+                                            color = if (selected) palette.bg else palette.text,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            Text("Timer de sono", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(listOf(0, 15, 30, 60, 90)) { mins ->
+                                    val selected = playback.sleepMinutes == mins
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (selected) palette.accent else palette.panel,
+                                        modifier = Modifier.clickable { onSelectSleep(mins) },
+                                    ) {
+                                        Text(
+                                            text = if (mins == 0) "Desligado" else "${mins} min",
+                                            color = if (selected) palette.bg else palette.text,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        VinylEmblem(
+                            palette = palette,
+                            sizeDp = vinylSize,
+                            artUri = track?.artUri ?: radio?.favicon?.takeIf { it.isNotBlank() },
+                        )
+                    }
                 }
             }
-        }
 
-        // Title & Metadata
-        Text(
-            text = title,
-            color = palette.text,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = subtitle,
-            color = palette.muted,
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        // Seek Scrubber
-        if (radio == null) {
-            val dur = playback.durationMs.coerceAtLeast(1L)
-            Slider(
-                value = (playback.positionMs.toFloat() / dur.toFloat()).coerceIn(0f, 1f),
-                onValueChange = { frac -> onSeek((frac * dur).toLong()) },
-                colors = SliderDefaults.colors(
-                    thumbColor = palette.accent,
-                    activeTrackColor = palette.accent,
-                    inactiveTrackColor = palette.elevated,
-                ),
+            // Title & Metadata
+            Text(
+                text = title,
+                color = palette.text,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
+            Text(
+                text = subtitle,
+                color = palette.muted,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // Seek Scrubber
+            if (radio == null) {
+                val dur = playback.durationMs.coerceAtLeast(1L)
+                Slider(
+                    value = (playback.positionMs.toFloat() / dur.toFloat()).coerceIn(0f, 1f),
+                    onValueChange = { frac -> onSeek((frac * dur).toLong()) },
+                    colors = SliderDefaults.colors(
+                        thumbColor = palette.accent,
+                        activeTrackColor = palette.accent,
+                        inactiveTrackColor = palette.elevated,
+                    ),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(formatDuration(playback.positionMs), color = palette.dim, fontSize = 11.sp)
+                    Text(formatDuration(playback.durationMs), color = palette.dim, fontSize = 11.sp)
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // Primary Transport Controls (Ergonomic Thumb Zone)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(formatDuration(playback.positionMs), color = palette.dim, fontSize = 11.sp)
-                Text(formatDuration(playback.durationMs), color = palette.dim, fontSize = 11.sp)
+                IconButton(onClick = onToggleShuffle, modifier = Modifier.size(46.dp)) {
+                    Icon(
+                        Icons.Rounded.Shuffle,
+                        contentDescription = "Aleatório",
+                        tint = if (playback.shuffle) palette.accent else palette.muted,
+                    )
+                }
+                IconButton(onClick = onPrev, modifier = Modifier.size(50.dp)) {
+                    Icon(Icons.Rounded.SkipPrevious, contentDescription = "Anterior", tint = palette.text, modifier = Modifier.size(32.dp))
+                }
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(palette.accent)
+                        .clickable(onClick = onTogglePlay),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = "Tocar/Pausar",
+                        tint = palette.bg,
+                        modifier = Modifier.size(34.dp),
+                    )
+                }
+                IconButton(onClick = onNext, modifier = Modifier.size(50.dp)) {
+                    Icon(Icons.Rounded.SkipNext, contentDescription = "Próxima", tint = palette.text, modifier = Modifier.size(32.dp))
+                }
+                IconButton(onClick = onCycleRepeat, modifier = Modifier.size(46.dp)) {
+                    Icon(
+                        if (playback.repeatMode == RepeatMode.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                        contentDescription = "Repetição",
+                        tint = if (playback.repeatMode != RepeatMode.OFF) palette.accent else palette.muted,
+                    )
+                }
             }
-        }
 
-        Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(14.dp))
 
-        // Primary Transport Controls (Ergonomic Thumb Zone)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onToggleShuffle, modifier = Modifier.size(46.dp)) {
-                Icon(
-                    Icons.Rounded.Shuffle,
-                    contentDescription = "Aleatório",
-                    tint = if (playback.shuffle) palette.accent else palette.muted,
-                )
-            }
-            IconButton(onClick = onPrev, modifier = Modifier.size(50.dp)) {
-                Icon(Icons.Rounded.SkipPrevious, contentDescription = "Anterior", tint = palette.text, modifier = Modifier.size(32.dp))
-            }
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(palette.accent)
-                    .clickable(onClick = onTogglePlay),
-                contentAlignment = Alignment.Center,
+            // Sub-panel Switches: Lyrics · Queue · EQ/Timer
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                Icon(
-                    if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = "Tocar/Pausar",
-                    tint = palette.bg,
-                    modifier = Modifier.size(34.dp),
-                )
-            }
-            IconButton(onClick = onNext, modifier = Modifier.size(50.dp)) {
-                Icon(Icons.Rounded.SkipNext, contentDescription = "Próxima", tint = palette.text, modifier = Modifier.size(32.dp))
-            }
-            IconButton(onClick = onCycleRepeat, modifier = Modifier.size(46.dp)) {
-                Icon(
-                    if (playback.repeatMode == RepeatMode.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                    contentDescription = "Repetição",
-                    tint = if (playback.repeatMode != RepeatMode.OFF) palette.accent else palette.muted,
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Sub-panel Switches: Lyrics · Queue · EQ/Timer
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            IconButton(onClick = { subPanel = if (subPanel == "lyrics") "art" else "lyrics" }) {
-                Icon(Icons.Rounded.Lyrics, contentDescription = "Letras", tint = if (subPanel == "lyrics") palette.accent else palette.muted)
-            }
-            IconButton(onClick = { subPanel = if (subPanel == "queue") "art" else "queue" }) {
-                Icon(Icons.AutoMirrored.Rounded.QueueMusic, contentDescription = "Fila", tint = if (subPanel == "queue") palette.accent else palette.muted)
-            }
-            IconButton(onClick = { subPanel = if (subPanel == "eq") "art" else "eq" }) {
-                Icon(Icons.Rounded.Equalizer, contentDescription = "EQ", tint = if (subPanel == "eq") palette.accent else palette.muted)
-            }
-            IconButton(onClick = { subPanel = if (subPanel == "eq") "art" else "eq" }) {
-                Icon(Icons.Rounded.Timer, contentDescription = "Sono", tint = if (playback.sleepMinutes > 0) palette.accent else palette.muted)
+                IconButton(onClick = { subPanel = if (subPanel == "lyrics") "art" else "lyrics" }) {
+                    Icon(Icons.Rounded.Lyrics, contentDescription = "Letras", tint = if (subPanel == "lyrics") palette.accent else palette.muted)
+                }
+                IconButton(onClick = { subPanel = if (subPanel == "queue") "art" else "queue" }) {
+                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, contentDescription = "Fila", tint = if (subPanel == "queue") palette.accent else palette.muted)
+                }
+                IconButton(onClick = { subPanel = if (subPanel == "eq") "art" else "eq" }) {
+                    Icon(Icons.Rounded.Equalizer, contentDescription = "EQ", tint = if (subPanel == "eq") palette.accent else palette.muted)
+                }
+                IconButton(onClick = { subPanel = if (subPanel == "eq") "art" else "eq" }) {
+                    Icon(Icons.Rounded.Timer, contentDescription = "Sono", tint = if (playback.sleepMinutes > 0) palette.accent else palette.muted)
+                }
             }
         }
     }
@@ -948,6 +1252,8 @@ fun IptvPortraitScreen(
     items: List<IptvChannel>,
     selectedCategory: IptvCategory?,
     loading: Boolean,
+    gridColumns: Int = 1,
+    bottomInsetDp: Int = 148,
     onSelectSource: (IptvSource) -> Unit,
     onSelectCategory: (IptvCategory) -> Unit,
     onBackToCategories: () -> Unit,
@@ -963,7 +1269,7 @@ fun IptvPortraitScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bg)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = if (gridColumns > 1) 24.dp else 16.dp),
     ) {
         Spacer(Modifier.height(12.dp))
         Row(
@@ -1068,9 +1374,11 @@ fun IptvPortraitScreen(
             }
         } else if (selectedCategory == null) {
             val filteredCats = categories.filter { query.isBlank() || it.name.contains(query, true) }
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = 148.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(gridColumns.coerceAtLeast(1)),
+                contentPadding = PaddingValues(bottom = bottomInsetDp.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(filteredCats, key = { it.id }) { cat ->
                     Row(
@@ -1083,8 +1391,9 @@ fun IptvPortraitScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(cat.name, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        Text(cat.name, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         if (cat.count > 0) {
+                            Spacer(Modifier.width(8.dp))
                             Text("${cat.count}", color = palette.accent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
                     }
@@ -1092,9 +1401,11 @@ fun IptvPortraitScreen(
             }
         } else {
             val filteredItems = items.filter { query.isBlank() || it.name.contains(query, true) }
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = 148.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(gridColumns.coerceAtLeast(1)),
+                contentPadding = PaddingValues(bottom = bottomInsetDp.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(filteredItems, key = { it.id }) { ch ->
                     Row(
@@ -1132,6 +1443,8 @@ fun RadioPortraitScreen(
     stations: List<RadioStation>,
     activeStation: RadioStation?,
     loading: Boolean,
+    gridColumns: Int = 1,
+    bottomInsetDp: Int = 148,
     onSelectCategory: (String) -> Unit,
     onPlayStation: (RadioStation) -> Unit,
     onRefresh: () -> Unit,
@@ -1144,7 +1457,7 @@ fun RadioPortraitScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bg)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = if (gridColumns > 1) 24.dp else 16.dp),
     ) {
         Spacer(Modifier.height(12.dp))
         Row(
@@ -1195,9 +1508,11 @@ fun RadioPortraitScreen(
                 CircularProgressIndicator(color = palette.accent)
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = 148.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(gridColumns.coerceAtLeast(1)),
+                contentPadding = PaddingValues(bottom = bottomInsetDp.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(filtered, key = { it.id }) { st ->
                     val playing = activeStation?.id == st.id
@@ -1234,6 +1549,8 @@ fun FootballPortraitScreen(
     palette: KPlayerThemePalette,
     matches: List<FootballMatch>,
     loading: Boolean,
+    gridColumns: Int = 1,
+    bottomInsetDp: Int = 148,
     onRefresh: () -> Unit,
 ) {
     var filter by remember { mutableStateOf("Todos") }
@@ -1251,7 +1568,7 @@ fun FootballPortraitScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bg)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = if (gridColumns > 1) 24.dp else 16.dp),
     ) {
         Spacer(Modifier.height(12.dp))
         Row(
@@ -1292,9 +1609,11 @@ fun FootballPortraitScreen(
                 CircularProgressIndicator(color = palette.accent)
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = 148.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(gridColumns.coerceAtLeast(1)),
+                contentPadding = PaddingValues(bottom = bottomInsetDp.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(filtered, key = { it.id }) { m ->
                     Column(
@@ -1350,76 +1669,182 @@ fun FootballPortraitScreen(
 fun SettingsAndTermsSheet(
     palette: KPlayerThemePalette,
     themeIndex: Int,
+    isWide: Boolean = false,
     onSelectTheme: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
-    LazyColumn(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(palette.bg)
-            .padding(horizontal = 18.dp),
-        contentPadding = PaddingValues(top = 14.dp, bottom = 36.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .background(palette.bg),
+        contentAlignment = Alignment.TopCenter,
     ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar", tint = palette.text)
+        LazyColumn(
+            modifier = Modifier
+                .widthIn(max = if (isWide) 760.dp else 1000.dp)
+                .fillMaxSize()
+                .padding(horizontal = if (isWide) 24.dp else 18.dp),
+            contentPadding = PaddingValues(top = 14.dp, bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar", tint = palette.text)
+                    }
+                    Text("Opções & Termos", color = palette.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
-                Text("Opções & Termos", color = palette.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
-        }
-        item {
-            Text("7 Temas de Cores", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                KPLAYER_THEMES.forEachIndexed { idx, th ->
-                    val chosen = idx == themeIndex
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .border(
-                                width = if (chosen) 2.5.dp else 1.dp,
-                                color = if (chosen) palette.text else palette.muted.copy(alpha = 0.35f),
-                                shape = CircleShape,
-                            )
-                            .clickable { onSelectTheme(idx) },
-                        contentAlignment = Alignment.Center,
-                    ) {
+            item {
+                Text("7 Temas de Cores", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    KPLAYER_THEMES.forEachIndexed { idx, th ->
+                        val chosen = idx == themeIndex
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(if (th.isLight) th.bg else th.accent),
-                        )
+                                .border(
+                                    width = if (chosen) 2.5.dp else 1.dp,
+                                    color = if (chosen) palette.text else palette.muted.copy(alpha = 0.35f),
+                                    shape = CircleShape,
+                                )
+                                .clickable { onSelectTheme(idx) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(if (th.isLight) th.bg else th.accent),
+                            )
+                        }
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                Text("Ativo: ${palette.name}", color = palette.muted, fontSize = 12.sp)
             }
-            Spacer(Modifier.height(6.dp))
-            Text("Ativo: ${palette.name}", color = palette.muted, fontSize = 12.sp)
-        }
 
-        item {
-            HorizontalDivider(color = palette.text.copy(alpha = 0.08f))
-            Spacer(Modifier.height(6.dp))
-            Text("Termos de Uso & Transparência", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        }
+            item {
+                HorizontalDivider(color = palette.text.copy(alpha = 0.08f))
+                Spacer(Modifier.height(6.dp))
+                Text("Termos de Uso & Transparência", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
 
-        items(KPLAYER_TERMS_PAGES) { page ->
-            Column(
+            items(KPLAYER_TERMS_PAGES) { page ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(palette.panel)
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(page.title, color = palette.accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(page.body, color = palette.muted, fontSize = 13.sp, lineHeight = 19.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdaptiveNavRail(
+    palette: KPlayerThemePalette,
+    currentTab: AndroidTab,
+    expanded: Boolean,
+    onSelect: (AndroidTab) -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val entries = listOf(
+        Triple(AndroidTab.HOME, "Início", Icons.Rounded.Home),
+        Triple(AndroidTab.MUSIC, "Música", Icons.Rounded.LibraryMusic),
+        Triple(AndroidTab.IPTV, "IPTV", Icons.Rounded.Tv),
+        Triple(AndroidTab.RADIO, "Rádio", Icons.Rounded.Radio),
+        Triple(AndroidTab.FOOTBALL, "Placar", Icons.Rounded.SportsSoccer),
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(if (expanded) 196.dp else 80.dp)
+            .background(palette.panel)
+            .border(0.5.dp, palette.text.copy(alpha = 0.08f))
+            .padding(vertical = 14.dp, horizontal = 10.dp),
+        horizontalAlignment = if (expanded) Alignment.Start else Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = if (expanded) 8.dp else 0.dp, vertical = 6.dp),
+        ) {
+            VinylEmblem(palette = palette, sizeDp = 34)
+            if (expanded) {
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("KPlayer", color = palette.text, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                    Text("v2.0.3", color = palette.accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        entries.forEach { (tab, label, icon) ->
+            val active = tab == currentTab
+            if (expanded) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (active) palette.accent.copy(alpha = 0.16f) else Color.Transparent)
+                        .clickable { onSelect(tab) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(icon, contentDescription = label, tint = if (active) palette.accent else palette.muted, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = label,
+                        color = if (active) palette.accent else palette.text,
+                        fontSize = 14.sp,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (active) palette.accent.copy(alpha = 0.16f) else Color.Transparent)
+                        .clickable { onSelect(tab) }
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(icon, contentDescription = label, tint = if (active) palette.accent else palette.muted, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.height(2.dp))
+                    Text(label, color = if (active) palette.accent else palette.muted, fontSize = 10.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        if (expanded) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(palette.panel)
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onOpenSettings)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(page.title, color = palette.accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text(page.body, color = palette.muted, fontSize = 13.sp, lineHeight = 19.sp)
+                Icon(Icons.Rounded.Settings, contentDescription = "Opções", tint = palette.muted, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("Opções", color = palette.muted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
+        } else {
+            IconButton(onClick = onOpenSettings, modifier = Modifier.size(44.dp)) {
+                Icon(Icons.Rounded.Settings, contentDescription = "Opções", tint = palette.muted)
             }
         }
     }

@@ -19,6 +19,9 @@ if [ -n "${CFW_NAME:-}" ] && [ -f "$controlfolder/mod_${CFW_NAME}.txt" ]; then
 fi
 get_controls
 if [ -n "${sdl_controllerconfig:-}" ]; then export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"; fi
+if [ -n "${DISPLAY_WIDTH:-}" ]; then export KPLAYER_DISPLAY_W="$DISPLAY_WIDTH"; fi
+if [ -n "${DISPLAY_HEIGHT:-}" ]; then export KPLAYER_DISPLAY_H="$DISPLAY_HEIGHT"; fi
+if [ -n "${DEVICE_NAME:-}" ]; then export KPLAYER_DEVICE="$DEVICE_NAME"; fi
 if [ -z "${GPTOKEYB:-}" ]; then printf 'GPTOKEYB nao foi definido pelo PortMaster.\n'; exit 1; fi
 # Motor VLC 3.0.23 recompilado para este port; codecs/plugins do Debian 13.
 unset PYTHON_VLC_LIB_PATH

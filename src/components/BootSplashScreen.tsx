@@ -76,12 +76,12 @@ export const BootSplashScreen: React.FC<BootSplashScreenProps> = ({
 
       {/* Extra ambient central aura */}
       <div
-        className="pointer-events-none absolute left-1/2 top-[156px] -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] rounded-full blur-3xl opacity-35 transition-opacity duration-500"
+        className="pointer-events-none absolute left-1/2 top-[34%] -translate-x-1/2 -translate-y-1/2 w-[min(65vw,320px)] h-[min(65vw,320px)] rounded-full blur-3xl opacity-35 transition-opacity duration-500"
         style={{ backgroundColor: theme.accent }}
       />
 
       {/* Animated Center Emblem (Sonar rings + Orbiting particles + Spinning Vinyl) */}
-      <div className="relative z-10 flex flex-col items-center -mt-3">
+      <div className="relative z-10 flex flex-col items-center w-full max-w-[460px] px-4 -mt-2">
         <div className="relative w-[132px] h-[132px] flex items-center justify-center kp-boot-float">
           {/* 3 staggered expanding sonar rings */}
           {[0, 0.7, 1.4].map((delay, i) => (
@@ -130,7 +130,7 @@ export const BootSplashScreen: React.FC<BootSplashScreenProps> = ({
                 color: theme.text,
                 textShadow: `0 0 24px ${rgbToRgba(theme.accent, 0.25)}`,
               }}
-              className="text-[34px] font-extrabold tracking-tight leading-none"
+              className="text-[32px] @min-[520px]:text-[36px] font-extrabold tracking-tight leading-none"
             >
               K <span style={{ color: theme.accent }}>PLAYER</span>
             </h1>
@@ -144,21 +144,21 @@ export const BootSplashScreen: React.FC<BootSplashScreenProps> = ({
             }}
             className="mt-2 px-3 py-0.5 rounded-full text-[10.5px] font-extrabold tracking-wider"
           >
-            v2.0.2 • R36S
+            v2.0.3 • R36S
           </div>
 
-          <p style={{ color: theme.muted }} className="mt-1.5 text-[12px] font-medium">
+          <p style={{ color: theme.muted }} className="mt-1.5 text-[12px] font-medium text-center">
             {tr('Central de Mídia Portátil', lang)}
           </p>
         </div>
 
-        {/* Live Animated 30-bar Equalizer */}
-        <div className="mt-4 kp-boot-rise" style={{ animationDelay: '160ms' }}>
-          <AudioVisualizer theme={theme} bars={30} width={286} height={22} active={true} />
+        {/* Live Animated Equalizer */}
+        <div className="mt-4 max-w-full overflow-hidden flex justify-center kp-boot-rise" style={{ animationDelay: '160ms' }}>
+          <AudioVisualizer theme={theme} bars={26} width={248} height={22} active={true} />
         </div>
 
         {/* Glowing Progress Bar + Shimmer + Status */}
-        <div className="mt-4 w-[420px] kp-boot-rise" style={{ animationDelay: '220ms' }}>
+        <div className="mt-4 w-full max-w-[420px] kp-boot-rise" style={{ animationDelay: '220ms' }}>
           <div
             style={{
               backgroundColor: mixRgb(theme.elevated, theme.text, 0.1),

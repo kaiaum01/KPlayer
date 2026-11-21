@@ -435,6 +435,8 @@ int main(void) {
   automatic_roots[2].path = "/this-path-does-not-exist-kplayer";
   automatic_roots[3].path = "/this-path-does-not-exist-kplayer";
   category = 1;
+  favorites_view = false;
+  clear_cached_media();
   media_preloaded = false;
   scan_automatic_media();
   assert(automatic_view && total == 1 &&

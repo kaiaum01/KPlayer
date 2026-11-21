@@ -16,7 +16,7 @@ object NetworkRepository {
         .followRedirects(true)
         .build()
 
-    private const val UA = "KPlayer-Android/2.0.2"
+    private const val UA = "KPlayer-Android/2.0.3"
     private const val CANAIS_BASE = "https://canais-saimo.pages.dev"
     private const val FILMES_BASE = "https://filmes-saimo.pages.dev"
 

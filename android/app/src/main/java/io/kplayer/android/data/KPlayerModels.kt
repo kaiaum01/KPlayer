@@ -131,7 +131,7 @@ data class TermsPage(
 val KPLAYER_TERMS_PAGES = listOf(
     TermsPage(
         title = "1. Sobre o KPlayer e Reprodução Local",
-        body = "O KPlayer v2.0.2 (edições R36S e Android) é um reprodutor independente de mídia local e streams de rede. Ele reproduz seus arquivos de áudio e vídeo diretamente do dispositivo com letras sincronizadas (.LRC), equalizador e fila sem envio de arquivos pessoais para servidores externos.",
+        body = "O KPlayer v2.0.3 (edições R36S e Android) é um reprodutor independente de mídia local e streams de rede. Ele reproduz seus arquivos de áudio e vídeo diretamente do dispositivo com letras sincronizadas (.LRC), equalizador e fila sem envio de arquivos pessoais para servidores externos.",
     ),
     TermsPage(
         title = "2. Fontes Abertas e Agregadores (IPTV e Rádio)",

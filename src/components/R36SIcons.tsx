@@ -558,9 +558,6 @@ export function FooterBar({
       {toast && (
         <div
           style={{
-            left: 30,
-            top: 397,
-            width: 580,
             height: 32,
             borderRadius: 16,
             backgroundColor: theme.elevated,
@@ -568,25 +565,25 @@ export function FooterBar({
             border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
             boxShadow: `0 0 14px ${rgbToRgba(theme.accent, 0.32)}`,
           }}
-          className="absolute z-30 flex items-center justify-center text-[13px] font-semibold px-4"
+          className="absolute left-4 right-4 max-w-[580px] mx-auto bottom-[52px] z-30 flex items-center justify-center text-[12.5px] font-semibold px-4"
         >
           <span className="truncate">{toast}</span>
         </div>
       )}
       <div
         style={{
-          backgroundColor: rgbToRgba(theme.panel, 0.9),
+          backgroundColor: rgbToRgba(theme.panel, 0.92),
           borderTop: `1px solid ${themeHairline(theme)}`,
-          height: 44,
+          minHeight: 44,
           gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
         }}
-        className="absolute bottom-0 left-0 right-0 grid items-center px-3 gap-x-2"
+        className="absolute bottom-0 left-0 right-0 z-20 grid items-center px-3 py-1 gap-x-2 gap-y-0.5"
       >
         {hints.map((h, i) => {
           const spriteCol = BUTTON_SPRITE_COL[h.key];
           const isSingle = h.key.length === 1;
           return (
-            <div key={i} className="flex items-center gap-1.5 min-w-0">
+            <div key={i} className="flex items-center justify-center @min-[500px]:justify-start gap-1.5 min-w-0">
               {spriteCol !== undefined ? (
                 <div
                   style={{ width: iconSize, height: iconSize }}
@@ -615,7 +612,7 @@ export function FooterBar({
               )}
               <span
                 style={{ color: theme.muted }}
-                className={`${twoRows ? 'text-[10.5px]' : 'text-[11.5px]'} leading-none truncate`}
+                className={`${twoRows ? 'text-[10px] @min-[520px]:text-[10.5px]' : 'text-[10.5px] @min-[520px]:text-[11.5px]'} leading-none truncate`}
               >
                 {h.label}
               </span>

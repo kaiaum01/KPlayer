@@ -51,7 +51,7 @@ class KPlayerEngine(context: Context) {
         .build()
 
     private val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
-        .setUserAgent("Mozilla/5.0 (Linux; Android 14) KPlayer/2.0.2")
+        .setUserAgent("Mozilla/5.0 (Linux; Android 14) KPlayer/2.0.3")
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))

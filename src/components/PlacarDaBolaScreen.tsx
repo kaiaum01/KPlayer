@@ -242,19 +242,22 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
       [activeMatch, filteredMatches, selectedIdx, onBack, loadMatches, loadMatchDetail]
     );
 
-    const windowStart = Math.max(0, Math.min(selectedIdx - 2, Math.max(0, filteredMatches.length - 5)));
+    const selectedRowRef = useRef<HTMLButtonElement | null>(null);
+    useEffect(() => {
+      selectedRowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, [selectedIdx]);
 
     return (
-      <div className="w-full h-full relative overflow-hidden">
+      <div className="w-full h-full relative overflow-hidden flex flex-col">
         <ModernBackdrop theme={theme} />
         <HeaderBar theme={theme} section={tr('PLACAR DA BOLA', lang)} location={location} />
 
         {!activeMatch ? (
           /* ==================== MATCH LIST VIEW ==================== */
-          <div className="relative z-10 px-4 pt-2.5 flex flex-col">
-            <div className="flex items-center justify-between gap-2">
+          <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-[52px] flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
               <div className="flex items-center gap-2">
-                <h2 style={{ color: theme.text }} className="text-[20px] font-extrabold leading-none">
+                <h2 style={{ color: theme.text }} className="text-[18px] @min-[520px]:text-[20px] font-extrabold leading-none">
                   {tr('Placar da Bola', lang)}
                 </h2>
                 {liveCount > 0 && (
@@ -275,7 +278,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {FILTERS.map((f, idx) => (
                   <button
                     key={f.id}
@@ -293,16 +296,16 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
               </div>
             </div>
 
-            <div className="mt-2.5 space-y-[6px]">
+            <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 grid grid-cols-1 @min-[860px]:grid-cols-2 gap-1.5 content-start">
               {loading ? (
                 <div
                   style={{ color: theme.accent }}
-                  className="h-[320px] flex items-center justify-center text-[16px] font-bold"
+                  className="col-span-full h-[220px] flex items-center justify-center text-[16px] font-bold"
                 >
                   {tr('Carregando placares...', lang)}
                 </div>
               ) : filteredMatches.length === 0 ? (
-                <div className="h-[320px] flex flex-col items-center justify-center text-center">
+                <div className="col-span-full h-[220px] flex flex-col items-center justify-center text-center">
                   <div style={{ color: theme.muted }} className="text-[16px] font-semibold">
                     {tr('Nenhum jogo ao vivo', lang)}
                   </div>
@@ -316,19 +319,19 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                   </button>
                 </div>
               ) : (
-                filteredMatches.slice(windowStart, windowStart + 5).map((m, idx) => {
-                  const realIdx = windowStart + idx;
+                filteredMatches.map((m, realIdx) => {
                   const focus = realIdx === selectedIdx;
                   const isLive = m.state === 'in';
                   return (
                     <button
                       key={`${m.leagueCode}-${m.id || realIdx}`}
+                      ref={focus ? selectedRowRef : undefined}
                       type="button"
                       onMouseEnter={() => setSelectedIdx(realIdx)}
                       onClick={() => loadMatchDetail(m, false)}
                       style={{
                         ...modernCardStyle(theme, focus, 11, theme.panel),
-                        height: 60,
+                        minHeight: 60,
                       }}
                       className="w-full px-3 py-1.5 flex flex-col justify-between text-left cursor-pointer transition-all"
                     >
@@ -339,7 +342,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                             {m.league}
                           </span>
                           {m.venue && (
-                            <span style={{ color: theme.dim }} className="text-[9.5px] truncate">
+                            <span style={{ color: theme.dim }} className="text-[9.5px] truncate hidden @min-[440px]:inline">
                               • {m.venue}
                             </span>
                           )}
@@ -364,7 +367,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                       {/* Row 2: Teams + Crests + Score Badge */}
                       <div className="flex items-center justify-between gap-2 w-full">
                         <div className="flex items-center justify-end gap-1.5 flex-1 min-w-0">
-                          <span style={{ color: theme.text }} className="text-[13px] font-bold truncate">
+                          <span style={{ color: theme.text }} className="text-[12.5px] @min-[500px]:text-[13px] font-bold truncate">
                             {m.home}
                           </span>
                           {m.homeLogo && (
@@ -382,7 +385,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                             border: `1px solid ${isLive ? rgbToRgba(theme.accent, 0.55) : themeHairline(theme)}`,
                             color: isLive ? theme.accent : theme.text,
                           }}
-                          className="px-2.5 py-0.5 rounded-[7px] text-[13.5px] font-black tabular-nums min-w-[66px] text-center shrink-0"
+                          className="px-2.5 py-0.5 rounded-[7px] text-[13px] font-black tabular-nums min-w-[60px] text-center shrink-0"
                         >
                           {m.score}
                         </div>
@@ -395,7 +398,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                               className="w-[17px] h-[17px] object-contain shrink-0"
                             />
                           )}
-                          <span style={{ color: theme.text }} className="text-[13px] font-bold truncate">
+                          <span style={{ color: theme.text }} className="text-[12.5px] @min-[500px]:text-[13px] font-bold truncate">
                             {m.away}
                           </span>
                         </div>
@@ -414,22 +417,22 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
             {filteredMatches.length > 0 && (
               <div
                 style={{ color: theme.dim }}
-                className="text-[10px] mt-1 flex items-center justify-between px-0.5"
+                className="text-[10px] mt-1.5 flex items-center justify-between px-0.5 shrink-0"
               >
                 <span>
                   {selectedIdx + 1} / {filteredMatches.length}
                 </span>
-                <span>{tr('B para estatísticas, eventos e escalações', lang)}</span>
+                <span className="truncate ml-2">{tr('B para estatísticas, eventos e escalações', lang)}</span>
               </div>
             )}
           </div>
         ) : (
           /* ==================== SOFASCORE-STYLE MATCH CENTER DETAIL ==================== */
-          <div className="relative z-10 px-4 pt-2 flex flex-col">
+          <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col">
             {/* Top Match Scoreboard Card */}
             <div
-              style={{ ...modernPanelStyle(theme, 14), height: 102 }}
-              className="px-3.5 py-2 flex flex-col justify-between"
+              style={{ ...modernPanelStyle(theme, 14), minHeight: 96 }}
+              className="px-3.5 py-2 flex flex-col justify-between shrink-0"
             >
               <div className="flex items-center justify-between gap-2 text-[9.5px]">
                 <span style={{ color: theme.accent }} className="font-extrabold truncate">
@@ -441,11 +444,11 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-2 @min-[520px]:gap-3">
                 {/* Home Team */}
                 <div className="flex items-center justify-end gap-2 flex-1 min-w-0">
                   <div className="min-w-0 text-right">
-                    <div style={{ color: theme.text }} className="text-[14px] font-extrabold truncate">
+                    <div style={{ color: theme.text }} className="text-[13px] @min-[520px]:text-[14px] font-extrabold truncate">
                       {activeMatch.home}
                     </div>
                     <div className="flex items-center justify-end gap-1.5 mt-0.5">
@@ -461,7 +464,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                     <img
                       src={activeMatch.homeLogo}
                       alt=""
-                      className="w-[30px] h-[30px] object-contain shrink-0"
+                      className="w-[26px] h-[26px] @min-[520px]:w-[30px] @min-[520px]:h-[30px] object-contain shrink-0"
                     />
                   )}
                 </div>
@@ -476,7 +479,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                       }`,
                       color: activeMatch.state === 'in' ? theme.accent : theme.text,
                     }}
-                    className="px-3.5 py-0.5 rounded-[10px] text-[20px] font-black tabular-nums leading-tight"
+                    className="px-3 py-0.5 rounded-[10px] text-[18px] @min-[520px]:text-[20px] font-black tabular-nums leading-tight"
                   >
                     {activeMatch.score}
                   </div>
@@ -496,11 +499,11 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                     <img
                       src={activeMatch.awayLogo}
                       alt=""
-                      className="w-[30px] h-[30px] object-contain shrink-0"
+                      className="w-[26px] h-[26px] @min-[520px]:w-[30px] @min-[520px]:h-[30px] object-contain shrink-0"
                     />
                   )}
                   <div className="min-w-0">
-                    <div style={{ color: theme.text }} className="text-[14px] font-extrabold truncate">
+                    <div style={{ color: theme.text }} className="text-[13px] @min-[520px]:text-[14px] font-extrabold truncate">
                       {activeMatch.away}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -517,7 +520,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
             </div>
 
             {/* 3 Glowing Pill Tabs: Estatísticas | Eventos | Escalações */}
-            <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="grid grid-cols-3 gap-2 mt-2 shrink-0">
               {DETAIL_TABS.map((tab, idx) => (
                 <button
                   key={tab}
@@ -527,7 +530,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                     if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
                   }}
                   style={{ ...modernPillStyle(theme, detailTab === idx), height: 26 }}
-                  className="text-[11.5px] font-extrabold cursor-pointer transition-all"
+                  className="text-[11px] @min-[500px]:text-[11.5px] font-extrabold cursor-pointer transition-all truncate px-1.5"
                 >
                   {tr(tab, lang)}
                   {idx === 1 && detail?.events.length ? ` (${detail.events.length})` : ''}
@@ -538,8 +541,8 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
             {/* Detail Tab Body Panel */}
             <div
               ref={detailScrollRef}
-              style={{ ...modernPanelStyle(theme, 14), height: 244 }}
-              className="mt-2 px-3.5 py-2.5 overflow-y-auto kp-scroll"
+              style={{ ...modernPanelStyle(theme, 14) }}
+              className="mt-2 flex-1 min-h-0 px-3.5 py-2.5 overflow-y-auto kp-scroll"
             >
               {detailLoading ? (
                 <div

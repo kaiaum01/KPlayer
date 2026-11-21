@@ -200,7 +200,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.0.2' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.0.3' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1168,7 +1168,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.0.2' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.0.3' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1189,7 +1189,7 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipPath = path.join(__dirname, 'releases', 'KPlayer-v2.0.2-R36S.zip');
+  const r36sZipPath = path.join(__dirname, 'releases', 'KPlayer-v2.0.3-R36S.zip');
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
   app.get('/api/r36s/info', async (_req, res) => {
@@ -1203,8 +1203,8 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.0.2',
-        filename: 'KPlayer-v2.0.2-R36S.zip',
+        version: '2.0.3',
+        filename: 'KPlayer-v2.0.3-R36S.zip',
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
@@ -1217,7 +1217,7 @@ async function createServer() {
   app.get('/api/r36s/download', async (_req, res) => {
     try {
       await fs.access(r36sZipPath);
-      return res.download(r36sZipPath, 'KPlayer-v2.0.2-R36S.zip');
+      return res.download(r36sZipPath, 'KPlayer-v2.0.3-R36S.zip');
     } catch {
       return res.status(404).json({ error: 'Pacote R36S não encontrado' });
     }
@@ -1226,7 +1226,7 @@ async function createServer() {
   app.get('/api/r36s/sha256', async (_req, res) => {
     try {
       await fs.access(r36sShaPath);
-      return res.download(r36sShaPath, 'KPlayer-v2.0.2-R36S.zip.sha256');
+      return res.download(r36sShaPath, 'KPlayer-v2.0.3-R36S.zip.sha256');
     } catch {
       return res.status(404).json({ error: 'Checksum não encontrado' });
     }
@@ -1558,7 +1558,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.2' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.3' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -1669,7 +1669,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.2' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.3' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1897,7 +1897,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.2',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.3',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -1993,7 +1993,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.0.2 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.0.3 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

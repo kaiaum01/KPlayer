@@ -1,4 +1,4 @@
-# Controls / Controles — KPlayer v2.0.2
+# Controls / Controles — KPlayer v2.0.3
 
 **English:** B confirms/opens and A goes back/cancels. SELECT opens or closes Settings. START pauses/resumes active media. Software volume controls are not used; adjust volume with the console's physical/system controls.
 
@@ -6,7 +6,7 @@
 
 | Screen / Tela | Buttons / Botões |
 | --- | --- |
-| Welcome / Boas-vindas (v2.0.2 Slim) | Up/down switches between Language and Theme color dots; left/right chooses language or live color theme; B saves and continues; Y opens terms / Cima/baixo alterna entre Idioma e bolinhas de cor do Tema; esquerda/direita seleciona idioma ou tema ao vivo; B salva e continua; Y abre termos |
+| Welcome / Boas-vindas (v2.0.3 Slim) | Up/down switches between Language and Theme color dots; left/right chooses language or live color theme; B saves and continues; Y opens terms / Cima/baixo alterna entre Idioma e bolinhas de cor do Tema; esquerda/direita seleciona idioma ou tema ao vivo; B salva e continua; Y abre termos |
 | Transparency Notice / Aviso de Transparência | Shown before entering Online Radio or IPTV: B agrees and continues; Y opens full Terms of Use; A returns / Exibido antes de entrar em Rádio Online ou IPTV: B concorda e continua; Y abre os Termos completos; A volta |
 | Terms / Termos | Left/right or up/down changes page (4 pages including IPTV/Radio transparency); A returns / Direcionais mudam página (4 páginas incluindo transparência de IPTV/Rádio); A volta |
 | Dashboard | D-pad selects card (Music, Video, Files, Online Radio, IPTV, Placar da Bola); B opens; X returns to active player; Y or SELECT opens settings / Direcional escolhe o cartão; B abre; X volta ao player ativo; Y ou SELECT abre opções |

@@ -1,29 +1,29 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="KPlayer v2.0.2 — Central de Mídia Portátil para R36S" width="100%" />
+  <img src="docs/images/banner.svg" alt="KPlayer v2.0.3 — Central de Mídia Portátil para R36S" width="100%" />
 </p>
 
-<h1 align="center">KPlayer v2.0.2</h1>
+<h1 align="center">KPlayer v2.0.3</h1>
 
 <p align="center">
-  <strong>Central de mídia portátil para R36S (Principal — dArkOS / PortMaster) &amp; Android (Edição Retrato)</strong><br />
+  <strong>Central de mídia portátil para R36S (Principal — dArkOS Adaptativo) &amp; Android (Edição Adaptativa)</strong><br />
   Músicas com letras sincronizadas (.LRC) · Vídeos · Rádio Online · IPTV · <strong>Placar da Bola</strong>
 </p>
 
 <p align="center">
   <a href="README.md">English</a> ·
   <a href="docs/INSTALL.md">Instalação (R36S)</a> ·
-  <a href="docs/ANDROID.md">Edição Android (Retrato)</a> ·
+  <a href="docs/ANDROID.md">Edição Android (Adaptativa)</a> ·
   <a href="docs/CONTROLS.md">Controles</a> ·
   <a href="docs/MEDIA.md">Mídias e Letras</a> ·
   <a href="TERMS.md">Termos e Transparência</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.0.2</a> ·
+  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.0.3</a> ·
   <a href="THIRD_PARTY.md">Licenças</a>
 </p>
 
 ---
 
-## Novidades da v2.0.2
+## Novidades da v2.0.3
 
 - **Tela de Aviso de Transparência e Termos Atualizados:** antes de entrar em **Rádio Online** ou **IPTV**, o player exibe uma tela clara informando que todos os dados vêm de agregadores públicos da internet ou fontes abertas, que o KPlayer não hospeda conteúdo e que você tem total direito de inserir seus próprios links e playlists.
 - **Tela de Boot Animada (Splash Screen):** toda vez que o KPlayer liga, uma tela animada com vinil giratório, anéis de sonar, faíscas orbitais, equalizador de 28 barras e barra de progresso pré-carrega suas mídias, rádios, IPTV e jogos do Placar da Bola de uma só vez — deixando a navegação interna instantânea e sem travamentos.
@@ -34,8 +34,8 @@
   - **Músicas:** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
   - **Vídeos:** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
 - **IPTV desbloqueado e categorizado (Canais · Filmes · Séries · Usuário):** sem limite de canais/filmes/episódios e com carregamento sob demanda categoria por categoria — **245 Canais de TV** em 12 categorias (`catalogo.txt` + reservas em `https://canais-saimo.pages.dev/`), **Filmes** (~30.000+ filmes por destaques, animes/kids, gêneros TMDB e A–Z), **Séries** (~13.000+ séries com seleção completa de temporadas e todos os episódios de `https://filmes-saimo.pages.dev/`) e **IPTV do Usuário** (teclado virtual para digitar URLs `.m3u`/`.m3u8` ou leitura automática de arquivos na pasta `ports/kplayer/iptv_usuario/`).
-- **Capa do Port e Metadados XML para dArkOS / EmulationStation:** o pacote `KPlayer-v2.0.2-R36S.zip` já inclui a capa oficial 640×480 (`images/KPlayer-image.png`), `gamelist.xml` pronto para uso e `kplayer/KPlayer-metadata.xml` para mesclar com seus outros ports.
-- **Nova Edição Android (Modo Retrato — Lado a Lado):** aplicativo Android nativo em **Kotlin + Jetpack Compose + Material 3 + Media3 (ExoPlayer)** na pasta `android/`, mantendo a edição **R36S como principal** e trazendo um player de música e entretenimento moderno em modo retrato com **todas as funções do KPlayer v2.0.2**, sem as limitações de tela 640×480 ou ausência de toque do console. Veja o guia completo em [docs/ANDROID.md](docs/ANDROID.md).
+- **Capa do Port e Metadados XML para dArkOS / EmulationStation:** o pacote `KPlayer-v2.0.3-R36S.zip` já inclui a capa oficial 640×480 (`images/KPlayer-image.png`), `gamelist.xml` pronto para uso e `kplayer/KPlayer-metadata.xml` para mesclar com seus outros ports.
+- **R36S & Android Adaptativos ao Dispositivo (Lado a Lado):** ambas as edições se adaptam automaticamente à tela do usuário. A edição principal de **R36S** escala de 640×480 até monitores 1080p, enquanto o app nativo **Android** (`android/` — **Kotlin + Jetpack Compose + Material 3 + Media3**) adapta-se a smartphones em retrato/paisagem, dobráveis e tablets (Barra Inferior ↔ Trilho Lateral, grades multi-coluna e Now Playing em 2 painéis) com paridade total da v2.0.3. Veja [docs/ANDROID.md](docs/ANDROID.md).
 
 ---
 
@@ -43,9 +43,9 @@
 
 | Tela de Boot Animada | Boas-Vindas Slim (Idioma + Cores) |
 | :---: | :---: |
-| ![Splash animada v2.0.2](docs/images/readme-splash.png) | ![Boas-vindas slim v2.0.2](docs/images/readme-welcome.png) |
+| ![Splash animada v2.0.3](docs/images/readme-splash.png) | ![Boas-vindas slim v2.0.3](docs/images/readme-welcome.png) |
 | **Dashboard Principal** | **Player de Música & Letras (.LRC)** |
-| ![Dashboard v2.0.2](docs/images/readme-home.png) | ![Player de música v2.0.2](docs/images/readme-audio.png) |
+| ![Dashboard v2.0.3](docs/images/readme-home.png) | ![Player de música v2.0.3](docs/images/readme-audio.png) |
 | **Placar da Bola — Jogos ao Vivo** | **Placar da Bola — Estatísticas da Partida** |
 | ![Placar da Bola](docs/images/readme-football.png) | ![Detalhes da partida](docs/images/readme-football-detail.png) |
 | **Rádio Online** | **IPTV (Canais · Filmes · Séries · Usuário)** |
@@ -53,13 +53,13 @@
 | **Pastas Dedicadas (SD1 / SD2)** | **Player de Vídeo (libVLC)** |
 | ![Biblioteca dedicada](docs/images/readme-library.png) | ![Player de vídeo](docs/images/readme-video.png) |
 | **Configurações & 7 Temas** | **Capa Oficial do Port (dArkOS / EmulationStation)** |
-| ![Opções e temas](docs/images/readme-options.png) | ![Capa KPlayer v2.0.2](docs/images/port-cover.png) |
+| ![Opções e temas](docs/images/readme-options.png) | ![Capa KPlayer v2.0.3](docs/images/port-cover.png) |
 
 ---
 
 ## Instalação no R36S (dArkOS / PortMaster)
 
-1. Baixe **`KPlayer-v2.0.2-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
+1. Baixe **`KPlayer-v2.0.3-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
 2. Extraia o arquivo e copie para `/roms/ports/` (ou `/roms2/ports/` no SD2):
    - `KPlayer.sh`
    - pasta `kplayer/`
@@ -74,24 +74,24 @@
 | **Rádios pessoais** | `ports/kplayer/radios_usuario/` | — | `.pls`, `.m3u`, `.m3u8`, `.asx` |
 | **IPTV do Usuário** | `ports/kplayer/iptv_usuario/` | — | `.m3u`, `.m3u8`, `.txt` (ou link pelo teclado virtual) |
 
-4. Reinicie o EmulationStation (ou atualize a lista de jogos) e abra **Ports → KPlayer v2.0.2**.
+4. Reinicie o EmulationStation (ou atualize a lista de jogos) e abra **Ports → KPlayer v2.0.3**.
 
 > **Requisitos (R36S):** R36S ARM64 com dArkOS e PortMaster, SDL2, ALSA e plugins VLC compatíveis em `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio Online, IPTV e Placar da Bola exigem conexão com a internet. Veja o guia completo em [docs/INSTALL.md](docs/INSTALL.md).
 
 ---
 
-## Edição Android v2.0.2 (Modo Retrato — Lado a Lado)
+## Edição Android v2.0.3 (Adaptativa — Lado a Lado)
 
-Além da edição principal de **R36S**, o repositório mantém lado a lado o **KPlayer Android** (`android/`), um aplicativo nativo em **modo retrato** projetado para smartphones Android 8.0+ (API 26–35) com visual moderno e paridade total de recursos:
+Além da edição principal de **R36S**, o repositório mantém lado a lado o **KPlayer Android** (`android/`), um aplicativo nativo **adaptativo** para smartphones Android 8.0+ (API 26–35) em retrato ou paisagem, dobráveis e tablets com visual moderno e paridade total de recursos:
 
-- **Player de Música Moderno:** Mini-Player flutuante persistente, tela cheia **Now Playing**, capa em alta resolução, **Letras sincronizadas (`.LRC`) com toque para pular**, Fila, Favoritas, velocidade de reprodução (`0.75x–1.5x`), Timer de Sono e **Equalizador de hardware (5 bandas / 6 presets)**.
-- **Vídeos, IPTV Desbloqueado, Rádio Online e Placar da Bola:** todas as mesmas fontes e recursos do R36S — incluindo os **245 canais de TV** em 12 categorias, **Filmes e Séries** completos sob demanda, **IPTV do Usuário** (teclado nativo + importação `.m3u`), **Rádio Online (Radio-Browser)**, **Placar da Bola** (Estatísticas, Eventos e Escalações), **Tela de Aviso de Transparência**, **7 temas** e **3 idiomas**.
-- **Instalação:** baixe **`KPlayer-v2.0.2-Android.apk`** na aba **[Releases](../../releases)** (compilado automaticamente junto com o ZIP do R36S pelo GitHub Actions).
+- **Player de Música Moderno e Adaptativo:** alterna automaticamente entre Barra Inferior de 5 abas em celulares retrato (`< 600dp`) e Trilho Lateral (`≥ 600dp` compacto / `≥ 840dp` expandido) em paisagem, dobráveis e tablets — com Mini-Player flutuante, **Now Playing** em 1 ou 2 painéis, capa em alta resolução, **Letras sincronizadas (`.LRC`) com toque para pular**, Fila, Favoritas, velocidade (`0.75x–1.5x`), Timer de Sono e **Equalizador de hardware (5 bandas / 6 presets)**.
+- **Vídeos, IPTV Desbloqueado, Rádio Online e Placar da Bola:** grades responsivas em 1, 2 ou 3 colunas com todas as mesmas fontes e recursos do R36S — incluindo os **245 canais de TV** em 12 categorias, **Filmes e Séries** completos sob demanda, **IPTV do Usuário** (teclado nativo + importação `.m3u`), **Rádio Online (Radio-Browser)**, **Placar da Bola** (Estatísticas, Eventos e Escalações), **Tela de Aviso de Transparência**, **7 temas** e **3 idiomas**.
+- **Instalação:** baixe **`KPlayer-v2.0.3-Android.apk`** na aba **[Releases](../../releases)** (compilado automaticamente junto com o ZIP do R36S pelo GitHub Actions).
 
 | Edição | Plataforma | Motor | Empacotamento |
 | :--- | :--- | :--- | :--- |
-| **KPlayer R36S (Principal)** | R36S / dArkOS / PortMaster (640×480, D-Pad) | C + SDL2 + libVLC (ARM64) | `KPlayer-v2.0.2-R36S.zip` |
-| **KPlayer Android (Lado a Lado)** | Android 8.0+ (Modo Retrato, Toque) | Kotlin + Jetpack Compose + Media3 | `KPlayer-v2.0.2-Android.apk` |
+| **KPlayer R36S (Principal)** | R36S / dArkOS / PortMaster (Adaptativo, D-Pad) | C + SDL2 + libVLC (ARM64) | `KPlayer-v2.0.3-R36S.zip` |
+| **KPlayer Android (Lado a Lado)** | Android 8.0+ (Adaptativo: Celular, Paisagem, Dobrável & Tablet) | Kotlin + Jetpack Compose + Media3 | `KPlayer-v2.0.3-Android.apk` |
 
 Veja a documentação completa, permissões e instruções de compilação em **[docs/ANDROID.md](docs/ANDROID.md)**.
 

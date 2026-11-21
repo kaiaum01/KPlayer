@@ -1,13 +1,20 @@
-# KPlayer v2.0.2 — R36S (Principal) & Android (Retrato)
+# KPlayer v2.0.3 — R36S & Android (Ambos Adaptativos)
 
-Central de mídia portátil para **R36S (Principal — dArkOS / PortMaster)** em C + SDL2 + libVLC (640×480, ARM64) e nova edição **Android (Lado a Lado — Modo Retrato)** em Kotlin + Jetpack Compose + Media3 (Android 8.0+).
+Central de mídia portátil para **R36S (Principal — dArkOS / PortMaster)** em C + SDL2 + libVLC (adaptativo à tela do dispositivo, ARM64) e edição **Android (Lado a Lado — Adaptativo)** em Kotlin + Jetpack Compose + Media3 (Android 8.0+, celulares retrato/paisagem, dobráveis e tablets).
 
 ---
 
-## Novidades da v2.0.2
+## Novidades da v2.0.3
 
-### Nova Edição Android (Modo Retrato — Lado a Lado)
-- **Player moderno em modo retrato (`KPlayer-v2.0.2-Android.apk`):** desenvolvido lado a lado sem substituir o R36S, trazendo Mini-Player flutuante, tela cheia **Now Playing**, **Letras `.LRC` com toque para pular**, Equalizador de hardware (5 bandas / 6 presets), velocidade de reprodução (`0.75x–1.5x`), Timer de Sono, varredura nativa via `MediaStore` (áudio e vídeo) e paridade completa com todas as funções do KPlayer v2.0.2 (IPTV, Rádio Online, Placar da Bola, 7 temas, 3 idiomas e Aviso de Transparência).
+### R36S Adaptativo ao Dispositivo do Usuário
+- **Escala automática de tela no binário nativo (`source/kplayer.c`):** detecta a resolução real do console ou monitor externo (`SDL_GetDesktopDisplayMode` / `SDL_RenderSetLogicalSize`), aplica filtragem linear e ajusta a decodificação de vídeo dinamicamente até Full HD (`1920×1080`) mantendo proporção fiel em telas 640×480 (R36S), 720p, 1080p ou ultrawide.
+- **Palco web adaptativo:** modo `Auto` padrão que preenche a tela do dispositivo do usuário (com atalhos rápidos para `4:3`, `1:1` e `16:9`).
+- **Compilação e testes nativos blindados:** corrigido o aviso `-Wformat-truncation` no leitor de categorias IPTV (`iptv_copy_str`) e garantido o reset determinístico de cache no teste com sanitizadores (`ASan`/`UBSan`).
+
+### Edição Android Adaptativa (Celulares, Paisagem, Dobráveis & Tablets — Lado a Lado)
+- **Layout 100% adaptativo (`KPlayer-v2.0.3-Android.apk`):** orientação desbloqueada (`fullUser`) e suporte multi-janela redimensionável. Em celulares retrato (`< 600dp`), utiliza Barra Inferior de 5 abas e Mini-Player flutuante; em paisagem, dobráveis e tablets (`≥ 600dp` / `≥ 840dp`), alterna automaticamente para **Trilho de Navegação Lateral**, grades multi-coluna (`LazyVerticalGrid` de 2–3 colunas) em Música, IPTV, Rádio e Placar, e **Now Playing em 2 painéis** (disco + controles à esquerda; letras `.LRC`, fila e equalizador ao vivo à direita).
+- **Preview web Android adaptativo:** alternância rápida entre `Auto` (preenche o dispositivo), `Celular`, `Paisagem` e `Tablet`.
+- **Paridade completa com o KPlayer v2.0.3:** letras `.LRC` com toque para pular, Equalizador de hardware (5 bandas / 6 presets), velocidade (`0.75x–1.5x`), Timer de Sono, varredura nativa via `MediaStore`, IPTV desbloqueado, Rádio Online, Placar da Bola, 7 temas, 3 idiomas e Aviso de Transparência.
 
 ### Aviso de Transparência e Termos de Uso Atualizados
 - **Tela de Aviso de Transparência antes de entrar em Rádio Online ou IPTV:** deixa explícito ao usuário que todos os dados de IPTV e Rádio vêm de **agregadores públicos da internet ou fontes abertas**, que o KPlayer é apenas um reprodutor (não hospeda conteúdo) e que **você sempre tem o direito de colocar seu próprio link ou playlist**.
@@ -31,18 +38,18 @@ Central de mídia portátil para **R36S (Principal — dArkOS / PortMaster)** em
 ## Como Instalar
 
 ### R36S (Edição Principal)
-1. Baixe **`KPlayer-v2.0.2-R36S.zip`** nos anexos desta release.
+1. Baixe **`KPlayer-v2.0.3-R36S.zip`** nos anexos desta release.
 2. Extraia e copie para `/roms/ports/` (ou `/roms2/ports/` no SD2):
    - `KPlayer.sh`
    - pasta `kplayer/`
    - `images/KPlayer-image.png`
    - `gamelist.xml` *(ou mescle `kplayer/KPlayer-metadata.xml` no seu `gamelist.xml` atual)*
 3. Coloque suas músicas em `/roms/bgmusic` (ou `/roms2/bgmusic`), vídeos em `/roms/videos` (ou `/roms2/videos`), suas playlists IPTV em `ports/kplayer/iptv_usuario/` e suas rádios em `ports/kplayer/radios_usuario/`.
-4. Abra **Ports → KPlayer v2.0.2** no R36S.
+4. Abra **Ports → KPlayer v2.0.3** no R36S.
 
-### Android (Edição Retrato — Lado a Lado)
-1. Baixe **`KPlayer-v2.0.2-Android.apk`** nos anexos desta release (Android 8.0+ / API 26+).
-2. Instale o APK no smartphone e conceda a permissão de mídia local (áudio e vídeos).
+### Android (Edição Adaptativa — Lado a Lado)
+1. Baixe **`KPlayer-v2.0.3-Android.apk`** nos anexos desta release (Android 8.0+ / API 26+, celulares retrato/paisagem, dobráveis e tablets).
+2. Instale o APK no dispositivo e conceda a permissão de mídia local (áudio e vídeos).
 3. Consulte o guia completo em **[docs/ANDROID.md](../docs/ANDROID.md)**.
 
 > **Importante:** No R36S, faça backup de `settings.cfg`, `preferences.cfg`, `favorites.cfg` e `radio-favorites.tsv` antes de atualizar uma instalação anterior. Consulte os termos e transparência completos em **[TERMS.md](../TERMS.md)**.
@@ -51,7 +58,7 @@ Central de mídia portátil para **R36S (Principal — dArkOS / PortMaster)** em
 
 ## English Summary
 
-**KPlayer v2.0.2 — R36S (Primary) & Android (Portrait Companion):**
-- **New Native Android Portrait Edition (`KPlayer-v2.0.2-Android.apk`):** Modern touch-first portrait app (Kotlin + Jetpack Compose + Media3) shipped side-by-side with the primary R36S package, with full feature parity (local Music/Video, tap-to-seek `.LRC` lyrics, 5-band EQ, 245-channel IPTV + Movies + Series + User IPTV, Online Radio, Placar da Bola, 7 themes, 3 languages, and Transparency Notice).
-- **Transparency Notice & Updated Terms (`TERMS.md`):** Displays an in-app Transparency Notice before entering **Online Radio** or **IPTV**, clearly stating that all IPTV and Radio listings come from public internet aggregators or open sources, KPlayer hosts no content, and every user has the right to add their own links/playlists.
-- **Unlocked Category-by-Category IPTV (245 TV Channels + Movies + Series + User IPTV)** and **Animated Boot Splash, Slim Welcome Screen, Placar da Bola Match Center, Dedicated SD1/SD2 Media Folders, and dArkOS Cover/XML Metadata** for R36S.
+**KPlayer v2.0.3 — R36S & Android (Both Adaptive):**
+- **Adaptive R36S Display & Cross-Device Scaling:** Native C/SDL2 display detection (`SDL_WINDOW_FULLSCREEN_DESKTOP` + `SDL_RenderSetLogicalSize`) and adaptive video decode up to 1080p, paired with a responsive web preview stage (`Auto`, `4:3`, `1:1`, `16:9`).
+- **Adaptive Android Edition (`KPlayer-v2.0.3-Android.apk`):** Unlocked `fullUser` orientation and resizable multi-window support (Kotlin + Jetpack Compose + Media3) adapting across portrait phones, landscape screens, foldables, and tablets (Bottom Nav ↔ Left Navigation Rail, multi-column grids, and 2-pane Now Playing) with full feature parity alongside `KPlayer-v2.0.3-R36S.zip`.
+- **Native CI & Sanitizer Hardening:** Resolved `-Wformat-truncation` in `source/iptv.h` and ensured deterministic cache reset in `tests/test_native.c` under ASan/UBSan.

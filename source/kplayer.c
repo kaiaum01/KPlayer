@@ -50,6 +50,84 @@
 #define CACHE 96
 static SDL_Window *window;
 static SDL_Renderer *renderer;
+static int dev_w = W, dev_h = H;
+/* 0 = Auto (Adaptativo sem barras), 1 = Preencher tela, 2 = Clássico 4:3. */
+static int display_mode = 0;
+static bool display_adaptive_active = false;
+static bool display_preview_lock = false;
+static void begin_full_screen_pass(void) {
+  if (!renderer || !display_adaptive_active) return;
+  if (SDL_RenderSetScale) SDL_RenderSetScale(renderer, 1.0f, 1.0f);
+  if (SDL_RenderSetViewport) {
+    SDL_Rect full = {0, 0, dev_w, dev_h};
+    SDL_RenderSetViewport(renderer, &full);
+  }
+}
+static void begin_ui_pass(void) {
+  if (!renderer || !display_adaptive_active) return;
+  if (display_mode == 1) {
+    if (SDL_RenderSetViewport) {
+      SDL_Rect full = {0, 0, dev_w, dev_h};
+      SDL_RenderSetViewport(renderer, &full);
+    }
+    if (SDL_RenderSetScale)
+      SDL_RenderSetScale(renderer, (float)dev_w / (float)W,
+                         (float)dev_h / (float)H);
+    return;
+  }
+  float sx = (float)dev_w / (float)W;
+  float sy = (float)dev_h / (float)H;
+  float sc = sx < sy ? sx : sy;
+  if (sc < 0.25f) sc = 0.25f;
+  int uw = (int)lroundf((float)W * sc);
+  int uh = (int)lroundf((float)H * sc);
+  if (uw > dev_w) uw = dev_w;
+  if (uh > dev_h) uh = dev_h;
+  if (SDL_RenderSetScale) SDL_RenderSetScale(renderer, sc, sc);
+  if (SDL_RenderSetViewport) {
+    /* SDL_RenderSetViewport expects logical/scaled units when scale is active. */
+    SDL_Rect vp = {(int)lroundf((float)(dev_w - uw) / (2.0f * sc)),
+                   (int)lroundf((float)(dev_h - uh) / (2.0f * sc)), W, H};
+    SDL_RenderSetViewport(renderer, &vp);
+  }
+}
+static void refresh_device_display(void) {
+  if (!renderer) return;
+  int out_w = 0, out_h = 0;
+  if (SDL_GetRendererOutputSize &&
+      SDL_GetRendererOutputSize(renderer, &out_w, &out_h) == 0 &&
+      out_w >= 240 && out_h >= 240) {
+    dev_w = out_w;
+    dev_h = out_h;
+  } else if (window && SDL_GetWindowSize) {
+    SDL_GetWindowSize(window, &out_w, &out_h);
+    if (out_w >= 240 && out_h >= 240) {
+      dev_w = out_w;
+      dev_h = out_h;
+    }
+  } else {
+    const char *ew = getenv("KPLAYER_DISPLAY_W");
+    const char *eh = getenv("KPLAYER_DISPLAY_H");
+    if (ew && eh) {
+      int pw = atoi(ew), ph = atoi(eh);
+      if (pw >= 240 && ph >= 240) {
+        dev_w = pw;
+        dev_h = ph;
+      }
+    }
+  }
+  if (display_preview_lock || display_mode == 2 ||
+      !SDL_RenderSetScale || !SDL_RenderSetViewport) {
+    display_adaptive_active = false;
+    if (SDL_RenderSetViewport) SDL_RenderSetViewport(renderer, NULL);
+    if (SDL_RenderSetScale) SDL_RenderSetScale(renderer, 1.0f, 1.0f);
+    SDL_RenderSetLogicalSize(renderer, W, H);
+    return;
+  }
+  SDL_RenderSetLogicalSize(renderer, 0, 0);
+  display_adaptive_active = true;
+  begin_ui_pass();
+}
 static libvlc_instance_t *engine;
 static libvlc_media_player_t *player;
 static volatile sig_atomic_t running = 1;
@@ -519,11 +597,15 @@ static unsigned format_video(void **opaque, char *chroma, unsigned *width,
                              unsigned *lines) {
   (void)opaque;
   unsigned w = *width, h = *height;
+  unsigned max_w = (unsigned)(dev_w > W ? dev_w : W);
+  unsigned max_h = (unsigned)(dev_h > H ? dev_h : H);
+  if (max_w > 1920) max_w = 1920;
+  if (max_h > 1080) max_h = 1080;
   if (!w || !h) {
-    w = W;
-    h = H;
+    w = max_w;
+    h = max_h;
   }
-  double factor = fmin((double)W / w, (double)H / h);
+  double factor = fmin((double)max_w / w, (double)max_h / h);
   if (factor > 1)
     factor = 1;
   w = (unsigned)fmax(2, floor(w * factor));
@@ -811,9 +893,9 @@ static void track_label(bool subtitle, char *out, size_t n) {
 static const int option_groups[][8] = {
   {0, 1, 2, 3, 4, 12, 16, -1},
   {7, 13, 14, 17, -1, -1, -1, -1},
-  {5, 9, 11, 15, 6, 8, -1, -1}
+  {5, 9, 18, 11, 15, 6, 8, -1}
 };
-static const int option_group_counts[] = {7, 4, 6};
+static const int option_group_counts[] = {7, 4, 7};
 static const char *option_group_names[] = {"Reprodução", "Biblioteca", "Geral"};
 static int option_group_for(int id) {
   for (int g = 0; g < 3; g++)
@@ -829,7 +911,7 @@ static void draw_options(void) {
       tr("Velocidade"),    tr("Formato da imagem"), tr("Faixa de áudio"),
       tr("Legendas"),      tr("Modo de repetição"), tr("Idioma"),
       tr("Termos de uso"), tr("Favoritar faixa"),   tr("Sair do KPlayer"),
-      tr("Tema"), "", tr("Localização por IP"), tr("Aleatório"), tr("Minhas favoritas"), tr("Retomar mídia"), tr("Timer de sono"), tr("Equalizador"), tr("IPTV")};
+      tr("Tema"), "", tr("Localização por IP"), tr("Aleatório"), tr("Minhas favoritas"), tr("Retomar mídia"), tr("Timer de sono"), tr("Equalizador"), tr("IPTV"), tr("Adaptação de tela")};
   int group = option_group_for(option);
   for (int g = 0; g < 3; g++) {
     int x = 24 + g * 199;
@@ -896,6 +978,14 @@ static void draw_options(void) {
         const char *name = eq_name_fn((unsigned)eq_choice - 1);
         snprintf(value, sizeof(value), "%s", name ? name : "-");
       } else snprintf(value, sizeof(value), "%s", tr("Desativada"));
+      break;
+    case 18:
+      if (display_mode == 0)
+        snprintf(value, sizeof(value), "Auto (%dx%d)", dev_w, dev_h);
+      else if (display_mode == 1)
+        snprintf(value, sizeof(value), "%s", tr("Preencher tela"));
+      else
+        snprintf(value, sizeof(value), "%s", tr("Clássico 4:3"));
       break;
     default:
       snprintf(value, sizeof(value), "%s", tr("Abrir"));
@@ -1019,6 +1109,11 @@ static void change_option(int dir) {
       iptv_open();
     else
       open_stream_notice(8, 2);
+    break;
+  case 18:
+    display_mode = (display_mode + dir + 3) % 3;
+    refresh_device_display();
+    save_settings();
     break;
   }
   menu_dirty = true;
@@ -1328,8 +1423,8 @@ static void save_settings(void) {
   FILE *f = fopen("settings.tmp", "w");
   if (!f)
     return;
-  fprintf(f, "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\nlocation %d\nrepeat %d\nshuffle %d\n", fit,
-          loop_video, rate, theme_index, network_location_enabled ? 1 : 0, repeat_mode, shuffle_enabled ? 1 : 0);
+  fprintf(f, "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\nlocation %d\nrepeat %d\nshuffle %d\ndisplay %d\n", fit,
+          loop_video, rate, theme_index, network_location_enabled ? 1 : 0, repeat_mode, shuffle_enabled ? 1 : 0, display_mode);
   if (fclose(f) == 0)
     rename("settings.tmp", "settings.cfg");
 }
@@ -1338,7 +1433,7 @@ static void load_settings(void) {
   if (!f)
     return;
   char line[160];
-  int legacy_setting, ft, loop, saved_theme = 0, saved_location = 0, saved_repeat = -1, saved_shuffle = 0;
+  int legacy_setting, ft, loop, saved_theme = 0, saved_location = 0, saved_repeat = -1, saved_shuffle = 0, saved_display = 0;
   float r;
   bool valid = false;
   if (fgets(line, sizeof(line), f)) {
@@ -1348,6 +1443,7 @@ static void load_settings(void) {
       if (valid && fscanf(f, "\nlocation %d", &saved_location) != 1) saved_location = 0;
       if (valid && fscanf(f, "\nrepeat %d", &saved_repeat) != 1) saved_repeat = -1;
       if (valid && fscanf(f, "\nshuffle %d", &saved_shuffle) != 1) saved_shuffle = 0;
+      if (valid && fscanf(f, "\ndisplay %d", &saved_display) != 1) saved_display = 0;
     } else
       valid = sscanf(line, "%d %d %d %f", &legacy_setting, &ft, &loop, &r) == 4;
   }
@@ -1358,9 +1454,11 @@ static void load_settings(void) {
     repeat_mode = saved_repeat >= 0 && saved_repeat <= 2 ? saved_repeat : loop;
     loop_video = repeat_mode == 1;
     shuffle_enabled = saved_shuffle == 1;
+    display_mode = saved_display >= 0 && saved_display <= 2 ? saved_display : 0;
     rate = r;
     apply_theme(saved_theme);
     network_location_enabled = saved_location == 1;
+    refresh_device_display();
   }
   fclose(f);
 }
@@ -1396,9 +1494,26 @@ int main(int argc, char **argv) {
   }
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
   SDL_ShowCursor(SDL_DISABLE);
+  display_preview_lock = preview;
+  int win_w = W, win_h = H;
+  Uint32 win_flags = preview ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP;
+  if (!preview && getenv("KPLAYER_WINDOWED")) {
+    win_flags = SDL_WINDOW_RESIZABLE;
+    const char *ew = getenv("KPLAYER_DISPLAY_W");
+    const char *eh = getenv("KPLAYER_DISPLAY_H");
+    if (ew && eh) {
+      int pw = atoi(ew), ph = atoi(eh);
+      if (pw >= 320 && ph >= 240) { win_w = pw; win_h = ph; }
+    }
+  } else if (!preview && SDL_GetCurrentDisplayMode) {
+    SDL_DisplayMode dm;
+    if (SDL_GetCurrentDisplayMode(0, &dm) == 0 && dm.w >= 240 && dm.h >= 240) {
+      win_w = dm.w;
+      win_h = dm.h;
+    }
+  }
   window = SDL_CreateWindow("K PLAYER", SDL_WINDOWPOS_CENTERED,
-                            SDL_WINDOWPOS_CENTERED, W, H,
-                            preview ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+                            SDL_WINDOWPOS_CENTERED, win_w, win_h, win_flags);
   if (!window) {
     fprintf(stderr, "Janela SDL: %s\n", SDL_GetError());
     SDL_Quit();
@@ -1414,7 +1529,7 @@ int main(int argc, char **argv) {
     SDL_Quit();
     return 1;
   }
-  SDL_RenderSetLogicalSize(renderer, W, H);
+  refresh_device_display();
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
   kp_sprites_load();
   if (!load_font()) {
@@ -1567,8 +1682,11 @@ int main(int argc, char **argv) {
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) {
         if (!radio_play_is_busy()) running = 0;
-      }
-      else if (e.type == SDL_KEYDOWN)
+      } else if (e.type == SDL_WINDOWEVENT &&
+                 (e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                  e.window.event == SDL_WINDOWEVENT_RESIZED)) {
+        refresh_device_display();
+      } else if (e.type == SDL_KEYDOWN)
         key(e.key.keysym.sym, e.key.repeat != 0);
     }
     radio_poll_play();

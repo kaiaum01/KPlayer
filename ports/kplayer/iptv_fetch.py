@@ -29,7 +29,7 @@ import urllib.request
 
 CANAIS_BASE = "https://canais-saimo.pages.dev/"
 FILMES_BASE = "https://filmes-saimo.pages.dev/"
-UA = "KPlayer-R36S/2.0.2"
+UA = "KPlayer-R36S/2.0.3"
 
 CACHE_DIR = Path("iptv/.cache")
 USER_DIR = Path("iptv_usuario")

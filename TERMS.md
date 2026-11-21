@@ -1,12 +1,12 @@
-# Termos de Uso e Transparência — KPlayer v2.0.2
+# Termos de Uso e Transparência — KPlayer v2.0.3
 
-> **[English version below](#terms-of-use--transparency--kplayer-v202)**
+> **[English version below](#terms-of-use--transparency--kplayer-v203)**
 
 ---
 
 ## 1. Natureza do Aplicativo
 
-O **KPlayer v2.0.2** é estritamente um **reprodutor de mídia independente** (músicas locais, vídeos locais, Rádio Online, listas IPTV e Placar da Bola) desenvolvido para o console portátil **R36S (Principal — dArkOS / PortMaster)**, smartphones **Android (Edição Retrato)** e interface web de pré-visualização.
+O **KPlayer v2.0.3** é estritamente um **reprodutor de mídia independente** (músicas locais, vídeos locais, Rádio Online, listas IPTV e Placar da Bola) desenvolvido para o console portátil **R36S (Principal — dArkOS / PortMaster)**, smartphones **Android (Edição Retrato)** e interface web de pré-visualização.
 
 - O KPlayer **não hospeda, não armazena, não retransmite e não comercializa** nenhum canal de TV, filme, série ou estação de rádio.
 - O aplicativo funciona exclusivamente como cliente reprodutor (*player*) de arquivos locais do usuário e endereços públicos informados ou consultados na internet.
@@ -49,11 +49,11 @@ Antes de entrar nas funções de **IPTV** ou **Rádio Online**, o KPlayer exibe 
 
 ---
 
-# Terms of Use & Transparency — KPlayer v2.0.2
+# Terms of Use & Transparency — KPlayer v2.0.3
 
 ## 1. Nature of the Application
 
-**KPlayer v2.0.2** is strictly an **independent media player** (local music, local video, Online Radio, IPTV playlists, and Placar da Bola) built for the **R36S handheld console (Primary — dArkOS / PortMaster)**, **Android smartphones (Portrait Edition)**, and web preview interface.
+**KPlayer v2.0.3** is strictly an **independent media player** (local music, local video, Online Radio, IPTV playlists, and Placar da Bola) built for the **R36S handheld console (Primary — dArkOS / PortMaster)**, **Android smartphones (Portrait Edition)**, and web preview interface.
 
 - KPlayer **does not host, store, rebroadcast, or sell** any TV channel, movie, series, or radio stream.
 - The software acts solely as a client media player for local files and publicly reachable stream URLs.

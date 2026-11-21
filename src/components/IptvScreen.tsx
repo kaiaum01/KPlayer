@@ -453,7 +453,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
   const visibleItems = filteredItems.slice(0, visibleChunk);
 
   return (
-    <div className="w-full h-full relative overflow-hidden">
+    <div className="w-full h-full relative overflow-hidden flex flex-col">
       <ModernBackdrop theme={theme} />
       <HeaderBar theme={theme} section={tr('IPTV', language)} location={locationLabel} />
 
@@ -465,62 +465,55 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         onChange={(e) => handleUploadUserFile(e.target.files)}
       />
 
-      {/* Title + Source Subtitle */}
-      <div
-        style={{ left: 20, top: 38, width: 230 }}
-        className="absolute z-10 flex flex-col leading-tight"
-      >
-        <div className="flex items-baseline gap-2">
-          <span style={{ color: theme.text }} className="text-[19px] font-extrabold truncate">
-            {tr(activeSource.label, language)}
-          </span>
-          {totalSourceCount > 0 && (
-            <span style={{ color: theme.accent }} className="text-[11px] font-bold shrink-0">
-              {totalSourceCount.toLocaleString('pt-BR')}
+      {/* Responsive Title + Source Tabs Header */}
+      <div className="relative z-10 px-4 pt-2 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="flex flex-col leading-tight min-w-0">
+          <div className="flex items-baseline gap-2">
+            <span style={{ color: theme.text }} className="text-[17px] @min-[520px]:text-[19px] font-extrabold truncate">
+              {tr(activeSource.label, language)}
             </span>
-          )}
+            {totalSourceCount > 0 && (
+              <span style={{ color: theme.accent }} className="text-[11px] font-bold shrink-0">
+                {totalSourceCount.toLocaleString('pt-BR')}
+              </span>
+            )}
+          </div>
+          <span style={{ color: theme.dim }} className="text-[9.5px] truncate mt-0.5 hidden @min-[480px]:block">
+            {activeSource.subtitle}
+          </span>
         </div>
-        <span style={{ color: theme.dim }} className="text-[9.5px] truncate mt-0.5">
-          {activeSource.subtitle}
-        </span>
-      </div>
 
-      {/* 4 Source Tabs: Canais | Filmes | Séries | Usuário */}
-      <div
-        style={{ right: 18, top: 44 }}
-        className="absolute z-10 flex items-center gap-1.5"
-      >
-        {SOURCES.map((src, idx) => {
-          const active = idx === sourceIdx;
-          return (
-            <button
-              key={src.key}
-              type="button"
-              onClick={() => setSourceIdx(idx)}
-              style={{
-                ...modernPillStyle(theme, active),
-                height: 24,
-                paddingLeft: 10,
-                paddingRight: 10,
-              }}
-              className="text-[11px] font-bold cursor-pointer transition-all"
-            >
-              {tr(src.label, language)}
-            </button>
-          );
-        })}
+        {/* 4 Source Tabs: Canais | Filmes | Séries | Usuário */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {SOURCES.map((src, idx) => {
+            const active = idx === sourceIdx;
+            return (
+              <button
+                key={src.key}
+                type="button"
+                onClick={() => setSourceIdx(idx)}
+                style={{
+                  ...modernPillStyle(theme, active),
+                  height: 24,
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                }}
+                className="text-[10.5px] @min-[520px]:text-[11px] font-bold cursor-pointer transition-all"
+              >
+                {tr(src.label, language)}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ==================== STEP 1: CATEGORIES VIEW ==================== */}
       {view === 'categories' && (
-        <div
-          style={{ left: 20, top: 80, width: 600, height: 348 }}
-          className="absolute z-10 flex flex-col"
-        >
+        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col">
           {/* User IPTV actions bar (Keyboard URL + Local folder upload) */}
           {activeSource.key === 'usuario' ? (
             <div className="mb-2 space-y-1.5 shrink-0">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -551,7 +544,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                 >
                   + {tr('Arquivo (.m3u)', language)}
                 </button>
-                <div style={{ color: theme.muted }} className="text-[10px] truncate flex-1 text-right">
+                <div style={{ color: theme.muted }} className="text-[10px] truncate flex-1 text-right hidden @min-[560px]:block">
                   Pasta: ports/kplayer/iptv_usuario/
                 </div>
               </div>
@@ -587,11 +580,11 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
               )}
             </div>
           ) : (
-            <div className="flex items-center justify-between mb-1.5 shrink-0">
-              <span style={{ color: theme.muted }} className="text-[12px] font-semibold">
+            <div className="flex items-center justify-between mb-1.5 shrink-0 gap-2">
+              <span style={{ color: theme.muted }} className="text-[12px] font-semibold truncate">
                 {tr('Escolha a categoria', language)} ({categories.length})
               </span>
-              <span style={{ color: theme.dim }} className="text-[10px]">
+              <span style={{ color: theme.dim }} className="text-[10px] shrink-0 hidden @min-[480px]:inline">
                 Carregamento sob demanda • Sem limite
               </span>
             </div>
@@ -617,7 +610,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
               </div>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto kp-scroll pr-1 grid grid-cols-2 gap-2 content-start">
+            <div className="flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 grid grid-cols-1 @min-[480px]:grid-cols-2 @min-[860px]:grid-cols-3 gap-2 content-start">
               {categories.map((cat, idx) => {
                 const focus = idx === catSelected;
                 return (
@@ -662,12 +655,9 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
 
       {/* ==================== STEP 2: ITEMS IN CATEGORY ==================== */}
       {view === 'items' && (
-        <div
-          style={{ left: 20, top: 78, width: 600, height: 350 }}
-          className="absolute z-10 flex flex-col"
-        >
+        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col">
           {/* Breadcrumb + Search bar */}
-          <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <button
                 type="button"
@@ -701,9 +691,8 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                 backgroundColor: rgbToRgba(theme.elevated, 0.95),
                 color: theme.text,
                 border: `1px solid ${themeHairline(theme)}`,
-                width: 185,
               }}
-              className="px-2.5 py-1 rounded-md text-[11px] outline-none"
+              className="w-full @min-[480px]:w-[196px] @min-[760px]:w-[240px] px-2.5 py-1 rounded-md text-[11px] outline-none"
             />
           </div>
 
@@ -720,18 +709,17 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex gap-3 overflow-hidden">
-              {/* Left Detail Card */}
+            <div className="flex-1 min-h-0 flex flex-col @min-[540px]:flex-row gap-2.5 overflow-hidden">
+              {/* Detail Card: compact horizontal bar on narrow screens, sidebar on wider screens */}
               <div
                 style={{
                   ...modernPanelStyle(theme, 14),
-                  width: 196,
                 }}
-                className="h-full p-3 flex flex-col items-center shrink-0"
+                className="p-2.5 @min-[540px]:p-3 flex flex-row @min-[540px]:flex-col items-center gap-2.5 @min-[540px]:gap-0 @min-[540px]:w-[196px] @min-[820px]:w-[230px] @min-[540px]:h-full shrink-0"
               >
                 <div
                   style={{ backgroundColor: theme.elevated }}
-                  className="w-[152px] h-[112px] rounded-lg flex items-center justify-center overflow-hidden p-1.5"
+                  className="w-[62px] h-[48px] @min-[540px]:w-full @min-[540px]:max-w-[164px] @min-[540px]:h-[112px] rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0"
                 >
                   {selectedItem?.logo ? (
                     <img
@@ -740,20 +728,25 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                       className="max-w-full max-h-full object-contain rounded"
                     />
                   ) : (
-                    <span style={{ color: theme.muted }} className="text-[12px]">
+                    <span style={{ color: theme.muted }} className="text-[10px] @min-[540px]:text-[12px] text-center">
                       {tr('Sem imagem', language)}
                     </span>
                   )}
                 </div>
 
-                <div
-                  style={{ color: theme.text }}
-                  className="mt-2.5 text-[13.5px] font-extrabold text-center leading-tight line-clamp-3 w-full"
-                >
-                  {selectedItem?.name}
+                <div className="min-w-0 flex-1 @min-[540px]:flex-none @min-[540px]:w-full @min-[540px]:mt-2.5">
+                  <div
+                    style={{ color: theme.text }}
+                    className="text-[12.5px] @min-[540px]:text-[13.5px] font-extrabold @min-[540px]:text-center leading-tight line-clamp-2 @min-[540px]:line-clamp-3 w-full"
+                  >
+                    {selectedItem?.name}
+                  </div>
+                  <div style={{ color: theme.accent }} className="text-[10.5px] font-bold truncate @min-[540px]:hidden mt-0.5">
+                    {selectedItem?.group || selectedItem?.id || '--'}
+                  </div>
                 </div>
 
-                <div className="mt-auto w-full space-y-1.5 pt-2">
+                <div className="hidden @min-[540px]:block mt-auto w-full space-y-1.5 pt-2">
                   <div>
                     <div style={{ color: theme.muted }} className="text-[10px]">
                       {tr('Categoria', language)}
@@ -770,24 +763,25 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                       {selectedItem?.id || '--'}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => activateItem(selectedItem)}
-                    style={{
-                      ...modernPillStyle(theme, true),
-                      height: 28,
-                    }}
-                    className="w-full text-[11px] font-extrabold cursor-pointer mt-1"
-                  >
-                    {selectedItem?.mediaType === 'series-show'
-                      ? tr('Episódios', language)
-                      : tr('Assistir', language)}
-                  </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => activateItem(selectedItem)}
+                  style={{
+                    ...modernPillStyle(theme, true),
+                    height: 28,
+                  }}
+                  className="px-3 @min-[540px]:w-full text-[11px] font-extrabold cursor-pointer shrink-0 @min-[540px]:mt-2"
+                >
+                  {selectedItem?.mediaType === 'series-show'
+                    ? tr('Episódios', language)
+                    : tr('Assistir', language)}
+                </button>
               </div>
 
-              {/* Right Unlimited Scrollable List (Chunk-windowed for 60 FPS even with 4,700+ items) */}
-              <div className="flex-1 h-full overflow-y-auto kp-scroll pr-1 space-y-1.5">
+              {/* Right Unlimited Scrollable List */}
+              <div className="flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-1.5">
                 {visibleItems.map((ch, idx) => {
                   const focus = idx === itemSelected;
                   return (
@@ -853,10 +847,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
 
       {/* ==================== STEP 3: SERIES EPISODES VIEW ==================== */}
       {view === 'episodes' && (
-        <div
-          style={{ left: 20, top: 78, width: 600, height: 350 }}
-          className="absolute z-10 flex flex-col"
-        >
+        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col">
           <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <button
@@ -934,17 +925,16 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex gap-3 overflow-hidden">
+            <div className="flex-1 min-h-0 flex flex-col @min-[540px]:flex-row gap-2.5 overflow-hidden">
               <div
                 style={{
                   ...modernPanelStyle(theme, 14),
-                  width: 186,
                 }}
-                className="h-full p-3 flex flex-col items-center shrink-0"
+                className="p-2.5 @min-[540px]:p-3 flex flex-row @min-[540px]:flex-col items-center gap-2.5 @min-[540px]:gap-0 @min-[540px]:w-[186px] @min-[820px]:w-[220px] @min-[540px]:h-full shrink-0"
               >
                 <div
                   style={{ backgroundColor: theme.elevated }}
-                  className="w-[144px] h-[112px] rounded-lg flex items-center justify-center overflow-hidden p-1.5"
+                  className="w-[56px] h-[44px] @min-[540px]:w-full @min-[540px]:max-w-[152px] @min-[540px]:h-[112px] rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0"
                 >
                   {activeSeries?.logo ? (
                     <img
@@ -953,19 +943,21 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                       className="max-w-full max-h-full object-contain rounded"
                     />
                   ) : (
-                    <span style={{ color: theme.muted }} className="text-[12px]">
+                    <span style={{ color: theme.muted }} className="text-[10px] @min-[540px]:text-[12px] text-center">
                       {tr('Sem imagem', language)}
                     </span>
                   )}
                 </div>
-                <div
-                  style={{ color: theme.text }}
-                  className="mt-2.5 text-[13px] font-extrabold text-center line-clamp-2 w-full"
-                >
-                  {activeSeries?.name}
-                </div>
-                <div style={{ color: theme.accent }} className="mt-1 text-[11px] font-bold">
-                  {selectedEp?.id || '--'}
+                <div className="min-w-0 flex-1 @min-[540px]:flex-none @min-[540px]:w-full @min-[540px]:mt-2.5">
+                  <div
+                    style={{ color: theme.text }}
+                    className="text-[12.5px] @min-[540px]:text-[13px] font-extrabold @min-[540px]:text-center line-clamp-2 w-full"
+                  >
+                    {activeSeries?.name}
+                  </div>
+                  <div style={{ color: theme.accent }} className="mt-0.5 text-[11px] font-bold @min-[540px]:text-center">
+                    {selectedEp?.id || '--'}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -974,13 +966,13 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                     ...modernPillStyle(theme, true),
                     height: 28,
                   }}
-                  className="w-full text-[11px] font-extrabold cursor-pointer mt-auto"
+                  className="px-3 @min-[540px]:w-full text-[11px] font-extrabold cursor-pointer shrink-0 @min-[540px]:mt-auto"
                 >
                   {tr('Assistir', language)}
                 </button>
               </div>
 
-              <div className="flex-1 h-full overflow-y-auto kp-scroll pr-1 space-y-1.5">
+              <div className="flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-1.5">
                 {filteredEpisodes.map((ep, idx) => {
                   const focus = idx === epSelected;
                   return (
@@ -1022,18 +1014,17 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
       {showKbModal && (
         <div
           style={{ backgroundColor: 'rgba(6, 9, 13, 0.88)' }}
-          className="absolute inset-0 z-30 flex items-center justify-center p-4"
+          className="absolute inset-0 z-30 flex items-center justify-center p-3 sm:p-4"
         >
           <div
             style={{
               ...modernPanelStyle(theme, 14),
-              width: 590,
             }}
-            className="p-3.5 flex flex-col gap-2"
+            className="w-full max-w-[600px] max-h-full overflow-y-auto p-3.5 flex flex-col gap-2"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <div style={{ color: theme.text }} className="text-[15px] font-extrabold">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div style={{ color: theme.text }} className="text-[14px] @min-[520px]:text-[15px] font-extrabold truncate">
                   {tr('Teclado IPTV', language)} — {tr('IPTV do Usuário', language)}
                 </div>
                 <div style={{ color: theme.muted }} className="text-[10.5px]">
@@ -1044,13 +1035,13 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                 type="button"
                 onClick={() => setShowKbModal(false)}
                 style={{ color: theme.muted }}
-                className="text-[16px] font-bold px-2 cursor-pointer"
+                className="text-[16px] font-bold px-2 cursor-pointer shrink-0"
               >
                 ×
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 @min-[460px]:grid-cols-3 gap-2">
               <input
                 type="text"
                 value={kbName}
@@ -1074,7 +1065,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                   color: theme.accent,
                   border: `1px solid ${rgbToRgba(theme.accent, 0.5)}`,
                 }}
-                className="col-span-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-mono outline-none"
+                className="@min-[460px]:col-span-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-mono outline-none"
               />
             </div>
 
@@ -1095,7 +1086,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                         border: `1px solid ${themeHairline(theme)}`,
                         height: 27,
                       }}
-                      className="rounded-md text-[10.5px] font-bold cursor-pointer hover:opacity-90 active:scale-95 transition-transform"
+                      className="rounded-md text-[9.5px] @min-[520px]:text-[10.5px] font-bold cursor-pointer hover:opacity-90 active:scale-95 transition-transform truncate px-0.5"
                     >
                       {keyVal}
                     </button>
@@ -1104,7 +1095,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
               ))}
             </div>
 
-            <div className="flex items-center justify-between gap-2 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"

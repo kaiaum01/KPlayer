@@ -96,6 +96,7 @@ static void pill(int x, int y, int w, int h, bool on) {
 /* Background: theme color plus two cached soft accent glows. */
 static SDL_Texture *glow_texture;
 static void backdrop(void) {
+  begin_full_screen_pass();
   color(bg);
   SDL_RenderClear(renderer);
   if (!glow_texture) {
@@ -123,6 +124,7 @@ static void backdrop(void) {
     SDL_SetTextureAlphaMod(glow_texture, 46);
     SDL_RenderCopy(renderer, glow_texture, NULL, NULL);
   }
+  begin_ui_pass();
 }
 
 /* Vinyl disc artwork. spin animates a light sweep across the grooves. */

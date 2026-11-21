@@ -1,10 +1,10 @@
-# Build and Test / Compilação e Testes — KPlayer v2.0.2
+# Build and Test / Compilação e Testes — KPlayer v2.0.3
 
-## R36S v2.0.2: GitHub Actions & Local Cross-Compilation
+## R36S v2.0.3: GitHub Actions & Local Cross-Compilation
 
-The workflow **Compilar KPlayer R36S** (`.github/workflows/r36s-build.yml`) cross-compiles the C/SDL2 frontend with `gcc-aarch64-linux-gnu` (`-O2 -std=gnu11 -Wall -Wextra -Werror`), runs unit tests, and packages `releases/KPlayer-v2.0.2-R36S.zip` (including `KPlayer.sh`, `gamelist.xml`, `images/KPlayer-image.png`, `kplayer/cover.png`, `kplayer/KPlayer-metadata.xml`, and the SHA-256 checksum).
+The workflow **Compilar KPlayer R36S** (`.github/workflows/r36s-build.yml`) cross-compiles the C/SDL2 frontend with `gcc-aarch64-linux-gnu` (`-O2 -std=gnu11 -Wall -Wextra -Werror`), runs unit tests, and packages `releases/KPlayer-v2.0.3-R36S.zip` (including `KPlayer.sh`, `gamelist.xml`, `images/KPlayer-image.png`, `kplayer/cover.png`, `kplayer/KPlayer-metadata.xml`, and the SHA-256 checksum).
 
-Pushing a version tag such as `v2.0.2` triggers **KPlayer - Compilar e preparar release R36S** (`.github/workflows/release-r36s.yml`), which builds the ARM64 binary, packages the install ZIP + `.sha256`, and drafts a GitHub Release ready for review and publishing.
+Pushing a version tag such as `v2.0.3` triggers **KPlayer - Compilar e preparar release R36S** (`.github/workflows/release-r36s.yml`), which builds the ARM64 binary, packages the install ZIP + `.sha256`, and drafts a GitHub Release ready for review and publishing.
 
 ### Compile the ARM64 Frontend Locally (Linux)
 
@@ -21,8 +21,8 @@ python3 tools/package_release.py
 ```
 
 Outputs:
-- `releases/KPlayer-v2.0.2-R36S.zip`
-- `releases/KPlayer-v2.0.2-R36S.zip.sha256`
+- `releases/KPlayer-v2.0.3-R36S.zip`
+- `releases/KPlayer-v2.0.3-R36S.zip.sha256`
 
 To rebuild the full VLC core from `upstream/vlc-3.0.23.tar.xz` with `patches/kplayer-vlc.patch`:
 
@@ -55,11 +55,11 @@ python3 tools/generate_v2_screenshots.py
 bash tools/render-previews.sh
 ```
 
-## Android v2.0.2 (Side-by-Side Portrait Edition): GitHub Actions & Local Build
+## Android v2.0.3 (Side-by-Side Portrait Edition): GitHub Actions & Local Build
 
-The dedicated workflow **Compilar KPlayer Android (APK)** (`.github/workflows/android-build.yml`) compiles the Kotlin + Jetpack Compose + Media3 project under `android/` using Java 17 and Gradle 8.10.2, producing `releases/KPlayer-v2.0.2-Android.apk` and its `.sha256` checksum.
+The dedicated workflow **Compilar KPlayer Android (APK)** (`.github/workflows/android-build.yml`) compiles the Kotlin + Jetpack Compose + Media3 project under `android/` using Java 17 and Gradle 8.10.2, producing `releases/KPlayer-v2.0.3-Android.apk` and its `.sha256` checksum.
 
-Pushing a version tag (`v*.*.*`) triggers **KPlayer - Compilar e preparar release (R36S + Android)** (`.github/workflows/release-r36s.yml`), which builds **both** `KPlayer-v2.0.2-R36S.zip` (primary) and `KPlayer-v2.0.2-Android.apk` (portrait companion) in parallel and attaches them side-by-side to the draft GitHub Release.
+Pushing a version tag (`v*.*.*`) triggers **KPlayer - Compilar e preparar release (R36S + Android)** (`.github/workflows/release-r36s.yml`), which builds **both** `KPlayer-v2.0.3-R36S.zip` (primary) and `KPlayer-v2.0.3-Android.apk` (portrait companion) in parallel and attaches them side-by-side to the draft GitHub Release.
 
 ### Compile the Android APK Locally (JDK 17 + Android SDK 35)
 

@@ -45,11 +45,11 @@ export function HeaderBar({
       style={{
         backgroundColor: rgbToRgba(theme.panel, 0.85),
         borderBottom: `1px solid ${themeHairline(theme)}`,
-        height: 32,
+        height: 34,
       }}
-      className="w-full flex items-center px-3.5 relative shrink-0 z-10"
+      className="w-full flex items-center justify-between gap-2 px-3 sm:px-4 relative shrink-0 z-10"
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
         <span
           style={{
             backgroundColor: theme.accent,
@@ -59,16 +59,16 @@ export function HeaderBar({
         />
         <span
           style={{ color: theme.text }}
-          className="text-[14px] font-bold tracking-wide shrink-0"
+          className="text-[13px] sm:text-[14px] font-bold tracking-wide shrink-0"
         >
           K PLAYER
         </span>
-        <span style={{ color: theme.dim }} className="text-[11px] shrink-0">
-          2.0.2
+        <span style={{ color: theme.dim }} className="text-[10.5px] shrink-0 hidden @min-[420px]:inline">
+          2.0.3
         </span>
         <span
           style={{ color: theme.muted }}
-          className="text-[11px] ml-1 truncate max-w-[116px]"
+          className="text-[11px] ml-0.5 truncate max-w-[140px] hidden @min-[560px]:inline"
         >
           {location}
         </span>
@@ -76,16 +76,16 @@ export function HeaderBar({
 
       <div
         style={{ backgroundColor: theme.elevated, color: theme.muted }}
-        className="absolute left-1/2 -translate-x-1/2 w-[144px] h-[20px] rounded-full flex items-center justify-center text-[10.5px] font-semibold tracking-wider"
+        className="max-w-[38%] @min-[520px]:w-[152px] h-[20px] rounded-full flex items-center justify-center text-[10px] sm:text-[10.5px] font-semibold tracking-wider shrink-0 px-2.5"
       >
-        <span className="truncate px-2.5">{section}</span>
+        <span className="truncate">{section}</span>
       </div>
 
-      <div className="ml-auto flex items-center gap-3 text-[12px]">
-        <span style={{ color: theme.muted }} className="tabular-nums">
+      <div className="flex items-center justify-end gap-2 sm:gap-3 text-[11.5px] sm:text-[12px] flex-1 min-w-0">
+        <span style={{ color: theme.muted }} className="tabular-nums shrink-0">
           {clock}
         </span>
-        <span style={{ color: theme.accent }} className="tabular-nums font-semibold">
+        <span style={{ color: theme.accent }} className="tabular-nums font-semibold shrink-0">
           {battery}%
         </span>
       </div>

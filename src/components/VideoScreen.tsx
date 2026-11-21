@@ -233,7 +233,7 @@ export function VideoScreen({
               backgroundColor: rgbToRgba(theme.panel, 0.92),
               border: `1px solid ${themeHairline(theme)}`,
             }}
-            className="absolute left-4 right-4 top-[328px] h-[100px] rounded-[18px] px-4 py-3 z-20 flex flex-col justify-between"
+            className="absolute left-4 right-4 max-w-[920px] mx-auto bottom-[52px] min-h-[100px] rounded-[18px] px-4 py-3 z-20 flex flex-col justify-between gap-2"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3">

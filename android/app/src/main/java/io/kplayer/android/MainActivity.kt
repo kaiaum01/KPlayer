@@ -10,15 +10,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Pause
@@ -55,6 +58,7 @@ import io.kplayer.android.data.VideoItem
 import io.kplayer.android.player.KPlayerEngine
 import io.kplayer.android.theme.KPLAYER_THEMES
 import io.kplayer.android.theme.KPlayerAndroidTheme
+import io.kplayer.android.ui.AdaptiveNavRail
 import io.kplayer.android.ui.BottomNavBar
 import io.kplayer.android.ui.FootballPortraitScreen
 import io.kplayer.android.ui.FullNowPlayingSheet
@@ -187,12 +191,25 @@ class MainActivity : ComponentActivity() {
 
             val palette = KPLAYER_THEMES[themeIndex]
             KPlayerAndroidTheme(palette = palette) {
-                Box(
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(palette.bg)
                         .safeDrawingPadding(),
                 ) {
+                    val isWide = maxWidth >= 600.dp
+                    val isExpanded = maxWidth >= 840.dp
+                    val gridColumns = when {
+                        maxWidth >= 900.dp -> 3
+                        maxWidth >= 600.dp -> 2
+                        else -> 1
+                    }
+                    val deviceProfile = when {
+                        isExpanded -> "Tablet / Tela Grande"
+                        isWide -> "Paisagem / Dobrável"
+                        else -> "Adaptativo"
+                    }
+
                     when {
                         playback.activeVideo != null -> {
                             VideoAndIptvPlayerOverlay(
@@ -216,6 +233,7 @@ class MainActivity : ComponentActivity() {
                             SettingsAndTermsSheet(
                                 palette = palette,
                                 themeIndex = themeIndex,
+                                isWide = isWide,
                                 onSelectTheme = { idx ->
                                     themeIndex = idx
                                     prefs.edit().putInt("theme_index", idx).apply()
@@ -246,6 +264,8 @@ class MainActivity : ComponentActivity() {
                                 palette = palette,
                                 playback = playback,
                                 isFavorite = favorites.contains(activeId),
+                                isWide = isWide,
+                                availableHeightDp = maxHeight.value.toInt(),
                                 onClose = { showNowPlaying = false },
                                 onToggleFavorite = {
                                     if (activeId.isNotBlank()) {
@@ -264,135 +284,165 @@ class MainActivity : ComponentActivity() {
                         }
 
                         else -> {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                when (currentTab) {
-                                    AndroidTab.HOME -> HomePortraitScreen(
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                if (isWide) {
+                                    AdaptiveNavRail(
                                         palette = palette,
-                                        playback = playback,
-                                        audioTracks = audioTracks,
-                                        videos = videos,
-                                        matches = footballMatches,
-                                        onOpenTab = ::navigateTab,
-                                        onOpenVideos = {
-                                            videos.firstOrNull()?.let { engine.playVideo(it) }
-                                        },
+                                        currentTab = currentTab,
+                                        expanded = isExpanded,
+                                        onSelect = ::navigateTab,
                                         onOpenSettings = { showSettings = true },
-                                        onOpenNowPlaying = { showNowPlaying = true },
-                                        onPlayTrack = { t ->
-                                            engine.playTrack(t, audioTracks)
-                                            showNowPlaying = true
-                                        },
-                                        onPlayVideo = { v -> engine.playVideo(v) },
-                                    )
-
-                                    AndroidTab.MUSIC -> MusicLibraryPortraitScreen(
-                                        palette = palette,
-                                        tracks = audioTracks,
-                                        favorites = favorites,
-                                        playback = playback,
-                                        onPlayTrack = { t, q -> engine.playTrack(t, q) },
-                                        onRescan = ::rescanLocalMedia,
-                                        onOpenNowPlaying = { showNowPlaying = true },
-                                    )
-
-                                    AndroidTab.IPTV -> IptvPortraitScreen(
-                                        palette = palette,
-                                        source = iptvSource,
-                                        categories = iptvCategories,
-                                        items = iptvItems,
-                                        selectedCategory = iptvSelectedCat,
-                                        loading = iptvLoading,
-                                        onSelectSource = { loadIptvCats(it) },
-                                        onSelectCategory = { cat ->
-                                            iptvSelectedCat = cat
-                                            scope.launch {
-                                                iptvLoading = true
-                                                iptvItems = NetworkRepository.fetchIptvItems(iptvSource, cat.id, userIptvPlaylists)
-                                                iptvLoading = false
-                                            }
-                                        },
-                                        onBackToCategories = {
-                                            iptvSelectedCat = null
-                                            iptvItems = emptyList()
-                                        },
-                                        onPlayChannel = { ch -> engine.playIptv(ch) },
-                                        onAddUserUrl = { url ->
-                                            scope.launch {
-                                                iptvLoading = true
-                                                val parsed = NetworkRepository.fetchUserPlaylistFromUrl(url)
-                                                if (parsed.isNotEmpty()) {
-                                                    userIptvPlaylists["Minha Lista (${parsed.size})"] = parsed
-                                                    loadIptvCats(IptvSource.USUARIO)
-                                                }
-                                                iptvLoading = false
-                                            }
-                                        },
-                                        onRefresh = { loadIptvCats(iptvSource, refresh = true) },
-                                    )
-
-                                    AndroidTab.RADIO -> RadioPortraitScreen(
-                                        palette = palette,
-                                        selectedCategory = radioCategory,
-                                        stations = radioStations,
-                                        activeStation = playback.activeRadio,
-                                        loading = radioLoading,
-                                        onSelectCategory = ::loadRadio,
-                                        onPlayStation = { st -> engine.playRadio(st) },
-                                        onRefresh = { loadRadio(radioCategory) },
-                                    )
-
-                                    AndroidTab.FOOTBALL -> FootballPortraitScreen(
-                                        palette = palette,
-                                        matches = footballMatches,
-                                        loading = footballLoading,
-                                        onRefresh = ::loadFootball,
                                     )
                                 }
 
-                                // Docked Floating Mini-Player + 5-Tab Bottom Navigation
-                                Column(
+                                Box(
                                     modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .fillMaxWidth(),
+                                        .weight(1f)
+                                        .fillMaxHeight(),
                                 ) {
-                                    val miniTitle = playback.activeTrack?.title ?: playback.activeRadio?.name
-                                    val miniSub = playback.activeTrack?.artist ?: playback.activeRadio?.country
-                                    if (miniTitle != null) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                                                .clip(RoundedCornerShape(16.dp))
-                                                .background(palette.elevated)
-                                                .clickable { showNowPlaying = true }
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            VinylEmblem(
-                                                palette = palette,
-                                                sizeDp = 38,
-                                                artUri = playback.activeTrack?.artUri,
-                                            )
-                                            Spacer(Modifier.width(10.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(miniTitle, color = palette.text, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                Text(miniSub.orEmpty(), color = palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            }
-                                            IconButton(onClick = { engine.togglePlayPause() }, modifier = Modifier.size(44.dp)) {
-                                                Icon(
-                                                    if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                                    contentDescription = "Tocar/Pausar",
-                                                    tint = palette.accent,
-                                                )
-                                            }
-                                        }
+                                    when (currentTab) {
+                                        AndroidTab.HOME -> HomePortraitScreen(
+                                            palette = palette,
+                                            playback = playback,
+                                            audioTracks = audioTracks,
+                                            videos = videos,
+                                            matches = footballMatches,
+                                            isWide = isWide,
+                                            deviceProfile = deviceProfile,
+                                            onOpenTab = ::navigateTab,
+                                            onOpenVideos = {
+                                                videos.firstOrNull()?.let { engine.playVideo(it) }
+                                            },
+                                            onOpenSettings = { showSettings = true },
+                                            onOpenNowPlaying = { showNowPlaying = true },
+                                            onPlayTrack = { t ->
+                                                engine.playTrack(t, audioTracks)
+                                                showNowPlaying = true
+                                            },
+                                            onPlayVideo = { v -> engine.playVideo(v) },
+                                        )
+
+                                        AndroidTab.MUSIC -> MusicLibraryPortraitScreen(
+                                            palette = palette,
+                                            tracks = audioTracks,
+                                            favorites = favorites,
+                                            playback = playback,
+                                            gridColumns = gridColumns,
+                                            bottomInsetDp = if (isWide) 96 else 148,
+                                            onPlayTrack = { t, q -> engine.playTrack(t, q) },
+                                            onRescan = ::rescanLocalMedia,
+                                            onOpenNowPlaying = { showNowPlaying = true },
+                                        )
+
+                                        AndroidTab.IPTV -> IptvPortraitScreen(
+                                            palette = palette,
+                                            source = iptvSource,
+                                            categories = iptvCategories,
+                                            items = iptvItems,
+                                            selectedCategory = iptvSelectedCat,
+                                            loading = iptvLoading,
+                                            gridColumns = gridColumns,
+                                            bottomInsetDp = if (isWide) 96 else 148,
+                                            onSelectSource = { loadIptvCats(it) },
+                                            onSelectCategory = { cat ->
+                                                iptvSelectedCat = cat
+                                                scope.launch {
+                                                    iptvLoading = true
+                                                    iptvItems = NetworkRepository.fetchIptvItems(iptvSource, cat.id, userIptvPlaylists)
+                                                    iptvLoading = false
+                                                }
+                                            },
+                                            onBackToCategories = {
+                                                iptvSelectedCat = null
+                                                iptvItems = emptyList()
+                                            },
+                                            onPlayChannel = { ch -> engine.playIptv(ch) },
+                                            onAddUserUrl = { url ->
+                                                scope.launch {
+                                                    iptvLoading = true
+                                                    val parsed = NetworkRepository.fetchUserPlaylistFromUrl(url)
+                                                    if (parsed.isNotEmpty()) {
+                                                        userIptvPlaylists["Minha Lista (${parsed.size})"] = parsed
+                                                        loadIptvCats(IptvSource.USUARIO)
+                                                    }
+                                                    iptvLoading = false
+                                                }
+                                            },
+                                            onRefresh = { loadIptvCats(iptvSource, refresh = true) },
+                                        )
+
+                                        AndroidTab.RADIO -> RadioPortraitScreen(
+                                            palette = palette,
+                                            selectedCategory = radioCategory,
+                                            stations = radioStations,
+                                            activeStation = playback.activeRadio,
+                                            loading = radioLoading,
+                                            gridColumns = gridColumns,
+                                            bottomInsetDp = if (isWide) 96 else 148,
+                                            onSelectCategory = ::loadRadio,
+                                            onPlayStation = { st -> engine.playRadio(st) },
+                                            onRefresh = { loadRadio(radioCategory) },
+                                        )
+
+                                        AndroidTab.FOOTBALL -> FootballPortraitScreen(
+                                            palette = palette,
+                                            matches = footballMatches,
+                                            loading = footballLoading,
+                                            gridColumns = gridColumns,
+                                            bottomInsetDp = if (isWide) 96 else 148,
+                                            onRefresh = ::loadFootball,
+                                        )
                                     }
 
-                                    BottomNavBar(
-                                        palette = palette,
-                                        currentTab = currentTab,
-                                        onSelect = ::navigateTab,
-                                    )
+                                    // Docked Floating Mini-Player + Bottom Nav (Compact Phones) / Floating Dock (Wide Screens)
+                                    Column(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        val miniTitle = playback.activeTrack?.title ?: playback.activeRadio?.name
+                                        val miniSub = playback.activeTrack?.artist ?: playback.activeRadio?.country
+                                        if (miniTitle != null) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .widthIn(max = if (isWide) 620.dp else 1000.dp)
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = if (isWide) 10.dp else 6.dp)
+                                                    .clip(RoundedCornerShape(16.dp))
+                                                    .background(palette.elevated)
+                                                    .clickable { showNowPlaying = true }
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                VinylEmblem(
+                                                    palette = palette,
+                                                    sizeDp = 38,
+                                                    artUri = playback.activeTrack?.artUri,
+                                                )
+                                                Spacer(Modifier.width(10.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(miniTitle, color = palette.text, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(miniSub.orEmpty(), color = palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                                IconButton(onClick = { engine.togglePlayPause() }, modifier = Modifier.size(44.dp)) {
+                                                    Icon(
+                                                        if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                                        contentDescription = "Tocar/Pausar",
+                                                        tint = palette.accent,
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (!isWide) {
+                                            BottomNavBar(
+                                                palette = palette,
+                                                currentTab = currentTab,
+                                                onSelect = ::navigateTab,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

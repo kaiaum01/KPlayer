@@ -33,7 +33,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Compilar APK KPlayer Android v2.0.2
+      - name: Compilar APK KPlayer Android v2.0.3
         working-directory: android
         run: |
           gradle assembleRelease --no-daemon --stacktrace

@@ -69,10 +69,40 @@ const EQ_PRESETS: Array<{ name: EqPresetName; low: number; mid: number; high: nu
   { name: 'Electronic', low: 6, mid: 1, high: 5 },
 ];
 
+type R36SDisplayMode = 'auto' | 'r36s' | 'square' | 'wide';
+
+const R36S_DISPLAY_MODES: Array<{
+  id: R36SDisplayMode;
+  short: string;
+  label: string;
+  width?: number;
+  height?: number;
+}> = [
+  { id: 'auto', short: 'Auto', label: 'Auto (Adaptativo)' },
+  { id: 'r36s', short: '4:3', label: 'Clássico 4:3', width: 640, height: 480 },
+  { id: 'square', short: '1:1', label: 'R36S Plus 1:1 (720×720)', width: 720, height: 720 },
+  { id: 'wide', short: '16:9', label: 'Widescreen 16:9 (960×540)', width: 960, height: 540 },
+];
+
+type AndroidDisplayMode = 'auto' | 'phone' | 'landscape' | 'tablet';
+
+const ANDROID_DISPLAY_MODES: Array<{
+  id: AndroidDisplayMode;
+  short: string;
+  label: string;
+  width?: number;
+  height?: number;
+}> = [
+  { id: 'auto', short: 'Auto', label: 'Auto (Adaptativo)' },
+  { id: 'phone', short: 'Celular', label: 'Celular Retrato (390×780)', width: 390, height: 780 },
+  { id: 'landscape', short: 'Paisagem', label: 'Celular Paisagem (820×400)', width: 820, height: 400 },
+  { id: 'tablet', short: 'Tablet', label: 'Tablet / Dobrável (960×640)', width: 960, height: 640 },
+];
+
 const OPTION_GROUPS = [
   { name: 'Reprodução', items: ['rate', 'fit', 'audioTrack', 'subtitles', 'repeat', 'shuffle', 'eq'] as const },
   { name: 'Biblioteca', items: ['favTrack', 'myFavs', 'resume', 'iptv', 'football'] as const },
-  { name: 'Geral', items: ['language', 'theme', 'ipLocation', 'sleep', 'terms', 'exit'] as const },
+  { name: 'Geral', items: ['language', 'theme', 'displayMode', 'ipLocation', 'sleep', 'terms', 'exit'] as const },
 ];
 
 function loadStorage<T>(key: string, fallback: T): T {
@@ -101,7 +131,17 @@ export default function App() {
   const [favoriteRadios, setFavoriteRadios] = useState<RadioStation[]>(() =>
     loadStorage('kp_fav_radios', [])
   );
-  const [showDeck, setShowDeck] = useState<boolean>(true);
+  const [showDeck, setShowDeck] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 820 : true
+  );
+  const [r36sDisplayMode, setR36sDisplayMode] = useState<R36SDisplayMode>(() => {
+    const saved = loadStorage<string>('kp_r36s_display', 'auto');
+    return saved === 'r36s' || saved === 'square' || saved === 'wide' ? saved : 'auto';
+  });
+  const [androidDisplayMode, setAndroidDisplayMode] = useState<AndroidDisplayMode>(() => {
+    const saved = loadStorage<string>('kp_android_display', 'auto');
+    return saved === 'phone' || saved === 'landscape' || saved === 'tablet' ? saved : 'auto';
+  });
   const [editionView, setEditionView] = useState<'r36s' | 'android' | 'split'>('r36s');
   const [showR36sModal, setShowR36sModal] = useState<boolean>(false);
   const [showAndroidModal, setShowAndroidModal] = useState<boolean>(false);
@@ -218,29 +258,52 @@ export default function App() {
   const [optionGroupIdx, setOptionGroupIdx] = useState(0);
   const [optionRowIdx, setOptionRowIdx] = useState(0);
 
-  // Responsive 640x480 viewport scaler
+  // Adaptive viewport measurement for R36S & Android (Auto fills device viewport; fixed presets scale cleanly)
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const [stageSize, setStageSize] = useState<{ w: number; h: number }>({ w: 960, h: 600 });
   const [scale, setScale] = useState(1);
+  const [androidScale, setAndroidScale] = useState(1);
+
+  const activePreset = useMemo(
+    () => R36S_DISPLAY_MODES.find((m) => m.id === r36sDisplayMode) ?? R36S_DISPLAY_MODES[0],
+    [r36sDisplayMode]
+  );
+
+  const activeAndroidPreset = useMemo(
+    () => ANDROID_DISPLAY_MODES.find((m) => m.id === androidDisplayMode) ?? ANDROID_DISPLAY_MODES[0],
+    [androidDisplayMode]
+  );
 
   useEffect(() => {
-    const updateScale = () => {
+    const updateViewport = () => {
       const el = stageRef.current;
       if (!el) return;
       const splitAllowance = editionView === 'split' ? 404 : 0;
-      const availW = Math.max(260, el.clientWidth - 16 - splitAllowance);
-      const availH = el.clientHeight - 16;
-      const s = Math.max(0.45, Math.min(availW / 640, availH / 480, 1.55));
+      const availW = Math.max(280, Math.floor(el.clientWidth - 16 - splitAllowance));
+      const availH = Math.max(260, Math.floor(el.clientHeight - 16));
+      setStageSize({ w: availW, h: availH });
+
+      const targetW = activePreset.width ?? 640;
+      const targetH = activePreset.height ?? 480;
+      const s = Math.max(0.35, Math.min(availW / targetW, availH / targetH, 1.6));
       setScale(s);
+
+      const androidAvailW = Math.max(280, Math.floor(el.clientWidth - 20));
+      const androidAvailH = Math.max(260, Math.floor(el.clientHeight - 20));
+      const aW = activeAndroidPreset.width ?? 390;
+      const aH = activeAndroidPreset.height ?? 780;
+      const aScale = Math.max(0.35, Math.min(androidAvailW / aW, androidAvailH / aH, 1.35));
+      setAndroidScale(aScale);
     };
-    updateScale();
-    const ro = new ResizeObserver(updateScale);
+    updateViewport();
+    const ro = new ResizeObserver(updateViewport);
     if (stageRef.current) ro.observe(stageRef.current);
-    window.addEventListener('resize', updateScale);
+    window.addEventListener('resize', updateViewport);
     return () => {
       ro.disconnect();
-      window.removeEventListener('resize', updateScale);
+      window.removeEventListener('resize', updateViewport);
     };
-  }, [showDeck, editionView]);
+  }, [showDeck, editionView, activePreset, activeAndroidPreset]);
 
   // Persist settings
   useEffect(() => {
@@ -253,6 +316,8 @@ export default function App() {
       localStorage.setItem('kp_ip_loc', JSON.stringify(ipLocationEnabled));
       localStorage.setItem('kp_fav_tracks', JSON.stringify(favoriteTrackIds));
       localStorage.setItem('kp_fav_radios', JSON.stringify(favoriteRadios));
+      localStorage.setItem('kp_r36s_display', JSON.stringify(r36sDisplayMode));
+      localStorage.setItem('kp_android_display', JSON.stringify(androidDisplayMode));
     } catch {
       // Ignore storage quota errors
     }
@@ -265,6 +330,8 @@ export default function App() {
     ipLocationEnabled,
     favoriteTrackIds,
     favoriteRadios,
+    r36sDisplayMode,
+    androidDisplayMode,
   ]);
 
   // Optional IP location
@@ -945,6 +1012,12 @@ export default function App() {
         case 'theme':
           setThemeIndex((i) => (i + dir + KP_THEMES.length) % KP_THEMES.length);
           break;
+        case 'displayMode': {
+          const idx = R36S_DISPLAY_MODES.findIndex((m) => m.id === r36sDisplayMode);
+          const next = R36S_DISPLAY_MODES[(idx + dir + R36S_DISPLAY_MODES.length) % R36S_DISPLAY_MODES.length];
+          setR36sDisplayMode(next.id);
+          break;
+        }
         case 'ipLocation':
           setIpLocationEnabled((v) => !v);
           break;
@@ -971,6 +1044,8 @@ export default function App() {
       activeTrack,
       playMediaTrack,
       toggleTrackFav,
+      openStreamingScreen,
+      r36sDisplayMode,
       notify,
     ]
   );
@@ -1334,6 +1409,10 @@ export default function App() {
         return LANGUAGE_NAMES[language];
       case 'theme':
         return tr(theme.name, language);
+      case 'displayMode':
+        return r36sDisplayMode === 'auto'
+          ? `${tr('Auto (Adaptativo)', language)} (${stageSize.w}×${stageSize.h})`
+          : tr(activePreset.label, language);
       case 'ipLocation':
         return tr(ipLocationEnabled ? 'Ativada' : 'Desativada', language);
       case 'sleep':
@@ -1359,6 +1438,7 @@ export default function App() {
       football: 'Placar da Bola',
       language: 'Idioma',
       theme: 'Tema',
+      displayMode: 'Adaptação de tela',
       ipLocation: 'Localização por IP',
       sleep: 'Timer de sono',
       terms: 'Termos de uso',
@@ -1368,8 +1448,6 @@ export default function App() {
   };
 
   const selectedRadio = radioStations[radioSelected];
-  const radioWindowStart = Math.max(0, Math.min(radioSelected - 2, Math.max(0, radioStations.length - 5)));
-  const libWindowStart = Math.max(0, Math.min(libSelected - 3, Math.max(0, filteredLibrary.length - 6)));
 
   return (
     <div className="h-screen w-screen bg-[#0a0c10] text-white flex flex-col overflow-hidden">
@@ -1411,12 +1489,12 @@ export default function App() {
       {/* Minimal Top Utility Bar for Edition Switcher, Media Import & Downloads */}
       <div className="min-h-10 px-3 py-1.5 bg-[#101319] border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-3 text-xs">
-          <span className="font-bold text-zinc-100 whitespace-nowrap">KPlayer 2.0.2</span>
+          <span className="font-bold text-zinc-100 whitespace-nowrap">KPlayer 2.0.3</span>
           <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[#181c25] border border-white/10">
             {(
               [
                 { id: 'r36s', label: 'R36S (Principal)' },
-                { id: 'android', label: 'Android (Retrato)' },
+                { id: 'android', label: 'Android (Adaptativo)' },
                 { id: 'split', label: 'Lado a Lado' },
               ] as const
             ).map((opt) => {
@@ -1468,8 +1546,60 @@ export default function App() {
           >
             + {tr('Mídias locais', language)} / .LRC
           </button>
+          {editionView === 'android' && (
+            <div
+              className="flex items-center gap-0.5 p-0.5 rounded-md bg-[#181c25] border border-white/10"
+              title="Adaptação de tela Android"
+            >
+              {ANDROID_DISPLAY_MODES.map((mode) => {
+                const active = androidDisplayMode === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setAndroidDisplayMode(mode.id)}
+                    style={
+                      active
+                        ? { backgroundColor: theme.accent, color: theme.bg }
+                        : undefined
+                    }
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap cursor-pointer transition-colors ${
+                      active ? '' : 'text-zinc-300 hover:text-white'
+                    }`}
+                  >
+                    {mode.id === 'auto' ? `Auto (${stageSize.w}×${stageSize.h})` : mode.short}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {editionView !== 'android' && (
             <>
+              <div
+                className="flex items-center gap-0.5 p-0.5 rounded-md bg-[#181c25] border border-white/10"
+                title={tr('Adaptação de tela', language)}
+              >
+                {R36S_DISPLAY_MODES.map((mode) => {
+                  const active = r36sDisplayMode === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setR36sDisplayMode(mode.id)}
+                      style={
+                        active
+                          ? { backgroundColor: theme.accent, color: theme.bg }
+                          : undefined
+                      }
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap cursor-pointer transition-colors ${
+                        active ? '' : 'text-zinc-300 hover:text-white'
+                      }`}
+                    >
+                      {mode.id === 'auto' ? `Auto (${stageSize.w}×${stageSize.h})` : mode.short}
+                    </button>
+                  );
+                })}
+              </div>
               <button
                 type="button"
                 onClick={() => setScreen('welcome')}
@@ -1498,34 +1628,70 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Responsive Stage: R36S (Principal) / Android (Retrato) / Lado a Lado */}
+      {/* Main Responsive Stage: R36S (Principal - Adaptativo) / Android (Adaptativo) / Lado a Lado */}
       <div
         ref={stageRef}
-        className="flex-1 min-h-0 flex items-center justify-center gap-6 p-3 overflow-auto"
+        className={`flex-1 min-h-0 flex items-center justify-center gap-4 sm:gap-6 overflow-auto ${
+          (r36sDisplayMode === 'auto' && editionView === 'r36s') ||
+          (androidDisplayMode === 'auto' && editionView === 'android')
+            ? 'p-1.5 sm:p-2.5'
+            : 'p-2.5 sm:p-3'
+        }`}
       >
-        {editionView !== 'android' && (
-          <div className="flex flex-col items-center gap-1.5 shrink-0">
-            {editionView === 'split' && (
-              <div className="text-[11px] font-semibold text-zinc-400">
-                R36S (Principal · 640×480 · dArkOS)
-              </div>
-            )}
+        {editionView !== 'android' && (() => {
+          const isFluid = r36sDisplayMode === 'auto';
+          const presetW = activePreset.width ?? 640;
+          const presetH = activePreset.height ?? 480;
+          return (
             <div
-              style={{
-                width: 640 * scale,
-                height: 480 * scale,
-              }}
-              className="relative shrink-0 rounded-[14px] overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.75)] ring-2 ring-white/10"
+              className={`flex flex-col items-center gap-1.5 ${
+                isFluid
+                  ? editionView === 'split'
+                    ? 'flex-1 h-full min-w-[300px]'
+                    : 'w-full h-full'
+                  : 'shrink-0'
+              }`}
             >
+              {editionView === 'split' && (
+                <div className="text-[11px] font-semibold text-zinc-400 shrink-0">
+                  {isFluid
+                    ? `R36S (Principal · Adaptativo ${stageSize.w}×${stageSize.h} · dArkOS)`
+                    : `R36S (Principal · ${presetW}×${presetH} · dArkOS)`}
+                </div>
+              )}
               <div
-                style={{
-                  transform: `scale(${scale})`,
-                  transformOrigin: 'top left',
-                  backgroundColor: theme.bg,
-                  color: theme.text,
-                }}
-                className="kp-screen"
+                style={
+                  isFluid
+                    ? undefined
+                    : {
+                        width: Math.round(presetW * scale),
+                        height: Math.round(presetH * scale),
+                      }
+                }
+                className={`relative rounded-[14px] overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.75)] ring-2 ring-white/10 ${
+                  isFluid ? 'w-full flex-1 min-h-0' : 'shrink-0'
+                }`}
               >
+                <div
+                  style={
+                    isFluid
+                      ? {
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: theme.bg,
+                          color: theme.text,
+                        }
+                      : {
+                          width: presetW,
+                          height: presetH,
+                          transform: `scale(${scale})`,
+                          transformOrigin: 'top left',
+                          backgroundColor: theme.bg,
+                          color: theme.text,
+                        }
+                  }
+                  className="kp-screen"
+                >
             {/* ==================== ANIMATED BOOT SPLASH SCREEN ==================== */}
             {screen === 'boot' && (
               <BootSplashScreen
@@ -1538,7 +1704,7 @@ export default function App() {
               />
             )}
 
-            {/* ==================== WELCOME / ONBOARDING (ANIMATED BOOT STYLE v2.0.2) ==================== */}
+            {/* ==================== WELCOME / ONBOARDING (ANIMATED BOOT STYLE v2.0.3) ==================== */}
             {screen === 'welcome' && (
               <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center">
                 <ModernBackdrop theme={theme} />
@@ -1609,7 +1775,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Brand wordmark + v2.0.2 pill + live equalizer */}
+                  {/* Brand wordmark + v2.0.3 pill + live equalizer */}
                   <div
                     className="mt-2 flex flex-col items-center kp-boot-rise"
                     style={{ animationDelay: '70ms' }}
@@ -1632,7 +1798,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.2 • R36S
+                      v2.0.3 • R36S
                     </div>
                   </div>
 
@@ -1642,7 +1808,7 @@ export default function App() {
 
                   {/* Row 0: Slim Unified Segmented Language Capsule */}
                   <div
-                    className="mt-3.5 flex flex-col items-center kp-boot-rise"
+                    className="mt-3.5 w-full flex flex-col items-center kp-boot-rise"
                     style={{ animationDelay: '190ms' }}
                   >
                     <div
@@ -1654,7 +1820,6 @@ export default function App() {
                     <div
                       style={{
                         ...modernPanelStyle(theme, 19),
-                        width: 448,
                         height: 38,
                         borderColor:
                           welcomeFocus === 0
@@ -1665,7 +1830,7 @@ export default function App() {
                             ? `0 0 14px ${rgbToRgba(theme.accent, 0.22)}`
                             : undefined,
                       }}
-                      className="p-1 grid grid-cols-3 gap-1 items-center transition-all"
+                      className="w-full max-w-[448px] p-1 grid grid-cols-3 gap-1 items-center transition-all"
                     >
                       {LANGUAGE_NAMES.map((name, idx) => {
                         const chosen = idx === language;
@@ -1689,7 +1854,7 @@ export default function App() {
                                     color: theme.muted,
                                   }
                             }
-                            className="h-[30px] rounded-full text-[12.5px] font-bold flex items-center justify-center cursor-pointer transition-all hover:brightness-115"
+                            className="h-[30px] rounded-full text-[11px] @min-[420px]:text-[12.5px] font-bold flex items-center justify-center cursor-pointer transition-all hover:brightness-115 truncate px-1"
                           >
                             {name}
                           </button>
@@ -1700,7 +1865,7 @@ export default function App() {
 
                   {/* Row 1: Slim Theme Color Dots ("bolinhas") */}
                   <div
-                    className="mt-3 flex flex-col items-center kp-boot-rise"
+                    className="mt-3 w-full flex flex-col items-center kp-boot-rise"
                     style={{ animationDelay: '250ms' }}
                   >
                     <div
@@ -1712,7 +1877,6 @@ export default function App() {
                     <div
                       style={{
                         ...modernPanelStyle(theme, 23),
-                        width: 348,
                         height: 46,
                         borderColor:
                           welcomeFocus === 1
@@ -1723,7 +1887,7 @@ export default function App() {
                             ? `0 0 14px ${rgbToRgba(theme.accent, 0.22)}`
                             : undefined,
                       }}
-                      className="px-4 flex items-center justify-between transition-all"
+                      className="w-full max-w-[348px] px-3 @min-[420px]:px-4 flex items-center justify-between transition-all"
                     >
                       {KP_THEMES.map((tItem, idx) => {
                         const chosen = idx === themeIndex;
@@ -1795,30 +1959,30 @@ export default function App() {
 
             {/* ==================== TERMS OF USE ==================== */}
             {screen === 'terms' && (
-              <div className="w-full h-full relative overflow-hidden">
+              <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
                   theme={theme}
                   section={tr('Termos de uso', language)}
                   location={locationLabel}
                 />
-                <div className="relative z-10 px-6 pt-4">
-                  <h2 style={{ color: theme.text }} className="text-[26px] font-extrabold">
+                <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-[54px] flex flex-col w-full max-w-[820px] mx-auto">
+                  <h2 style={{ color: theme.text }} className="text-[22px] @min-[540px]:text-[26px] font-extrabold shrink-0">
                     {tr('Termos de uso', language)}
                   </h2>
                   <div
-                    style={{ ...modernPanelStyle(theme, 16), height: 296 }}
-                    className="mt-3 p-5 flex flex-col justify-between"
+                    style={{ ...modernPanelStyle(theme, 16) }}
+                    className="mt-3 flex-1 min-h-0 p-4 @min-[540px]:p-5 flex flex-col justify-between gap-3 overflow-y-auto kp-scroll"
                   >
                     <div>
-                      <div style={{ color: theme.accent }} className="text-[19px] font-bold mb-3">
+                      <div style={{ color: theme.accent }} className="text-[17px] @min-[540px]:text-[19px] font-bold mb-2.5">
                         {tr(TERMS_PAGES[termsPage].title, language)}
                       </div>
-                      <p style={{ color: theme.text }} className="text-[13.5px] leading-[1.55]">
+                      <p style={{ color: theme.text }} className="text-[13px] @min-[540px]:text-[14px] leading-[1.6]">
                         {TERMS_PAGES[termsPage]?.body[language]}
                       </p>
                     </div>
-                    <div className="flex items-center justify-between pt-2">
+                    <div className="flex items-center justify-between pt-2 shrink-0">
                       <button
                         type="button"
                         onClick={() =>
@@ -1858,20 +2022,20 @@ export default function App() {
 
             {/* ==================== TRANSPARENCY NOTICE BEFORE IPTV / RADIO ==================== */}
             {screen === 'notice' && (
-              <div className="w-full h-full relative overflow-hidden">
+              <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
                   theme={theme}
                   section={tr('TRANSPARÊNCIA', language)}
                   location={locationLabel}
                 />
-                <div className="relative z-10 px-6 pt-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <h2 style={{ color: theme.text }} className="text-[22px] font-extrabold leading-tight">
+                <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-[54px] flex flex-col w-full max-w-[820px] mx-auto">
+                  <div className="flex items-center justify-between gap-2 shrink-0">
+                    <div className="min-w-0">
+                      <h2 style={{ color: theme.text }} className="text-[19px] @min-[540px]:text-[22px] font-extrabold leading-tight truncate">
                         {tr('Aviso de Transparência', language)}
                       </h2>
-                      <div style={{ color: theme.muted }} className="text-[11.5px] mt-0.5">
+                      <div style={{ color: theme.muted }} className="text-[11px] @min-[540px]:text-[11.5px] mt-0.5 truncate">
                         {tr('Antes de acessar Rádio Online ou IPTV', language)}
                       </div>
                     </div>
@@ -1881,22 +2045,22 @@ export default function App() {
                         color: theme.accent,
                         border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
                       }}
-                      className="px-2.5 py-1 rounded-full text-[10.5px] font-bold uppercase tracking-wider shrink-0"
+                      className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0"
                     >
                       {pendingStreamTarget === 'iptv' ? 'IPTV' : tr('Rádio Online', language)}
                     </span>
                   </div>
 
                   <div
-                    style={{ ...modernPanelStyle(theme, 14), height: 266 }}
-                    className="mt-2.5 p-4 flex flex-col justify-between gap-2.5"
+                    style={{ ...modernPanelStyle(theme, 14) }}
+                    className="mt-2.5 flex-1 min-h-0 p-4 flex flex-col justify-between gap-3 overflow-y-auto kp-scroll"
                   >
                     <div className="space-y-2.5">
                       <div>
                         <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
                           1. {tr('Fontes abertas e agregadores públicos', language)}
                         </div>
-                        <p style={{ color: theme.text }} className="text-[12px] leading-[1.48] mt-0.5">
+                        <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
                           {tr(
                             'Todos os dados de IPTV e Rádio são obtidos de agregadores públicos da internet e fontes abertas (como Radio-Browser e catálogos web públicos). O KPlayer é apenas um reprodutor e não hospeda nem transmite conteúdo próprio.',
                             language
@@ -1911,7 +2075,7 @@ export default function App() {
                         <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
                           2. {tr('Você tem direito de colocar seu próprio link', language)}
                         </div>
-                        <p style={{ color: theme.text }} className="text-[12px] leading-[1.48] mt-0.5">
+                        <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
                           {tr(
                             'Com total transparência, você pode inserir seus próprios links e listas .m3u/.m3u8 (pelo teclado virtual ou na pasta iptv_usuario/) e rádios .pls/.m3u (em radios_usuario/) a qualquer momento.',
                             language
@@ -1920,12 +2084,12 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-1">
+                    <div className="flex flex-wrap items-center gap-2 pt-1 shrink-0">
                       <button
                         type="button"
                         onClick={acceptStreamNotice}
                         style={{ backgroundColor: theme.accent, color: theme.bg }}
-                        className="flex-1 py-2 px-3 rounded-xl text-[12px] font-extrabold cursor-pointer hover:brightness-110 transition-all"
+                        className="flex-1 min-w-[160px] py-2 px-3 rounded-xl text-[12px] font-extrabold cursor-pointer hover:brightness-110 transition-all"
                       >
                         B • {tr('Concordo e continuar', language)}
                       </button>
@@ -1973,9 +2137,9 @@ export default function App() {
               </div>
             )}
 
-            {/* ==================== DASHBOARD / HOME (01-inicio.png MODERN SKIN) ==================== */}
+            {/* ==================== DASHBOARD / HOME (ADAPTIVE MODERN SKIN) ==================== */}
             {screen === 'home' && (
-              <div className="w-full h-full relative overflow-hidden">
+              <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
                   theme={theme}
@@ -1983,222 +2147,219 @@ export default function App() {
                   location={locationLabel}
                 />
 
-                {/* Two-tone Hero Headline from source/skin.h lines 149-154 */}
-                <div className="relative z-10 px-[18px] pt-[8px]">
-                  <div className="flex items-baseline gap-2.5 leading-tight">
-                    <span style={{ color: theme.text }} className="text-[28px] font-extrabold tracking-tight">
-                      {tr('Seu som.', language)}
-                    </span>
-                    <span style={{ color: theme.muted }} className="text-[28px] font-extrabold tracking-tight">
-                      {tr('Sua tela.', language)}
-                    </span>
+                <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col justify-between gap-2.5 overflow-y-auto kp-scroll w-full max-w-[1120px] mx-auto">
+                  {/* Two-tone Hero Headline */}
+                  <div className="shrink-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2.5 leading-tight">
+                      <span style={{ color: theme.text }} className="text-[23px] @min-[520px]:text-[28px] @min-[840px]:text-[32px] font-extrabold tracking-tight">
+                        {tr('Seu som.', language)}
+                      </span>
+                      <span style={{ color: theme.muted }} className="text-[23px] @min-[520px]:text-[28px] @min-[840px]:text-[32px] font-extrabold tracking-tight">
+                        {tr('Sua tela.', language)}
+                      </span>
+                    </div>
+                    <p style={{ color: theme.muted }} className="text-[11.5px] @min-[520px]:text-[12.5px] mt-0.5 truncate">
+                      {tr('Músicas, vídeos, rádios e TV ao vivo num player só.', language)}
+                    </p>
                   </div>
-                  <p style={{ color: theme.muted }} className="text-[12px] mt-0.5 truncate">
-                    {tr('Músicas, vídeos, rádios e TV ao vivo num player só.', language)}
-                  </p>
-                </div>
 
-                {/* Exact 3x2 Modern Gradient Card Grid (y=104, 192x94 cards) */}
-                <div className="relative z-10 px-4 mt-[10px] grid grid-cols-3 gap-x-4 gap-y-[10px]">
-                  {(
-                    [
-                      {
-                        kind: 'music',
-                        spriteCol: 0,
-                        tag: tr('LRC Sync', language),
-                        name: tr('Músicas', language),
-                        desc: tr('Sua trilha sonora,', language),
-                      },
-                      {
-                        kind: 'video',
-                        spriteCol: 1,
-                        tag: tr('Ocultar auto.', language),
-                        name: tr('Vídeos', language),
-                        desc: tr('Cinema na palma', language),
-                      },
-                      {
-                        kind: 'folder',
-                        spriteCol: 2,
-                        tag: tr('Mídias locais', language),
-                        name: tr('Arquivos', language),
-                        desc: tr('Explore as pastas', language),
-                      },
-                      {
-                        kind: 'radio',
-                        spriteCol: 3,
-                        tag: tr('Radio Browser', language),
-                        name: tr('Rádio Online', language),
-                        desc: tr('Estações do mundo', language),
-                      },
-                      {
-                        kind: 'iptv',
-                        spriteCol: 4,
-                        tag: tr('TV Online', language),
-                        name: tr('IPTV', language),
-                        desc: tr('Canais ao vivo', language),
-                      },
-                      {
-                        kind: 'football',
-                        spriteCol: 5,
-                        tag: tr('Placar ao vivo', language),
-                        name: tr('Placar da Bola', language),
-                        desc: tr('Jogos e estatísticas', language),
-                      },
-                    ] as const
-                  ).map((cardItem, i) => {
-                    const focused = i === dashFocus;
-                    const gradTop = mixRgb(theme.elevated, theme.accent, focused ? 0.22 : 0.1);
-                    return (
-                      <button
-                        key={cardItem.kind}
-                        type="button"
-                        onMouseEnter={() => setDashFocus(i)}
-                        onClick={() => openDashboardCard(i)}
-                        style={{
-                          height: 94,
-                          borderRadius: 16,
-                          border: focused
-                            ? `2px solid ${theme.accent}`
-                            : `1px solid ${themeHairline(theme)}`,
-                          background: `linear-gradient(180deg, ${gradTop} 0%, ${theme.panel} 100%)`,
-                          boxShadow: focused
-                            ? `0 0 18px ${rgbToRgba(theme.accent, 0.36)}`
-                            : undefined,
-                        }}
-                        className="relative text-left p-3 flex flex-col justify-between cursor-pointer transition-all"
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <div
-                            style={{
-                              width: 38,
-                              height: 38,
-                              borderRadius: 12,
-                              backgroundColor: rgbToRgba(theme.bg, 0.65),
-                              border: `1px solid ${mixRgb(theme.panel, theme.text, 0.09)}`,
-                            }}
-                            className="flex items-center justify-center shrink-0"
-                          >
-                            <KpSprite
-                              sheet="categorias"
-                              col={cardItem.spriteCol}
-                              themeIndex={themeIndex}
-                              size={26}
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1 pt-0.5">
+                  {/* Adaptive Category Card Grid (2x3 on compact portrait, 3x2 on 4:3 / landscape / desktop) */}
+                  <div className="grid grid-cols-2 @min-[520px]:grid-cols-3 gap-2.5 @min-[520px]:gap-3.5 flex-1 content-center">
+                    {(
+                      [
+                        {
+                          kind: 'music',
+                          spriteCol: 0,
+                          tag: tr('LRC Sync', language),
+                          name: tr('Músicas', language),
+                          desc: tr('Sua trilha sonora,', language),
+                        },
+                        {
+                          kind: 'video',
+                          spriteCol: 1,
+                          tag: tr('Ocultar auto.', language),
+                          name: tr('Vídeos', language),
+                          desc: tr('Cinema na palma', language),
+                        },
+                        {
+                          kind: 'folder',
+                          spriteCol: 2,
+                          tag: tr('Mídias locais', language),
+                          name: tr('Arquivos', language),
+                          desc: tr('Explore as pastas', language),
+                        },
+                        {
+                          kind: 'radio',
+                          spriteCol: 3,
+                          tag: tr('Radio Browser', language),
+                          name: tr('Rádio Online', language),
+                          desc: tr('Estações do mundo', language),
+                        },
+                        {
+                          kind: 'iptv',
+                          spriteCol: 4,
+                          tag: tr('TV Online', language),
+                          name: tr('IPTV', language),
+                          desc: tr('Canais ao vivo', language),
+                        },
+                        {
+                          kind: 'football',
+                          spriteCol: 5,
+                          tag: tr('Placar ao vivo', language),
+                          name: tr('Placar da Bola', language),
+                          desc: tr('Jogos e estatísticas', language),
+                        },
+                      ] as const
+                    ).map((cardItem, i) => {
+                      const focused = i === dashFocus;
+                      const gradTop = mixRgb(theme.elevated, theme.accent, focused ? 0.22 : 0.1);
+                      return (
+                        <button
+                          key={cardItem.kind}
+                          type="button"
+                          onMouseEnter={() => setDashFocus(i)}
+                          onClick={() => openDashboardCard(i)}
+                          style={{
+                            borderRadius: 16,
+                            border: focused
+                              ? `2px solid ${theme.accent}`
+                              : `1px solid ${themeHairline(theme)}`,
+                            background: `linear-gradient(180deg, ${gradTop} 0%, ${theme.panel} 100%)`,
+                            boxShadow: focused
+                              ? `0 0 18px ${rgbToRgba(theme.accent, 0.36)}`
+                              : undefined,
+                          }}
+                          className="relative text-left p-2.5 @min-[520px]:p-3 min-h-[86px] @min-[520px]:min-h-[94px] @min-[820px]:min-h-[112px] flex flex-col justify-between cursor-pointer transition-all"
+                        >
+                          <div className="flex items-start gap-2 @min-[520px]:gap-2.5">
                             <div
-                              style={{ color: theme.accent }}
-                              className="text-[10px] font-bold leading-tight truncate pr-4"
+                              style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 12,
+                                backgroundColor: rgbToRgba(theme.bg, 0.65),
+                                border: `1px solid ${mixRgb(theme.panel, theme.text, 0.09)}`,
+                              }}
+                              className="flex items-center justify-center shrink-0"
                             >
-                              {cardItem.tag}
+                              <KpSprite
+                                sheet="categorias"
+                                col={cardItem.spriteCol}
+                                themeIndex={themeIndex}
+                                size={24}
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1 pt-0.5">
+                              <div
+                                style={{ color: theme.accent }}
+                                className="text-[9.5px] @min-[520px]:text-[10px] font-bold leading-tight truncate pr-4"
+                              >
+                                {cardItem.tag}
+                              </div>
+                            </div>
+                            <div className="absolute right-2.5 top-2.5 @min-[520px]:right-3 @min-[520px]:top-3">
+                              <TileArrow color={focused ? theme.accent : theme.dim} size={11} />
                             </div>
                           </div>
-                          <div className="absolute right-3 top-3">
-                            <TileArrow color={focused ? theme.accent : theme.dim} size={11} />
-                          </div>
-                        </div>
 
-                        <div className="mt-auto">
-                          <div
-                            style={{ color: theme.text }}
-                            className="text-[16px] font-extrabold leading-tight truncate"
-                          >
-                            {cardItem.name}
+                          <div className="mt-2">
+                            <div
+                              style={{ color: theme.text }}
+                              className="text-[14.5px] @min-[520px]:text-[16px] font-extrabold leading-tight truncate"
+                            >
+                              {cardItem.name}
+                            </div>
+                            <div style={{ color: theme.muted }} className="text-[10px] truncate mt-0.5">
+                              {cardItem.desc}
+                            </div>
                           </div>
-                          <div style={{ color: theme.muted }} className="text-[10px] truncate mt-0.5">
-                            {cardItem.desc}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                {/* Modern Bottom Now Playing Card (y=318, h=108, vinyl + 34-bar visualizer + play_disc) */}
-                <div
-                  style={{
-                    ...modernPanelStyle(theme, 18),
-                    left: 16,
-                    top: 318,
-                    width: 608,
-                    height: 108,
-                  }}
-                  className="absolute z-10 px-3.5 flex items-center justify-between"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setScreen(activeRadio ? 'radio' : 'music')}
-                    className="flex items-center gap-4 min-w-0 flex-1 text-left cursor-pointer"
+                  {/* Adaptive Bottom Now Playing Card */}
+                  <div
+                    style={{
+                      ...modernPanelStyle(theme, 18),
+                    }}
+                    className="w-full min-h-[92px] @min-[520px]:min-h-[106px] px-3 @min-[520px]:px-4 py-2 flex items-center justify-between gap-2 shrink-0"
                   >
-                    <VinylArt
-                      theme={theme}
-                      size={84}
-                      coverUrl={activeTrack?.coverUrl}
-                      centerLogoUrl={activeRadio?.favicon || undefined}
-                      spinning={isPlaying && !isPaused}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div
-                        style={{ color: isPlaying ? theme.accent : theme.dim }}
-                        className="text-[10px] font-bold tracking-wider uppercase"
-                      >
-                        {isPlaying
-                          ? !isPaused
-                            ? tr('TOCANDO AGORA', language)
-                            : tr('PAUSADO', language)
-                          : tr('NADA TOCANDO', language)}
+                    <button
+                      type="button"
+                      onClick={() => setScreen(activeRadio ? 'radio' : 'music')}
+                      className="flex items-center gap-3 @min-[520px]:gap-4 min-w-0 flex-1 text-left cursor-pointer"
+                    >
+                      <VinylArt
+                        theme={theme}
+                        size={72}
+                        coverUrl={activeTrack?.coverUrl}
+                        centerLogoUrl={activeRadio?.favicon || undefined}
+                        spinning={isPlaying && !isPaused}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div
+                          style={{ color: isPlaying ? theme.accent : theme.dim }}
+                          className="text-[9.5px] @min-[520px]:text-[10px] font-bold tracking-wider uppercase"
+                        >
+                          {isPlaying
+                            ? !isPaused
+                              ? tr('TOCANDO AGORA', language)
+                              : tr('PAUSADO', language)
+                            : tr('NADA TOCANDO', language)}
+                        </div>
+                        <div
+                          style={{ color: theme.text }}
+                          className="text-[15px] @min-[520px]:text-[17px] font-extrabold truncate leading-snug mt-0.5"
+                        >
+                          {activeRadio
+                            ? activeRadio.name
+                            : activeTrack
+                            ? activeTrack.title
+                            : tr('Pronto para dar o play', language)}
+                        </div>
+                        <div style={{ color: theme.muted }} className="text-[11.5px] @min-[520px]:text-[12px] truncate">
+                          {activeRadio
+                            ? `${activeRadio.country} • ${tr('AO VIVO', language)}`
+                            : activeTrack
+                            ? activeTrack.artist || tr('Reprodução local', language)
+                            : tr('Abra Músicas ou Vídeos para começar', language)}
+                        </div>
+                        <div className="mt-1.5 hidden @min-[440px]:block overflow-hidden max-w-full">
+                          <AudioVisualizer
+                            theme={theme}
+                            bars={28}
+                            width={180}
+                            height={13}
+                            active={isPlaying && !isPaused}
+                          />
+                        </div>
                       </div>
-                      <div
-                        style={{ color: theme.text }}
-                        className="text-[17px] font-extrabold truncate leading-snug mt-0.5"
-                      >
-                        {activeRadio
-                          ? activeRadio.name
-                          : activeTrack
-                          ? activeTrack.title
-                          : tr('Pronto para dar o play', language)}
-                      </div>
-                      <div style={{ color: theme.muted }} className="text-[12px] truncate">
-                        {activeRadio
-                          ? `${activeRadio.country} • ${tr('AO VIVO', language)}`
-                          : activeTrack
-                          ? activeTrack.artist || tr('Reprodução local', language)
-                          : tr('Abra Músicas ou Vídeos para começar', language)}
-                      </div>
-                      <div className="mt-2">
-                        <AudioVisualizer
-                          theme={theme}
-                          bars={34}
-                          width={200}
-                          height={14}
-                          active={isPlaying && !isPaused}
-                        />
-                      </div>
-                    </div>
-                  </button>
+                    </button>
 
-                  <div className="flex items-center justify-center gap-3 pl-3 pr-1 shrink-0">
-                    <TransportSkipButton
-                      theme={theme}
-                      direction="prev"
-                      size={30}
-                      onClick={() => stepTrack(-1)}
-                      title="Anterior"
-                    />
-                    <PlayDisc
-                      theme={theme}
-                      size={44}
-                      playing={isPlaying && !isPaused}
-                      onClick={togglePlayPause}
-                      title="Reproduzir / Pausar"
-                    />
-                    <TransportSkipButton
-                      theme={theme}
-                      direction="next"
-                      size={30}
-                      onClick={() => stepTrack(1)}
-                      title="Próxima"
-                    />
+                    <div className="flex items-center justify-center gap-2 @min-[520px]:gap-3 pl-2 pr-0.5 shrink-0">
+                      <TransportSkipButton
+                        theme={theme}
+                        direction="prev"
+                        size={28}
+                        onClick={() => stepTrack(-1)}
+                        title="Anterior"
+                      />
+                      <PlayDisc
+                        theme={theme}
+                        size={42}
+                        playing={isPlaying && !isPaused}
+                        onClick={togglePlayPause}
+                        title="Reproduzir / Pausar"
+                      />
+                      <TransportSkipButton
+                        theme={theme}
+                        direction="next"
+                        size={28}
+                        onClick={() => stepTrack(1)}
+                        title="Próxima"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -2219,7 +2380,7 @@ export default function App() {
 
             {/* ==================== LIBRARY / FILE BROWSER ==================== */}
             {screen === 'library' && (
-              <div className="w-full h-full relative overflow-hidden">
+              <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
                   theme={theme}
@@ -2227,195 +2388,192 @@ export default function App() {
                   location={locationLabel}
                 />
 
-                {/* Top Library Filter Banner */}
-                <div
-                  style={{ ...modernPanelStyle(theme, 14), height: 68 }}
-                  className="relative z-10 mx-[14px] mt-[14px] px-3.5 py-2 flex flex-col justify-between"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <KpSprite sheet="categorias" col={2} themeIndex={themeIndex} size={22} />
-                    <span style={{ color: theme.text }} className="text-[14px] font-bold truncate">
-                      {libFavoritesOnly
-                        ? tr('Minhas favoritas', language)
-                        : libLocationsView
-                        ? tr('Escolha o local das suas mídias', language)
-                        : tr('Pastas: /roms(2)/bgmusic e /roms(2)/videos', language)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {(['Todos', 'Músicas', 'Vídeos'] as const).map((tab, i) => {
-                      const activeTab = i === libFilter;
-                      return (
-                        <button
-                          key={tab}
-                          type="button"
-                          onClick={() => {
-                            setLibFilter(i as 0 | 1 | 2);
-                            setLibSelected(0);
-                          }}
-                          style={{
-                            ...modernPillStyle(theme, activeTab),
-                            width: 92,
-                            height: 21,
-                          }}
-                          className="text-[12px] font-semibold cursor-pointer transition-all"
-                        >
-                          {tr(tab, language)}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      style={{ backgroundColor: theme.elevated, color: theme.accent }}
-                      className="ml-auto px-2.5 h-[21px] rounded-full text-[11px] font-semibold cursor-pointer hover:brightness-110"
-                    >
-                      + {tr('Importar do dispositivo', language)}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Locations View OR Files List */}
-                <div className="relative z-10 px-[14px] mt-3 space-y-1.5">
-                  {libLocationsView ? (
-                    [
-                      {
-                        name: tr('Músicas (SD1)', language),
-                        path: '/roms/bgmusic',
-                        action: () => {
-                          setLibFilter(1);
-                          setLibLocationsView(false);
-                        },
-                      },
-                      {
-                        name: tr('Músicas (SD2)', language),
-                        path: '/roms2/bgmusic',
-                        action: () => {
-                          setLibFilter(1);
-                          setLibLocationsView(false);
-                        },
-                      },
-                      {
-                        name: tr('Vídeos (SD1)', language),
-                        path: '/roms/videos',
-                        action: () => {
-                          setLibFilter(2);
-                          setLibLocationsView(false);
-                        },
-                      },
-                      {
-                        name: tr('Vídeos (SD2)', language),
-                        path: '/roms2/videos',
-                        action: () => {
-                          setLibFilter(2);
-                          setLibLocationsView(false);
-                        },
-                      },
-                    ].map((loc, idx) => {
-                      const focus = idx === libLocationSelected;
-                      return (
-                        <button
-                          key={loc.name}
-                          type="button"
-                          onMouseEnter={() => setLibLocationSelected(idx)}
-                          onClick={loc.action}
-                          style={{
-                            ...modernCardStyle(theme, focus, 10, theme.panel),
-                            height: 58,
-                          }}
-                          className="w-full px-3.5 flex items-center justify-between cursor-pointer text-left transition-all"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <KpSprite sheet="categorias" col={2} themeIndex={themeIndex} size={26} />
-                            <div className="min-w-0">
-                              <div style={{ color: theme.text }} className="text-[16px] font-bold truncate">
-                                {loc.name}
-                              </div>
-                              <div style={{ color: theme.muted }} className="text-[12px] truncate">
-                                {loc.path}
-                              </div>
-                            </div>
-                          </div>
-                          <span style={{ color: theme.accent }} className="text-[13px] font-semibold shrink-0">
-                            {tr('Abrir', language)}
-                          </span>
-                        </button>
-                      );
-                    })
-                  ) : filteredLibrary.length === 0 ? (
-                    <div className="pt-16 text-center px-6">
-                      <div style={{ color: theme.text }} className="text-[20px] font-bold">
-                        {tr('Nenhuma mídia neste filtro', language)}
-                      </div>
-                      <div style={{ color: theme.muted }} className="text-[13px] mt-2">
-                        {tr('A volta. Esquerda/direita muda o filtro. Y atualiza.', language)}
-                      </div>
+                <div className="relative z-10 flex-1 min-h-0 px-3.5 pt-3 pb-[52px] flex flex-col w-full max-w-[1040px] mx-auto">
+                  {/* Top Library Filter Banner */}
+                  <div
+                    style={{ ...modernPanelStyle(theme, 14) }}
+                    className="px-3.5 py-2.5 flex flex-col gap-2 shrink-0"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <KpSprite sheet="categorias" col={2} themeIndex={themeIndex} size={22} />
+                      <span style={{ color: theme.text }} className="text-[13.5px] @min-[520px]:text-[14px] font-bold truncate">
+                        {libFavoritesOnly
+                          ? tr('Minhas favoritas', language)
+                          : libLocationsView
+                          ? tr('Escolha o local das suas mídias', language)
+                          : tr('Pastas: /roms(2)/bgmusic e /roms(2)/videos', language)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 @min-[520px]:gap-2">
+                      {(['Todos', 'Músicas', 'Vídeos'] as const).map((tab, i) => {
+                        const activeTab = i === libFilter;
+                        return (
+                          <button
+                            key={tab}
+                            type="button"
+                            onClick={() => {
+                              setLibFilter(i as 0 | 1 | 2);
+                              setLibSelected(0);
+                            }}
+                            style={{
+                              ...modernPillStyle(theme, activeTab),
+                              height: 22,
+                            }}
+                            className="px-3 @min-[520px]:min-w-[88px] text-[11.5px] font-semibold cursor-pointer transition-all"
+                          >
+                            {tr(tab, language)}
+                          </button>
+                        );
+                      })}
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        style={{
-                          backgroundColor: theme.accent,
-                          color: theme.bg,
-                          boxShadow: `0 0 16px ${rgbToRgba(theme.accent, 0.4)}`,
-                        }}
-                        className="mt-4 px-5 py-2 rounded-full text-[13px] font-bold cursor-pointer"
+                        style={{ backgroundColor: theme.elevated, color: theme.accent }}
+                        className="ml-auto px-2.5 h-[22px] rounded-full text-[11px] font-semibold cursor-pointer hover:brightness-110 whitespace-nowrap"
                       >
                         + {tr('Importar do dispositivo', language)}
                       </button>
                     </div>
-                  ) : (
-                    filteredLibrary.slice(libWindowStart, libWindowStart + 6).map((item, offsetIdx) => {
-                      const realIdx = libWindowStart + offsetIdx;
-                      const focus = realIdx === libSelected;
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onMouseEnter={() => setLibSelected(realIdx)}
-                          onClick={() => {
-                            playMediaTrack(item);
-                            if (item.kind === 'audio') setScreen('music');
-                          }}
-                          style={{
-                            ...modernCardStyle(theme, focus, 9, theme.panel),
-                            height: 44,
-                          }}
-                          className="w-full px-3 flex items-center justify-between text-left cursor-pointer transition-all"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <KpSprite
-                              sheet="categorias"
-                              col={item.kind === 'audio' ? 0 : 1}
-                              themeIndex={themeIndex}
-                              size={24}
-                            />
-                            <div className="min-w-0">
-                              <div style={{ color: theme.text }} className="text-[15px] font-semibold truncate">
-                                {item.name}
-                              </div>
-                              <div style={{ color: theme.dim }} className="text-[10px]">
-                                {item.kind === 'audio' ? tr('Áudio', language) : tr('Vídeo', language)}
-                                {item.lyrics ? ' • LRC' : ''}
+                  </div>
+
+                  {/* Locations View OR Full Scrollable Files List */}
+                  <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-1.5">
+                    {libLocationsView ? (
+                      [
+                        {
+                          name: tr('Músicas (SD1)', language),
+                          path: '/roms/bgmusic',
+                          action: () => {
+                            setLibFilter(1);
+                            setLibLocationsView(false);
+                          },
+                        },
+                        {
+                          name: tr('Músicas (SD2)', language),
+                          path: '/roms2/bgmusic',
+                          action: () => {
+                            setLibFilter(1);
+                            setLibLocationsView(false);
+                          },
+                        },
+                        {
+                          name: tr('Vídeos (SD1)', language),
+                          path: '/roms/videos',
+                          action: () => {
+                            setLibFilter(2);
+                            setLibLocationsView(false);
+                          },
+                        },
+                        {
+                          name: tr('Vídeos (SD2)', language),
+                          path: '/roms2/videos',
+                          action: () => {
+                            setLibFilter(2);
+                            setLibLocationsView(false);
+                          },
+                        },
+                      ].map((loc, idx) => {
+                        const focus = idx === libLocationSelected;
+                        return (
+                          <button
+                            key={loc.name}
+                            type="button"
+                            onMouseEnter={() => setLibLocationSelected(idx)}
+                            onClick={loc.action}
+                            style={{
+                              ...modernCardStyle(theme, focus, 10, theme.panel),
+                              height: 58,
+                            }}
+                            className="w-full px-3.5 flex items-center justify-between cursor-pointer text-left transition-all"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <KpSprite sheet="categorias" col={2} themeIndex={themeIndex} size={26} />
+                              <div className="min-w-0">
+                                <div style={{ color: theme.text }} className="text-[15px] @min-[520px]:text-[16px] font-bold truncate">
+                                  {loc.name}
+                                </div>
+                                <div style={{ color: theme.muted }} className="text-[11.5px] truncate">
+                                  {loc.path}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <span style={{ color: theme.muted }} className="text-[12px] shrink-0 pl-2">
-                            {formatBytes(item.sizeBytes)}
-                          </span>
+                            <span style={{ color: theme.accent }} className="text-[13px] font-semibold shrink-0 pl-2">
+                              {tr('Abrir', language)}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : filteredLibrary.length === 0 ? (
+                      <div className="py-12 text-center px-6">
+                        <div style={{ color: theme.text }} className="text-[19px] font-bold">
+                          {tr('Nenhuma mídia neste filtro', language)}
+                        </div>
+                        <div style={{ color: theme.muted }} className="text-[13px] mt-2">
+                          {tr('A volta. Esquerda/direita muda o filtro. Y atualiza.', language)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          style={{
+                            backgroundColor: theme.accent,
+                            color: theme.bg,
+                            boxShadow: `0 0 16px ${rgbToRgba(theme.accent, 0.4)}`,
+                          }}
+                          className="mt-4 px-5 py-2 rounded-full text-[13px] font-bold cursor-pointer"
+                        >
+                          + {tr('Importar do dispositivo', language)}
                         </button>
-                      );
-                    })
+                      </div>
+                    ) : (
+                      filteredLibrary.map((item, realIdx) => {
+                        const focus = realIdx === libSelected;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onMouseEnter={() => setLibSelected(realIdx)}
+                            onClick={() => {
+                              playMediaTrack(item);
+                              if (item.kind === 'audio') setScreen('music');
+                            }}
+                            style={{
+                              ...modernCardStyle(theme, focus, 9, theme.panel),
+                              height: 46,
+                            }}
+                            className="w-full px-3 flex items-center justify-between text-left cursor-pointer transition-all"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <KpSprite
+                                sheet="categorias"
+                                col={item.kind === 'audio' ? 0 : 1}
+                                themeIndex={themeIndex}
+                                size={24}
+                              />
+                              <div className="min-w-0">
+                                <div style={{ color: theme.text }} className="text-[14.5px] font-semibold truncate">
+                                  {item.name}
+                                </div>
+                                <div style={{ color: theme.dim }} className="text-[10px]">
+                                  {item.kind === 'audio' ? tr('Áudio', language) : tr('Vídeo', language)}
+                                  {item.lyrics ? ' • LRC' : ''}
+                                </div>
+                              </div>
+                            </div>
+                            <span style={{ color: theme.muted }} className="text-[12px] shrink-0 pl-2">
+                              {formatBytes(item.sizeBytes)}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {!libLocationsView && (
+                    <div style={{ color: theme.dim }} className="pt-1.5 text-[11px] shrink-0">
+                      {filteredLibrary.length ? libSelected + 1 : 0} / {filteredLibrary.length}
+                    </div>
                   )}
                 </div>
-
-                {!libLocationsView && (
-                  <div
-                    style={{ left: 18, top: 416, color: theme.dim }}
-                    className="absolute z-10 text-[11px]"
-                  >
-                    {filteredLibrary.length ? libSelected + 1 : 0} / {filteredLibrary.length}
-                  </div>
-                )}
 
                 <FooterBar
                   theme={theme}
@@ -2433,9 +2591,9 @@ export default function App() {
               </div>
             )}
 
-            {/* ==================== MUSIC PLAYER (02-musica.png MODERN SKIN) ==================== */}
+            {/* ==================== MUSIC PLAYER (ADAPTIVE MODERN SKIN) ==================== */}
             {screen === 'music' && (
-              <div className="w-full h-full relative overflow-hidden">
+              <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
                   theme={theme}
@@ -2443,321 +2601,317 @@ export default function App() {
                   location={locationLabel}
                 />
 
-                {/* Left Album & Metadata Card (x=16, y=46, w=232, h=320) */}
-                <div
-                  style={{
-                    ...modernPanelStyle(theme, 16),
-                    left: 16,
-                    top: 46,
-                    width: 232,
-                    height: 320,
-                  }}
-                  className="absolute z-10 p-3 flex flex-col items-center"
-                >
-                  <VinylArt
-                    theme={theme}
-                    size={122}
-                    coverUrl={activeTrack?.coverUrl}
-                    spinning={isPlaying && !isPaused && !activeRadio}
-                  />
+                <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-[52px] flex flex-col gap-2.5 w-full max-w-[1160px] mx-auto">
+                  {/* Main Split: Album Metadata + Lyrics/Queue/Folder */}
+                  <div className="flex-1 min-h-0 grid grid-cols-1 @min-[540px]:grid-cols-[minmax(216px,36%)_1fr] gap-3 overflow-hidden">
+                    {/* Left Album & Metadata Card */}
+                    <div
+                      style={{
+                        ...modernPanelStyle(theme, 16),
+                      }}
+                      className="p-3 flex flex-row @min-[540px]:flex-col items-center gap-3 @min-[540px]:gap-0 @min-[540px]:justify-center overflow-y-auto kp-scroll"
+                    >
+                      <VinylArt
+                        theme={theme}
+                        size={108}
+                        coverUrl={activeTrack?.coverUrl}
+                        spinning={isPlaying && !isPaused && !activeRadio}
+                      />
 
-                  <div
-                    style={{ color: theme.text }}
-                    className="mt-2.5 text-[16px] font-extrabold text-center leading-tight line-clamp-2 w-full"
-                  >
-                    {activeTrack?.title ?? tr('Pronto para dar o play', language)}
-                  </div>
-                  <div
-                    style={{ color: theme.accent }}
-                    className="mt-1 text-[12px] font-semibold truncate w-full text-center"
-                  >
-                    {activeTrack?.artist ?? tr('Artista não informado', language)}
-                  </div>
-                  <div
-                    style={{ color: theme.muted }}
-                    className="text-[11px] truncate w-full text-center"
-                  >
-                    {activeTrack?.album ?? tr('Áudio local', language)}
-                  </div>
-
-                  <div className="mt-2">
-                    <AudioVisualizer
-                      theme={theme}
-                      bars={30}
-                      width={192}
-                      height={16}
-                      active={isPlaying && !isPaused && !activeRadio}
-                    />
-                  </div>
-
-                  <div
-                    style={{ backgroundColor: themeHairline(theme) }}
-                    className="w-full h-[1px] my-2"
-                  />
-
-                  <div style={{ color: theme.text }} className="text-[11px] w-full truncate">
-                    {activeTrack?.format ?? 'AUDIO'} • {formatBytes(activeTrack?.sizeBytes ?? 0)} •{' '}
-                    {formatTime(durationMs)}
-                  </div>
-                  <div style={{ color: theme.muted }} className="text-[11px] w-full truncate mt-0.5">
-                    {activeTrack?.sampleRate
-                      ? `${(activeTrack.sampleRate / 1000).toFixed(1)} kHz • ${activeTrack.channels ?? 2} ${tr('canais', language)}`
-                      : tr('Analisando dados técnicos...', language)}
-                  </div>
-                  {activeTrack?.bitrateKbps && (
-                    <div style={{ color: theme.accent }} className="text-[11px] font-semibold w-full truncate mt-0.5">
-                      {activeTrack.bitrateKbps} kbps
-                    </div>
-                  )}
-                </div>
-
-                {/* Right Switchable Panel: Letras / Fila / Pasta (x=260, y=46, w=364, h=320) */}
-                <div
-                  style={{
-                    ...modernPanelStyle(theme, 16),
-                    left: 260,
-                    top: 46,
-                    width: 364,
-                    height: 320,
-                  }}
-                  className="absolute z-10 p-3 flex flex-col"
-                >
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['Letras', 'Fila', 'Pasta'] as const).map((tab, i) => {
-                      const activeTab = i === audioPanel;
-                      return (
-                        <button
-                          key={tab}
-                          type="button"
-                          onClick={() => setAudioPanel(i as 0 | 1 | 2)}
-                          style={{
-                            ...modernPillStyle(theme, activeTab),
-                            height: 28,
-                          }}
-                          className="text-[13px] font-bold cursor-pointer transition-all"
+                      <div className="min-w-0 flex-1 @min-[540px]:flex-none @min-[540px]:w-full @min-[540px]:mt-2.5 flex flex-col @min-[540px]:items-center">
+                        <div
+                          style={{ color: theme.text }}
+                          className="text-[15px] @min-[540px]:text-[16px] font-extrabold @min-[540px]:text-center leading-tight line-clamp-2 w-full"
                         >
-                          {tr(tab, language)}
-                        </button>
-                      );
-                    })}
-                  </div>
+                          {activeTrack?.title ?? tr('Pronto para dar o play', language)}
+                        </div>
+                        <div
+                          style={{ color: theme.accent }}
+                          className="mt-1 text-[12px] font-semibold truncate w-full @min-[540px]:text-center"
+                        >
+                          {activeTrack?.artist ?? tr('Artista não informado', language)}
+                        </div>
+                        <div
+                          style={{ color: theme.muted }}
+                          className="text-[11px] truncate w-full @min-[540px]:text-center"
+                        >
+                          {activeTrack?.album ?? tr('Áudio local', language)}
+                        </div>
 
-                  {audioPanel === 0 ? (
-                    <div className="flex-1 flex flex-col mt-3 overflow-hidden">
-                      <div
-                        style={{ color: theme.accent }}
-                        className="text-[10px] font-bold tracking-wider uppercase"
-                      >
-                        {activeTrack?.lyrics?.length
-                          ? tr('LETRAS SINCRONIZADAS', language)
-                          : tr('LETRAS', language)}
+                        <div className="mt-2 hidden @min-[540px]:flex justify-center max-w-full overflow-hidden">
+                          <AudioVisualizer
+                            theme={theme}
+                            bars={26}
+                            width={184}
+                            height={15}
+                            active={isPlaying && !isPaused && !activeRadio}
+                          />
+                        </div>
+
+                        <div
+                          style={{ backgroundColor: themeHairline(theme) }}
+                          className="hidden @min-[540px]:block w-full h-[1px] my-2"
+                        />
+
+                        <div style={{ color: theme.text }} className="text-[10.5px] @min-[540px]:text-[11px] w-full truncate mt-1 @min-[540px]:mt-0">
+                          {activeTrack?.format ?? 'AUDIO'} • {formatBytes(activeTrack?.sizeBytes ?? 0)} •{' '}
+                          {formatTime(durationMs)}
+                        </div>
+                        <div style={{ color: theme.muted }} className="text-[10.5px] @min-[540px]:text-[11px] w-full truncate mt-0.5 hidden @min-[540px]:block">
+                          {activeTrack?.sampleRate
+                            ? `${(activeTrack.sampleRate / 1000).toFixed(1)} kHz • ${activeTrack.channels ?? 2} ${tr('canais', language)}`
+                            : tr('Analisando dados técnicos...', language)}
+                        </div>
+                        {activeTrack?.bitrateKbps && (
+                          <div style={{ color: theme.accent }} className="text-[11px] font-semibold w-full truncate mt-0.5 hidden @min-[540px]:block">
+                            {activeTrack.bitrateKbps} kbps
+                          </div>
+                        )}
                       </div>
-                      {activeTrack?.lyrics?.length ? (
-                        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-3 text-center">
-                          <div style={{ color: theme.muted }} className="text-[14px] min-h-[20px]">
-                            {activeLyricIndex > 0 ? activeTrack.lyrics[activeLyricIndex - 1].text : ''}
-                          </div>
-                          <div
-                            style={{ color: theme.text }}
-                            className="text-[19px] font-extrabold leading-snug"
-                          >
-                            {activeLyricIndex >= 0
-                              ? activeTrack.lyrics[activeLyricIndex].text
-                              : tr('Aguardando a letra...', language)}
-                          </div>
-                          <div style={{ color: theme.muted }} className="text-[14px] min-h-[20px]">
-                            {activeLyricIndex + 1 < activeTrack.lyrics.length
-                              ? activeTrack.lyrics[activeLyricIndex + 1].text
-                              : ''}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-                          <div style={{ color: theme.text }} className="text-[17px] font-bold">
-                            {tr('Letras indisponíveis', language)}
-                          </div>
-                          <div style={{ color: theme.muted }} className="text-[12px] mt-2">
-                            {tr('Use um .lrc com o mesmo nome do áudio.', language)}
-                          </div>
-                        </div>
-                      )}
                     </div>
-                  ) : (
-                    <div className="flex-1 flex flex-col mt-2.5 overflow-hidden">
-                      <div style={{ color: theme.muted }} className="text-[11px] mb-2 truncate">
-                        {audioPanel === 2
-                          ? '/roms/bgmusic  •  /roms2/bgmusic'
-                          : `${audioTracks.length} ${tr('Músicas', language).toLowerCase()}`}
-                      </div>
-                      <div className="space-y-1.5 overflow-y-auto kp-scroll pr-1">
-                        {audioTracks.map((t, idx) => {
-                          const focus = idx === queueCursor;
-                          const isCur = activeTrack?.id === t.id;
+
+                    {/* Right Switchable Panel: Letras / Fila / Pasta */}
+                    <div
+                      style={{
+                        ...modernPanelStyle(theme, 16),
+                      }}
+                      className="p-3 flex flex-col min-h-0 overflow-hidden"
+                    >
+                      <div className="grid grid-cols-3 gap-2 shrink-0">
+                        {(['Letras', 'Fila', 'Pasta'] as const).map((tab, i) => {
+                          const activeTab = i === audioPanel;
                           return (
                             <button
-                              key={t.id}
+                              key={tab}
                               type="button"
-                              onMouseEnter={() => setQueueCursor(idx)}
-                              onClick={() => playMediaTrack(t)}
+                              onClick={() => setAudioPanel(i as 0 | 1 | 2)}
                               style={{
-                                ...modernCardStyle(theme, focus, 8, theme.panel),
-                                height: 41,
+                                ...modernPillStyle(theme, activeTab),
+                                height: 28,
                               }}
-                              className="w-full px-2.5 flex items-center gap-2.5 text-left cursor-pointer transition-all"
+                              className="text-[12.5px] @min-[520px]:text-[13px] font-bold cursor-pointer transition-all"
                             >
-                              <span
-                                style={{ color: isCur ? theme.accent : theme.muted }}
-                                className="w-4 h-4 flex items-center justify-center shrink-0"
-                              >
-                                {isCur ? (
-                                  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="block">
-                                    <rect x="1.5" y="4" width="2" height="7" rx="1" />
-                                    <rect x="5" y="1" width="2" height="10" rx="1" />
-                                    <rect x="8.5" y="3" width="2" height="8" rx="1" />
-                                  </svg>
-                                ) : (
-                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" className="block">
-                                    <path d="M3 2.2C3 1.7 3.6 1.4 4 1.7L9.8 5.5C10.2 5.8 10.2 6.2 9.8 6.5L4 10.3C3.6 10.6 3 10.3 3 9.8V2.2Z" />
-                                  </svg>
-                                )}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <div
-                                  style={{ color: isCur ? theme.accent : theme.text }}
-                                  className="text-[13px] font-semibold truncate"
-                                >
-                                  {t.title}
-                                </div>
-                                <div style={{ color: theme.muted }} className="text-[10px] truncate">
-                                  {isCur ? tr('Em reprodução', language) : tr('B  Reproduzir', language)}
-                                </div>
-                              </div>
+                              {tr(tab, language)}
                             </button>
                           );
                         })}
                       </div>
-                    </div>
-                  )}
-                </div>
 
-                {/* Bottom Transport Bar (x=16, y=374, w=608, h=56) — Symmetric 164 | 1fr | 164 grid */}
-                <div
-                  style={{
-                    ...modernPanelStyle(theme, 14),
-                    left: 16,
-                    top: 374,
-                    width: 608,
-                    height: 56,
-                  }}
-                  className="absolute z-10 px-2.5 grid grid-cols-[164px_1fr_164px] items-center"
-                >
-                  {/* Left column: Up Next */}
-                  <div
-                    style={{ borderRight: `1px solid ${themeHairline(theme)}` }}
-                    className="flex items-center gap-2.5 pr-2.5 h-[40px] min-w-0"
-                  >
-                    <div
-                      style={{
-                        backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
-                        color: theme.accent,
-                      }}
-                      className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center shrink-0"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="block">
-                        <path d="M4.5 2.7C4.5 2.1 5.2 1.8 5.7 2.1L13.1 7.4C13.5 7.7 13.5 8.3 13.1 8.6L5.7 13.9C5.2 14.2 4.5 13.9 4.5 13.3V2.7Z" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0">
-                      <div style={{ color: theme.accent }} className="text-[9px] font-bold tracking-wider leading-tight">
-                        {tr('A SEGUIR', language)}
-                      </div>
-                      <div style={{ color: theme.text }} className="text-[11.5px] font-semibold truncate leading-tight mt-0.5">
-                        {upNextTrack ? upNextTrack.title : tr('Fim da fila', language)}
-                      </div>
+                      {audioPanel === 0 ? (
+                        <div className="flex-1 min-h-0 flex flex-col mt-3 overflow-hidden">
+                          <div
+                            style={{ color: theme.accent }}
+                            className="text-[10px] font-bold tracking-wider uppercase shrink-0"
+                          >
+                            {activeTrack?.lyrics?.length
+                              ? tr('LETRAS SINCRONIZADAS', language)
+                              : tr('LETRAS', language)}
+                          </div>
+                          {activeTrack?.lyrics?.length ? (
+                            <div className="flex-1 flex flex-col items-center justify-center gap-4 px-3 text-center">
+                              <div style={{ color: theme.muted }} className="text-[13.5px] min-h-[20px]">
+                                {activeLyricIndex > 0 ? activeTrack.lyrics[activeLyricIndex - 1].text : ''}
+                              </div>
+                              <div
+                                style={{ color: theme.text }}
+                                className="text-[18px] @min-[700px]:text-[22px] font-extrabold leading-snug"
+                              >
+                                {activeLyricIndex >= 0
+                                  ? activeTrack.lyrics[activeLyricIndex].text
+                                  : tr('Aguardando a letra...', language)}
+                              </div>
+                              <div style={{ color: theme.muted }} className="text-[13.5px] min-h-[20px]">
+                                {activeLyricIndex + 1 < activeTrack.lyrics.length
+                                  ? activeTrack.lyrics[activeLyricIndex + 1].text
+                                  : ''}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+                              <div style={{ color: theme.text }} className="text-[16px] font-bold">
+                                {tr('Letras indisponíveis', language)}
+                              </div>
+                              <div style={{ color: theme.muted }} className="text-[12px] mt-2">
+                                {tr('Use um .lrc com o mesmo nome do áudio.', language)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex-1 min-h-0 flex flex-col mt-2.5 overflow-hidden">
+                          <div style={{ color: theme.muted }} className="text-[11px] mb-2 truncate shrink-0">
+                            {audioPanel === 2
+                              ? '/roms/bgmusic  •  /roms2/bgmusic'
+                              : `${audioTracks.length} ${tr('Músicas', language).toLowerCase()}`}
+                          </div>
+                          <div className="flex-1 min-h-0 space-y-1.5 overflow-y-auto kp-scroll pr-1">
+                            {audioTracks.map((t, idx) => {
+                              const focus = idx === queueCursor;
+                              const isCur = activeTrack?.id === t.id;
+                              return (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onMouseEnter={() => setQueueCursor(idx)}
+                                  onClick={() => playMediaTrack(t)}
+                                  style={{
+                                    ...modernCardStyle(theme, focus, 8, theme.panel),
+                                    height: 41,
+                                  }}
+                                  className="w-full px-2.5 flex items-center gap-2.5 text-left cursor-pointer transition-all"
+                                >
+                                  <span
+                                    style={{ color: isCur ? theme.accent : theme.muted }}
+                                    className="w-4 h-4 flex items-center justify-center shrink-0"
+                                  >
+                                    {isCur ? (
+                                      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="block">
+                                        <rect x="1.5" y="4" width="2" height="7" rx="1" />
+                                        <rect x="5" y="1" width="2" height="10" rx="1" />
+                                        <rect x="8.5" y="3" width="2" height="8" rx="1" />
+                                      </svg>
+                                    ) : (
+                                      <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" className="block">
+                                        <path d="M3 2.2C3 1.7 3.6 1.4 4 1.7L9.8 5.5C10.2 5.8 10.2 6.2 9.8 6.5L4 10.3C3.6 10.6 3 10.3 3 9.8V2.2Z" />
+                                      </svg>
+                                    )}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div
+                                      style={{ color: isCur ? theme.accent : theme.text }}
+                                      className="text-[13px] font-semibold truncate"
+                                    >
+                                      {t.title}
+                                    </div>
+                                    <div style={{ color: theme.muted }} className="text-[10px] truncate">
+                                      {isCur ? tr('Em reprodução', language) : tr('B  Reproduzir', language)}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Center Transport + Progress (dead-center horizontally & vertically balanced) */}
-                  <div className="flex flex-col items-center justify-center px-3 gap-1.5">
-                    <div className="flex items-center justify-center gap-4">
-                      <TransportSkipButton
-                        theme={theme}
-                        direction="prev"
-                        size={24}
-                        onClick={() => stepTrack(-1)}
-                        title="Anterior"
-                      />
-                      <PlayDisc
-                        theme={theme}
-                        size={30}
-                        playing={isPlaying && !isPaused}
-                        onClick={togglePlayPause}
-                        title="Reproduzir / Pausar"
-                      />
-                      <TransportSkipButton
-                        theme={theme}
-                        direction="next"
-                        size={24}
-                        onClick={() => stepTrack(1)}
-                        title="Próxima"
-                      />
-                    </div>
-                    <div className="w-full flex items-center justify-center gap-2">
-                      <span
-                        style={{ color: theme.muted }}
-                        className="text-[9.5px] tabular-nums min-w-[28px] text-right leading-none"
-                      >
-                        {formatTime(currentMs)}
-                      </span>
+                  {/* Adaptive Bottom Transport Bar */}
+                  <div
+                    style={{
+                      ...modernPanelStyle(theme, 14),
+                      minHeight: 56,
+                    }}
+                    className="w-full px-3 py-1.5 grid grid-cols-1 @min-[540px]:grid-cols-[minmax(146px,26%)_1fr_minmax(130px,24%)] items-center gap-2 shrink-0"
+                  >
+                    {/* Left column: Up Next */}
+                    <div
+                      style={{ borderRight: `1px solid ${themeHairline(theme)}` }}
+                      className="hidden @min-[540px]:flex items-center gap-2.5 pr-2.5 h-[40px] min-w-0"
+                    >
                       <div
-                        style={{ backgroundColor: mixRgb(theme.elevated, theme.text, 0.14) }}
-                        className="flex-1 h-[4px] rounded-full relative cursor-pointer"
-                        onClick={(e) => {
-                          if (!audioRef.current || !durationMs) return;
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                          audioRef.current.currentTime = (ratio * durationMs) / 1000;
+                        style={{
+                          backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
+                          color: theme.accent,
                         }}
+                        className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center shrink-0"
                       >
-                        <div
-                          style={{
-                            width: `${durationMs > 0 ? Math.min(100, (currentMs / durationMs) * 100) : 0}%`,
-                            backgroundColor: theme.accent,
-                          }}
-                          className="h-full rounded-full relative"
-                        >
-                          <span
-                            style={{ backgroundColor: theme.text }}
-                            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-[8px] h-[8px] rounded-full shadow"
-                          />
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="block">
+                          <path d="M4.5 2.7C4.5 2.1 5.2 1.8 5.7 2.1L13.1 7.4C13.5 7.7 13.5 8.3 13.1 8.6L5.7 13.9C5.2 14.2 4.5 13.9 4.5 13.3V2.7Z" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0">
+                        <div style={{ color: theme.accent }} className="text-[9px] font-bold tracking-wider leading-tight">
+                          {tr('A SEGUIR', language)}
+                        </div>
+                        <div style={{ color: theme.text }} className="text-[11.5px] font-semibold truncate leading-tight mt-0.5">
+                          {upNextTrack ? upNextTrack.title : tr('Fim da fila', language)}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Center Transport + Progress */}
+                    <div className="flex flex-col items-center justify-center px-1 @min-[540px]:px-3 gap-1.5">
+                      <div className="flex items-center justify-center gap-4">
+                        <TransportSkipButton
+                          theme={theme}
+                          direction="prev"
+                          size={24}
+                          onClick={() => stepTrack(-1)}
+                          title="Anterior"
+                        />
+                        <PlayDisc
+                          theme={theme}
+                          size={30}
+                          playing={isPlaying && !isPaused}
+                          onClick={togglePlayPause}
+                          title="Reproduzir / Pausar"
+                        />
+                        <TransportSkipButton
+                          theme={theme}
+                          direction="next"
+                          size={24}
+                          onClick={() => stepTrack(1)}
+                          title="Próxima"
+                        />
+                      </div>
+                      <div className="w-full flex items-center justify-center gap-2">
+                        <span
+                          style={{ color: theme.muted }}
+                          className="text-[9.5px] tabular-nums min-w-[28px] text-right leading-none"
+                        >
+                          {formatTime(currentMs)}
+                        </span>
+                        <div
+                          style={{ backgroundColor: mixRgb(theme.elevated, theme.text, 0.14) }}
+                          className="flex-1 h-[4px] rounded-full relative cursor-pointer"
+                          onClick={(e) => {
+                            if (!audioRef.current || !durationMs) return;
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                            audioRef.current.currentTime = (ratio * durationMs) / 1000;
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${durationMs > 0 ? Math.min(100, (currentMs / durationMs) * 100) : 0}%`,
+                              backgroundColor: theme.accent,
+                            }}
+                            className="h-full rounded-full relative"
+                          >
+                            <span
+                              style={{ backgroundColor: theme.text }}
+                              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-[8px] h-[8px] rounded-full shadow"
+                            />
+                          </div>
+                        </div>
+                        <span
+                          style={{ color: theme.muted }}
+                          className="text-[9.5px] tabular-nums min-w-[28px] text-left leading-none"
+                        >
+                          {formatTime(durationMs)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Right column: Format pill + file size */}
+                    <div
+                      style={{ borderLeft: `1px solid ${themeHairline(theme)}` }}
+                      className="hidden @min-[540px]:flex items-center justify-end gap-2 pl-2.5 h-[40px] min-w-0"
+                    >
                       <span
-                        style={{ color: theme.muted }}
-                        className="text-[9.5px] tabular-nums min-w-[28px] text-left leading-none"
+                        style={{
+                          backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
+                          color: theme.accent,
+                        }}
+                        className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide shrink-0"
                       >
-                        {formatTime(durationMs)}
+                        {activeTrack?.format ?? 'AUDIO'}
+                      </span>
+                      <span style={{ color: theme.text }} className="text-[11px] font-medium tabular-nums truncate">
+                        {formatBytes(activeTrack?.sizeBytes ?? 0)}
                       </span>
                     </div>
-                  </div>
-
-                  {/* Right column: Format pill + file size */}
-                  <div
-                    style={{ borderLeft: `1px solid ${themeHairline(theme)}` }}
-                    className="flex items-center justify-end gap-2 pl-2.5 h-[40px] min-w-0"
-                  >
-                    <span
-                      style={{
-                        backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
-                        color: theme.accent,
-                      }}
-                      className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide shrink-0"
-                    >
-                      {activeTrack?.format ?? 'AUDIO'}
-                    </span>
-                    <span style={{ color: theme.text }} className="text-[11px] font-medium tabular-nums truncate">
-                      {formatBytes(activeTrack?.sizeBytes ?? 0)}
-                    </span>
                   </div>
                 </div>
 
@@ -2818,12 +2972,12 @@ export default function App() {
               />
             )}
 
-            {/* ==================== ONLINE RADIO (03-radio.png MODERN SKIN) ==================== */}
+            {/* ==================== ONLINE RADIO (ADAPTIVE MODERN SKIN) ==================== */}
             {screen === 'radio' && (() => {
               const onAir = Boolean(activeRadio && isPlaying && !isPaused);
               const featured = activeRadio ?? selectedRadio;
               return (
-                <div className="w-full h-full relative overflow-hidden">
+                <div className="w-full h-full relative overflow-hidden flex flex-col">
                   <ModernBackdrop theme={theme} />
                   <HeaderBar
                     theme={theme}
@@ -2831,216 +2985,211 @@ export default function App() {
                     location={locationLabel}
                   />
 
-                  {/* Left Station Tuner Card (x=16, y=46, w=224, h=384) */}
-                  <div
-                    style={{
-                      ...modernPanelStyle(theme, 16),
-                      left: 16,
-                      top: 46,
-                      width: 224,
-                      height: 384,
-                    }}
-                    className="absolute z-10 p-3 flex flex-col items-center justify-between"
-                  >
-                    <div className="pt-1">
-                      <VinylArt
-                        theme={theme}
-                        size={118}
-                        spinning={onAir}
-                        pulse={onAir}
-                        centerLogoUrl={featured?.favicon || undefined}
-                      />
-                    </div>
-
-                    <span
+                  <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-[52px] grid grid-cols-1 @min-[540px]:grid-cols-[minmax(216px,35%)_1fr] gap-3 overflow-hidden w-full max-w-[1160px] mx-auto">
+                    {/* Left Station Tuner Card (compact bar on mobile, full sidebar on 4:3 / landscape) */}
+                    <div
                       style={{
-                        backgroundColor: onAir ? theme.accent : theme.elevated,
-                        color: onAir ? theme.bg : theme.muted,
+                        ...modernPanelStyle(theme, 16),
                       }}
-                      className="px-3.5 h-[19px] rounded-full inline-flex items-center justify-center text-[10px] font-bold tracking-wider"
+                      className="p-2.5 @min-[540px]:p-3 flex flex-row @min-[540px]:flex-col items-center justify-between gap-2.5 @min-[540px]:gap-2 overflow-y-auto kp-scroll"
                     >
-                      {activeRadio ? tr('AO VIVO', language) : tr('RÁDIO ONLINE', language)}
-                    </span>
+                      <div className="shrink-0">
+                        <VinylArt
+                          theme={theme}
+                          size={72}
+                          spinning={onAir}
+                          pulse={onAir}
+                          centerLogoUrl={featured?.favicon || undefined}
+                        />
+                      </div>
 
-                    <div className="w-full text-center px-1">
-                      <div style={{ color: theme.text }} className="text-[16px] font-extrabold truncate">
-                        {featured?.name ?? tr('Estação online', language)}
-                      </div>
-                      <div style={{ color: theme.muted }} className="text-[11px] truncate mt-0.5">
-                        {featured?.tags || featured?.country || 'Internet'}
-                      </div>
-                      <div
+                      <span
                         style={{
-                          backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
-                          color: theme.accent,
+                          backgroundColor: onAir ? theme.accent : theme.elevated,
+                          color: onAir ? theme.bg : theme.muted,
                         }}
-                        className="mt-2 py-1 px-3 rounded-full text-[11px] font-bold truncate inline-block max-w-full"
+                        className="hidden @min-[540px]:inline-flex px-3.5 h-[19px] rounded-full items-center justify-center text-[10px] font-bold tracking-wider shrink-0"
                       >
-                        {featured?.codec || 'STREAM'} • {featured?.bitrate ?? 0} kbps
-                      </div>
-                    </div>
+                        {activeRadio ? tr('AO VIVO', language) : tr('RÁDIO ONLINE', language)}
+                      </span>
 
-                    <AudioVisualizer
-                      theme={theme}
-                      bars={30}
-                      width={176}
-                      height={12}
-                      active={onAir}
-                    />
-
-                    <div className="flex items-center justify-center gap-3.5">
-                      <TransportSkipButton
-                        theme={theme}
-                        direction="prev"
-                        size={28}
-                        onClick={() => stepTrack(-1)}
-                        title="Estação anterior"
-                      />
-                      <PlayDisc
-                        theme={theme}
-                        size={40}
-                        playing={onAir}
-                        onClick={() => {
-                          if (activeRadio) togglePlayPause();
-                          else if (selectedRadio) playRadioStation(selectedRadio);
-                        }}
-                      />
-                      <TransportSkipButton
-                        theme={theme}
-                        direction="next"
-                        size={28}
-                        onClick={() => stepTrack(1)}
-                        title="Próxima estação"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => selectedRadio && playRadioStation(selectedRadio)}
-                      style={{
-                        backgroundColor: theme.elevated,
-                        color: activeRadio ? theme.accent : theme.muted,
-                      }}
-                      className="w-[168px] h-[22px] rounded-full text-[10.5px] font-bold cursor-pointer hover:brightness-110"
-                    >
-                      {onAir ? tr('Transmitindo agora', language) : tr('B  Ouvir estação', language)}
-                    </button>
-                  </div>
-
-                  {/* Right Category & Station List (x=252, y=46, w=372, h=384) */}
-                  <div
-                    style={{
-                      ...modernPanelStyle(theme, 16),
-                      left: 252,
-                      top: 46,
-                      width: 372,
-                      height: 384,
-                    }}
-                    className="absolute z-10 p-3 flex flex-col"
-                  >
-                    <div className="flex items-baseline justify-between">
-                      <div style={{ color: theme.text }} className="text-[16px] font-extrabold">
-                        {tr(RADIO_CATEGORIES[radioCategory], language)}
-                      </div>
-                      <div style={{ color: theme.muted }} className="text-[11px]">
-                        {radioStations.length} {tr('estações', language)}
-                      </div>
-                    </div>
-
-                    {/* 7 Glowing Pill Category Tabs */}
-                    <div className="flex gap-1 mt-2 overflow-x-auto pb-1">
-                      {RADIO_CATEGORIES.map((cat, idx) => {
-                        const activeCat = idx === radioCategory;
-                        return (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => setRadioCategory(idx)}
-                            style={modernPillStyle(theme, activeCat)}
-                            className="px-2 py-1 text-[9.5px] font-bold whitespace-nowrap cursor-pointer shrink-0 transition-all"
-                          >
-                            {tr(cat, language)}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* 5 Visible Station Rows */}
-                    <div className="mt-2 space-y-1.5 flex-1 overflow-hidden">
-                      {radioLoading ? (
+                      <div className="min-w-0 flex-1 @min-[540px]:flex-none @min-[540px]:w-full @min-[540px]:text-center px-0.5">
+                        <div style={{ color: theme.text }} className="text-[14px] @min-[540px]:text-[16px] font-extrabold truncate">
+                          {featured?.name ?? tr('Estação online', language)}
+                        </div>
+                        <div style={{ color: theme.muted }} className="text-[10.5px] @min-[540px]:text-[11px] truncate mt-0.5">
+                          {featured?.tags || featured?.country || 'Internet'}
+                        </div>
                         <div
-                          style={{ color: theme.accent }}
-                          className="h-full flex items-center justify-center text-[14px] font-semibold"
+                          style={{
+                            backgroundColor: mixRgb(theme.elevated, theme.accent, 0.16),
+                            color: theme.accent,
+                          }}
+                          className="mt-1.5 py-0.5 px-2.5 rounded-full text-[10px] @min-[540px]:text-[11px] font-bold truncate inline-block max-w-full"
                         >
-                          {tr('Buscando estações...', language)}
+                          {featured?.codec || 'STREAM'} • {featured?.bitrate ?? 0} kbps
                         </div>
-                      ) : radioStations.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center px-4">
-                          <div style={{ color: theme.text }} className="text-[15px] font-bold">
-                            {radioCategory === 6
-                              ? tr('Nenhuma rádio favorita', language)
-                              : radioError ?? tr('Nenhuma estação encontrada', language)}
-                          </div>
-                          <div style={{ color: theme.muted }} className="text-[12px] mt-1">
-                            {tr('Pressione Y para tentar novamente', language)}
-                          </div>
+                      </div>
+
+                      <div className="hidden @min-[540px]:flex justify-center max-w-full overflow-hidden shrink-0">
+                        <AudioVisualizer
+                          theme={theme}
+                          bars={26}
+                          width={164}
+                          height={12}
+                          active={onAir}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-center gap-2 @min-[540px]:gap-3.5 shrink-0">
+                        <TransportSkipButton
+                          theme={theme}
+                          direction="prev"
+                          size={26}
+                          onClick={() => stepTrack(-1)}
+                          title="Estação anterior"
+                        />
+                        <PlayDisc
+                          theme={theme}
+                          size={38}
+                          playing={onAir}
+                          onClick={() => {
+                            if (activeRadio) togglePlayPause();
+                            else if (selectedRadio) playRadioStation(selectedRadio);
+                          }}
+                        />
+                        <TransportSkipButton
+                          theme={theme}
+                          direction="next"
+                          size={26}
+                          onClick={() => stepTrack(1)}
+                          title="Próxima estação"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => selectedRadio && playRadioStation(selectedRadio)}
+                        style={{
+                          backgroundColor: theme.elevated,
+                          color: activeRadio ? theme.accent : theme.muted,
+                        }}
+                        className="hidden @min-[540px]:block w-full max-w-[176px] h-[24px] rounded-full text-[10.5px] font-bold cursor-pointer hover:brightness-110 shrink-0"
+                      >
+                        {onAir ? tr('Transmitindo agora', language) : tr('B  Ouvir estação', language)}
+                      </button>
+                    </div>
+
+                    {/* Right Category & Full Scrollable Station List */}
+                    <div
+                      style={{
+                        ...modernPanelStyle(theme, 16),
+                      }}
+                      className="p-3 flex flex-col min-h-0 overflow-hidden"
+                    >
+                      <div className="flex items-baseline justify-between shrink-0">
+                        <div style={{ color: theme.text }} className="text-[15.5px] @min-[520px]:text-[16px] font-extrabold">
+                          {tr(RADIO_CATEGORIES[radioCategory], language)}
                         </div>
-                      ) : (
-                        radioStations.slice(radioWindowStart, radioWindowStart + 5).map((st, idx) => {
-                          const realIdx = radioWindowStart + idx;
-                          const focus = realIdx === radioSelected;
-                          const isFav = favoriteRadios.some((f) => f.url === st.url);
-                          const isLiveNow = activeRadio?.url === st.url && !isPaused;
+                        <div style={{ color: theme.muted }} className="text-[11px]">
+                          {radioStations.length} {tr('estações', language)}
+                        </div>
+                      </div>
+
+                      {/* 7 Glowing Pill Category Tabs */}
+                      <div className="flex gap-1 mt-2 overflow-x-auto pb-1 shrink-0">
+                        {RADIO_CATEGORIES.map((cat, idx) => {
+                          const activeCat = idx === radioCategory;
                           return (
                             <button
-                              key={st.uuid + realIdx}
+                              key={cat}
                               type="button"
-                              onMouseEnter={() => setRadioSelected(realIdx)}
-                              onClick={() => playRadioStation(st)}
-                              style={{
-                                ...modernCardStyle(theme, focus, 10, theme.elevated),
-                                height: 49,
-                              }}
-                              className="w-full px-2.5 flex items-center justify-between text-left cursor-pointer transition-all"
+                              onClick={() => setRadioCategory(idx)}
+                              style={modernPillStyle(theme, activeCat)}
+                              className="px-2.5 py-1 text-[9.5px] font-bold whitespace-nowrap cursor-pointer shrink-0 transition-all"
                             >
-                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                <span
-                                  style={{
-                                    backgroundColor: isLiveNow ? theme.accent : theme.panel,
-                                    color: isLiveNow ? theme.bg : focus ? theme.accent : theme.muted,
-                                  }}
-                                  className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
-                                >
-                                  {isLiveNow ? '▶' : '~'}
-                                </span>
-                                <div className="min-w-0">
-                                  <div
-                                    style={{ color: isLiveNow ? theme.accent : theme.text }}
-                                    className="text-[13.5px] font-bold truncate"
-                                  >
-                                    {isFav ? '★ ' : ''}
-                                    {st.name}
-                                  </div>
-                                  <div style={{ color: theme.muted }} className="text-[10px] truncate">
-                                    {st.tags || st.country} {isLiveNow ? `• ${tr('AO VIVO', language)}` : ''}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <div
-                                  style={{ color: focus ? theme.accent : theme.muted }}
-                                  className="text-[10px] font-bold"
-                                >
-                                  {st.codec || 'STREAM'}
-                                </div>
-                                <div style={{ color: theme.muted }} className="text-[10px]">
-                                  {st.bitrate} kbps
-                                </div>
-                              </div>
+                              {tr(cat, language)}
                             </button>
                           );
-                        })
-                      )}
+                        })}
+                      </div>
+
+                      {/* Full Scrollable Station Rows */}
+                      <div className="mt-2 space-y-1.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1">
+                        {radioLoading ? (
+                          <div
+                            style={{ color: theme.accent }}
+                            className="h-full flex items-center justify-center text-[14px] font-semibold"
+                          >
+                            {tr('Buscando estações...', language)}
+                          </div>
+                        ) : radioStations.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                            <div style={{ color: theme.text }} className="text-[15px] font-bold">
+                              {radioCategory === 6
+                                ? tr('Nenhuma rádio favorita', language)
+                                : radioError ?? tr('Nenhuma estação encontrada', language)}
+                            </div>
+                            <div style={{ color: theme.muted }} className="text-[12px] mt-1">
+                              {tr('Pressione Y para tentar novamente', language)}
+                            </div>
+                          </div>
+                        ) : (
+                          radioStations.map((st, realIdx) => {
+                            const focus = realIdx === radioSelected;
+                            const isFav = favoriteRadios.some((f) => f.url === st.url);
+                            const isLiveNow = activeRadio?.url === st.url && !isPaused;
+                            return (
+                              <button
+                                key={st.uuid + realIdx}
+                                type="button"
+                                onMouseEnter={() => setRadioSelected(realIdx)}
+                                onClick={() => playRadioStation(st)}
+                                style={{
+                                  ...modernCardStyle(theme, focus, 10, theme.elevated),
+                                  height: 49,
+                                }}
+                                className="w-full px-2.5 flex items-center justify-between text-left cursor-pointer transition-all"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <span
+                                    style={{
+                                      backgroundColor: isLiveNow ? theme.accent : theme.panel,
+                                      color: isLiveNow ? theme.bg : focus ? theme.accent : theme.muted,
+                                    }}
+                                    className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                                  >
+                                    {isLiveNow ? '▶' : '~'}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div
+                                      style={{ color: isLiveNow ? theme.accent : theme.text }}
+                                      className="text-[13.5px] font-bold truncate"
+                                    >
+                                      {isFav ? '★ ' : ''}
+                                      {st.name}
+                                    </div>
+                                    <div style={{ color: theme.muted }} className="text-[10px] truncate">
+                                      {st.tags || st.country} {isLiveNow ? `• ${tr('AO VIVO', language)}` : ''}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div
+                                    style={{ color: focus ? theme.accent : theme.muted }}
+                                    className="text-[10px] font-bold"
+                                  >
+                                    {st.codec || 'STREAM'}
+                                  </div>
+                                  <div style={{ color: theme.muted }} className="text-[10px]">
+                                    {st.bitrate} kbps
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -3091,9 +3240,9 @@ export default function App() {
               />
             )}
 
-            {/* ==================== OPTIONS / SETTINGS (07-opcoes.png MODERN SKIN) ==================== */}
+            {/* ==================== OPTIONS / SETTINGS (ADAPTIVE MODERN SKIN) ==================== */}
             {screen === 'options' && (
-              <div className="w-full h-full relative overflow-hidden">
+              <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
                   theme={theme}
@@ -3101,13 +3250,13 @@ export default function App() {
                   location={locationLabel}
                 />
 
-                <div className="relative z-10 px-6 pt-3">
-                  <h2 style={{ color: theme.text }} className="text-[23px] font-extrabold">
+                <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-[54px] flex flex-col w-full max-w-[820px] mx-auto">
+                  <h2 style={{ color: theme.text }} className="text-[21px] @min-[540px]:text-[23px] font-extrabold shrink-0">
                     {tr('Opções', language)}
                   </h2>
 
                   {/* 3 Glowing Pill Category Tabs: Reprodução, Biblioteca, Geral */}
-                  <div className="grid grid-cols-3 gap-2 mt-2">
+                  <div className="grid grid-cols-3 gap-2 mt-2 shrink-0">
                     {OPTION_GROUPS.map((g, gi) => {
                       const activeGrp = gi === optionGroupIdx;
                       return (
@@ -3122,7 +3271,7 @@ export default function App() {
                             ...modernPillStyle(theme, activeGrp),
                             height: 30,
                           }}
-                          className="text-[13px] font-bold cursor-pointer transition-all"
+                          className="text-[12px] @min-[520px]:text-[13px] font-bold cursor-pointer transition-all truncate px-1.5"
                         >
                           {tr(g.name, language)}
                         </button>
@@ -3130,8 +3279,8 @@ export default function App() {
                     })}
                   </div>
 
-                  {/* Glowing Option Rows */}
-                  <div className="mt-2.5 space-y-1.5">
+                  {/* Scrollable Glowing Option Rows */}
+                  <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-1.5">
                     {OPTION_GROUPS[optionGroupIdx].items.map((key, ri) => {
                       const focused = ri === optionRowIdx;
                       return (
@@ -3142,17 +3291,17 @@ export default function App() {
                           onClick={() => activateOption(key, 1)}
                           style={{
                             ...modernCardStyle(theme, focused, 10, theme.panel),
-                            height: 36,
+                            minHeight: 38,
                           }}
-                          className="w-full px-4 flex items-center justify-between text-left cursor-pointer transition-all"
+                          className="w-full px-3.5 @min-[520px]:px-4 py-1.5 flex items-center justify-between gap-2 text-left cursor-pointer transition-all"
                         >
                           <span
                             style={{ color: focused ? theme.accent : theme.text }}
-                            className="text-[14.5px] font-bold"
+                            className="text-[13.5px] @min-[520px]:text-[14.5px] font-bold shrink-0"
                           >
                             {optionNameLabel(key)}
                           </span>
-                          <span style={{ color: theme.muted }} className="text-[13.5px] font-medium truncate max-w-[260px]">
+                          <span style={{ color: theme.muted }} className="text-[12.5px] @min-[520px]:text-[13.5px] font-medium truncate text-right">
                             {optionValueLabel(key)}
                           </span>
                         </button>
@@ -3175,19 +3324,21 @@ export default function App() {
                 />
               </div>
             )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
-        {/* Modern Portrait Android Edition (Side-by-Side or Dedicated View) */}
-        {editionView !== 'r36s' && (
-          <div className="flex flex-col items-center gap-1.5 h-full max-h-[770px] justify-center shrink-0">
-            {editionView === 'split' && (
-              <div className="text-[11px] font-semibold text-zinc-400">
-                Android (Retrato · Compose + Media3)
-              </div>
-            )}
+        {/* Modern Adaptive Android Edition (Side-by-Side or Dedicated Fluid/Preset View) */}
+        {editionView !== 'r36s' && (() => {
+          const isSplit = editionView === 'split';
+          const isFluidAuto = !isSplit && androidDisplayMode === 'auto';
+          const presetW = activeAndroidPreset.width ?? 390;
+          const presetH = activeAndroidPreset.height ?? 780;
+          const isBezelPreset = !isSplit && (androidDisplayMode === 'phone' || androidDisplayMode === 'landscape');
+
+          const androidNode = (
             <AndroidPlayerApp
               theme={theme}
               themeIndex={themeIndex}
@@ -3242,10 +3393,53 @@ export default function App() {
               onImportLocalFiles={() => fileInputRef.current?.click()}
               preloadedMatches={preloadedMatches}
               onMatchesLoaded={setPreloadedMatches}
-              compactFrame={true}
+              compactFrame={isSplit || isBezelPreset}
+              fluidAdaptive={!isSplit}
             />
-          </div>
-        )}
+          );
+
+          if (isSplit) {
+            return (
+              <div className="flex flex-col items-center gap-1.5 h-full max-h-[770px] justify-center shrink-0">
+                <div className="text-[11px] font-semibold text-zinc-400">
+                  Android (Adaptativo · Compose + Media3)
+                </div>
+                {androidNode}
+              </div>
+            );
+          }
+
+          if (isFluidAuto) {
+            return (
+              <div className="w-full h-full flex flex-col min-w-0 min-h-0">
+                {androidNode}
+              </div>
+            );
+          }
+
+          return (
+            <div className="flex flex-col items-center gap-1.5 shrink-0">
+              <div
+                style={{
+                  width: Math.round(presetW * androidScale),
+                  height: Math.round(presetH * androidScale),
+                }}
+                className="relative shrink-0"
+              >
+                <div
+                  style={{
+                    width: presetW,
+                    height: presetH,
+                    transform: `scale(${androidScale})`,
+                    transformOrigin: 'top left',
+                  }}
+                >
+                  {androidNode}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Optional Interactive R36S Handheld Control Deck */}
@@ -3271,7 +3465,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.2 — Visual Moderno
+                  KPlayer v2.0.3 — Visual Moderno
                 </h2>
               </div>
               <button
@@ -3287,7 +3481,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
                   src={portCoverImg}
-                  alt="Capa do Port KPlayer v2.0.2 para R36S dArkOS"
+                  alt="Capa do Port KPlayer v2.0.3 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -3296,7 +3490,7 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.2-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.3-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -3329,7 +3523,7 @@ export default function App() {
             <div className="mt-4 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.2-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.3-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code>,{' '}
                   <code className="text-zinc-100">kplayer/</code>,{' '}
@@ -3346,22 +3540,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 v2.0.2, capa 640×480 e XML dArkOS, tela de boas-vindas animada com seletor de temas, libVLC ARM64, <strong>Placar da Bola</strong>, IPTV categorizado (245 canais + filmes/séries + IPTV do Usuário) e rádios <code className="text-zinc-300">.pls</code>.
+                Inclui binário ARM64 v2.0.3, capa 640×480 e XML dArkOS, tela de boas-vindas animada com seletor de temas, libVLC ARM64, <strong>Placar da Bola</strong>, IPTV categorizado (245 canais + filmes/séries + IPTV do Usuário) e rádios <code className="text-zinc-300">.pls</code>.
               </p>
             </div>
 
             <div className="mt-5 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.2-R36S.zip"
+                download="KPlayer-v2.0.3-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.2-R36S.zip
+                ⬇ Baixar KPlayer-v2.0.3-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.2-R36S.zip.sha256"
+                download="KPlayer-v2.0.3-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256
@@ -3387,7 +3581,7 @@ export default function App() {
                   Edição Android · Lado a Lado com R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.2 — Android Retrato
+                  KPlayer v2.0.3 — Android Adaptativo
                 </h2>
               </div>
               <button
@@ -3403,7 +3597,7 @@ export default function App() {
               <div className="w-[128px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
                   src={portCoverImg}
-                  alt="Capa KPlayer v2.0.2 Android"
+                  alt="Capa KPlayer v2.0.3 Android"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -3418,6 +3612,10 @@ export default function App() {
                   <span className="font-medium text-zinc-200 truncate">Kotlin · Compose · Media3</span>
                 </div>
                 <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">Layout</span>
+                  <span className="font-medium text-zinc-200">Retrato, Paisagem, Dobrável & Tablet</span>
+                </div>
+                <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Android mínimo</span>
                   <span className="font-medium text-zinc-200">Android 8.0+ (API 26–35)</span>
                 </div>
@@ -3429,14 +3627,14 @@ export default function App() {
             </div>
 
             <div className="mt-4 text-xs text-zinc-300 space-y-2">
-              <div className="font-bold text-zinc-100">Mesmo KPlayer, design moderno em retrato:</div>
+              <div className="font-bold text-zinc-100">Mesmo KPlayer, 100% adaptativo ao seu dispositivo:</div>
               <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                <li>Se adapta automaticamente a celulares (retrato e paisagem), dobráveis, tablets e telas grandes — alternando entre Barra Inferior, Trilho Lateral, grades multi-coluna e Now Playing em 2 painéis.</li>
                 <li>Player de música com disco/capa grande, letras sincronizadas (.LRC) com toque para avançar, fila, equalizador de hardware e timer de sono.</li>
-                <li>Vídeos locais e streams HLS via Media3 ExoPlayer sem as limitações de 640×480 do portátil.</li>
-                <li>IPTV desbloqueado (Canais · Filmes · Séries · Usuário com teclado nativo), Rádio Online, Placar da Bola e os mesmos 7 temas + Aviso de Transparência.</li>
+                <li>Vídeos locais e streams HLS via Media3 ExoPlayer, IPTV desbloqueado (Canais · Filmes · Séries · Usuário), Rádio Online, Placar da Bola e os mesmos 7 temas + Aviso de Transparência.</li>
               </ul>
               <p className="text-[11px] text-zinc-400 pt-1">
-                O projeto nativo está em <code className="text-zinc-200">android/</code> e é compilado automaticamente no GitHub Actions gerando <code className="text-zinc-200">KPlayer-v2.0.2-Android.apk</code> lado a lado com o pacote principal do R36S.
+                O projeto nativo está em <code className="text-zinc-200">android/</code> e é compilado automaticamente no GitHub Actions gerando <code className="text-zinc-200">KPlayer-v2.0.3-Android.apk</code> lado a lado com o pacote principal do R36S.
               </p>
             </div>
 
@@ -3450,7 +3648,7 @@ export default function App() {
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all cursor-pointer"
               >
-                Abrir Preview Android Retrato
+                Abrir Preview Android Adaptativo
               </button>
               <button
                 type="button"

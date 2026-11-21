@@ -43,6 +43,16 @@ static __typeof__(SDL_RenderReadPixels) *p_SDL_RenderReadPixels;
 #define SDL_RenderReadPixels p_SDL_RenderReadPixels
 static __typeof__(SDL_RenderSetLogicalSize) *p_SDL_RenderSetLogicalSize;
 #define SDL_RenderSetLogicalSize p_SDL_RenderSetLogicalSize
+static __typeof__(SDL_GetRendererOutputSize) *p_SDL_GetRendererOutputSize;
+#define SDL_GetRendererOutputSize p_SDL_GetRendererOutputSize
+static __typeof__(SDL_RenderSetViewport) *p_SDL_RenderSetViewport;
+#define SDL_RenderSetViewport p_SDL_RenderSetViewport
+static __typeof__(SDL_RenderSetScale) *p_SDL_RenderSetScale;
+#define SDL_RenderSetScale p_SDL_RenderSetScale
+static __typeof__(SDL_GetCurrentDisplayMode) *p_SDL_GetCurrentDisplayMode;
+#define SDL_GetCurrentDisplayMode p_SDL_GetCurrentDisplayMode
+static __typeof__(SDL_GetWindowSize) *p_SDL_GetWindowSize;
+#define SDL_GetWindowSize p_SDL_GetWindowSize
 static __typeof__(SDL_SetHint) *p_SDL_SetHint;
 #define SDL_SetHint p_SDL_SetHint
 static __typeof__(SDL_SetRenderDrawBlendMode) *p_SDL_SetRenderDrawBlendMode;
@@ -195,6 +205,16 @@ static int load_sdl(void) {
     fprintf(stderr, "Símbolo ausente: SDL_RenderSetLogicalSize\n");
     return 0;
   }
+  *(void **)(&p_SDL_GetRendererOutputSize) =
+      dlsym(handle, "SDL_GetRendererOutputSize");
+  *(void **)(&p_SDL_RenderSetViewport) =
+      dlsym(handle, "SDL_RenderSetViewport");
+  *(void **)(&p_SDL_RenderSetScale) =
+      dlsym(handle, "SDL_RenderSetScale");
+  *(void **)(&p_SDL_GetCurrentDisplayMode) =
+      dlsym(handle, "SDL_GetCurrentDisplayMode");
+  *(void **)(&p_SDL_GetWindowSize) =
+      dlsym(handle, "SDL_GetWindowSize");
   *(void **)(&p_SDL_SetHint) = dlsym(handle, "SDL_SetHint");
   if (!p_SDL_SetHint) {
     fprintf(stderr, "Símbolo ausente: SDL_SetHint\n");

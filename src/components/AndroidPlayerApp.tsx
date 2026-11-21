@@ -90,6 +90,7 @@ export interface AndroidPlayerAppProps {
   preloadedMatches: FootballMatch[];
   onMatchesLoaded: (matches: FootballMatch[]) => void;
   compactFrame?: boolean;
+  fluidAdaptive?: boolean;
 }
 
 type AndroidTab = 'home' | 'music' | 'iptv' | 'radio' | 'football';
@@ -145,10 +146,12 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
   preloadedMatches,
   onMatchesLoaded,
   compactFrame = true,
+  fluidAdaptive = false,
 }) => {
   const [tab, setTab] = useState<AndroidTab>('home');
   const [showNowPlaying, setShowNowPlaying] = useState(false);
   const [nowView, setNowView] = useState<NowPlayingView>('art');
+  const [wideSideTab, setWideSideTab] = useState<'lyrics' | 'queue' | 'eq'>('lyrics');
   const [showVideosSheet, setShowVideosSheet] = useState(false);
   const [showSettingsSheet, setShowSettingsSheet] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -517,18 +520,30 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
   const hasMiniPlayer = Boolean(activeTrack || activeRadio);
   const progressRatio = durationMs > 0 ? Math.min(1, Math.max(0, currentMs / durationMs)) : 0;
 
+  const navItems = [
+    { id: 'home' as const, label: 'Início', icon: Home },
+    { id: 'music' as const, label: 'Música', icon: Music2 },
+    { id: 'iptv' as const, label: 'IPTV', icon: Tv },
+    { id: 'radio' as const, label: 'Rádio', icon: Radio },
+    { id: 'football' as const, label: 'Placar', icon: Trophy },
+  ];
+
+  const rootClassName = fluidAdaptive
+    ? compactFrame
+      ? 'relative @container w-full h-full rounded-[34px] border-[5px] shadow-[0_28px_90px_rgba(0,0,0,0.75)] overflow-hidden flex flex-col select-none'
+      : 'relative @container w-full h-full rounded-[16px] sm:rounded-[20px] border shadow-2xl overflow-hidden flex flex-col select-none'
+    : compactFrame
+    ? 'relative @container w-[372px] h-[740px] max-h-full rounded-[38px] border-[6px] shadow-[0_28px_90px_rgba(0,0,0,0.75)] overflow-hidden flex flex-col shrink-0 select-none'
+    : 'relative @container w-full h-full rounded-[20px] border shadow-2xl overflow-hidden flex flex-col select-none';
+
   return (
     <div
       style={{
         backgroundColor: theme.bg,
         color: theme.text,
-        borderColor: compactFrame ? 'rgba(255,255,255,0.14)' : 'transparent',
+        borderColor: compactFrame ? 'rgba(255,255,255,0.14)' : subtleBorder,
       }}
-      className={
-        compactFrame
-          ? 'relative w-[372px] h-[740px] max-h-full rounded-[38px] border-[6px] shadow-[0_28px_90px_rgba(0,0,0,0.75)] overflow-hidden flex flex-col shrink-0 select-none'
-          : 'relative w-full max-w-[430px] h-full min-h-[680px] rounded-[28px] border shadow-2xl overflow-hidden flex flex-col select-none'
-      }
+      className={rootClassName}
     >
       {/* Hidden .m3u / .m3u8 upload input for IPTV do Usuário */}
       <input
@@ -541,24 +556,93 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
 
       {/* Ambient Atmospheric Tint */}
       <div
-        className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[340px] h-[220px] rounded-full blur-3xl opacity-20 transition-colors duration-500"
+        className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[340px] @min-[680px]:w-[520px] h-[220px] rounded-full blur-3xl opacity-20 transition-colors duration-500"
         style={{ backgroundColor: theme.accent }}
       />
 
-      {/* Compact Android Status / Top Notch Safe Bar */}
-      <div className="relative z-20 h-7 px-5 flex items-center justify-between text-[11px] font-semibold tabular-nums shrink-0">
+      {/* Compact Android Status / Top Notch Safe Bar (Phones only; hidden on wide/tablet viewports) */}
+      <div className="relative z-20 h-7 px-5 flex @min-[680px]:hidden items-center justify-between text-[11px] font-semibold tabular-nums shrink-0">
         <span style={{ color: theme.muted }}>
           {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
         </span>
         <div className="w-16 h-4 rounded-full bg-black/50 border border-white/10" aria-hidden="true" />
-        <span style={{ color: theme.muted }}>Android · 2.0.2</span>
+        <span style={{ color: theme.muted }}>Android · 2.0.3</span>
       </div>
 
-      {/* ==================== MAIN SCROLLABLE VIEWPORT ==================== */}
-      <div className="relative z-10 flex-1 min-h-0 overflow-hidden flex flex-col">
+      {/* ==================== ADAPTIVE BODY: LEFT NAV RAIL (>=680px) + MAIN VIEWPORT ==================== */}
+      <div className="relative z-10 flex-1 min-h-0 flex overflow-hidden">
+        {/* Adaptive Left Navigation Rail for Landscape Phones, Foldables, Tablets & Desktops */}
+        {!pendingNoticeTab && (
+          <aside
+            aria-label="Navegação lateral KPlayer Android"
+            style={{
+              backgroundColor: theme.panel,
+              borderRight: `1px solid ${subtleBorder}`,
+            }}
+            className="hidden @min-[680px]:flex flex-col w-[78px] @min-[960px]:w-[212px] shrink-0 py-3 px-2 @min-[960px]:px-3 gap-1.5 z-20"
+          >
+            <div className="flex items-center justify-center @min-[960px]:justify-start gap-2.5 px-1.5 pb-3 mb-1 border-b" style={{ borderColor: subtleBorder }}>
+              <VinylArt theme={theme} size={34} spinning={isPlaying && !isPaused} />
+              <div className="hidden @min-[960px]:block min-w-0">
+                <div className="text-[15px] font-extrabold leading-none tracking-tight">
+                  K <span style={{ color: theme.accent }}>Player</span>
+                </div>
+                <div className="text-[10.5px] mt-1 truncate" style={{ color: theme.muted }}>
+                  Android · v2.0.3
+                </div>
+              </div>
+            </div>
+
+            <nav className="flex-1 flex flex-col gap-1">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = tab === item.id && !showVideosSheet && !showSettingsSheet;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => navigateTab(item.id)}
+                    style={{
+                      backgroundColor: active ? rgbToRgba(theme.accent, 0.16) : 'transparent',
+                      color: active ? theme.accent : theme.muted,
+                    }}
+                    className="min-h-[46px] rounded-xl px-2 @min-[960px]:px-3 flex flex-col @min-[960px]:flex-row items-center justify-center @min-[960px]:justify-start gap-1 @min-[960px]:gap-3 cursor-pointer transition-colors hover:bg-white/5"
+                  >
+                    <Icon className="w-5 h-5 shrink-0" />
+                    <span className="text-[10px] @min-[960px]:text-[13px] font-bold leading-none whitespace-nowrap">
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowVideosSheet(false);
+                setShowSettingsSheet(true);
+              }}
+              style={{
+                backgroundColor: showSettingsSheet ? rgbToRgba(theme.accent, 0.16) : 'transparent',
+                color: showSettingsSheet ? theme.accent : theme.muted,
+              }}
+              className="min-h-[44px] rounded-xl px-2 @min-[960px]:px-3 flex flex-col @min-[960px]:flex-row items-center justify-center @min-[960px]:justify-start gap-1 @min-[960px]:gap-3 cursor-pointer transition-colors hover:bg-white/5"
+            >
+              <Settings className="w-5 h-5 shrink-0" />
+              <span className="text-[10px] @min-[960px]:text-[13px] font-bold leading-none whitespace-nowrap">
+                Opções
+              </span>
+            </button>
+          </aside>
+        )}
+
+        {/* ==================== MAIN SCROLLABLE CONTENT COLUMN ==================== */}
+        <div className="relative flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
         {/* 1. TRANSPARENCY NOTICE GATE (IPTV / RÁDIO) */}
         {pendingNoticeTab && (
           <div className="flex-1 overflow-y-auto kp-scroll px-5 py-6 flex flex-col justify-center">
+            <div className="w-full max-w-[500px] mx-auto">
             <div className="flex flex-col items-center text-center">
               <div
                 className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
@@ -641,12 +725,14 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                 </button>
               </div>
             </div>
+            </div>
           </div>
         )}
 
-        {/* 2. HOME TAB (PORTRAIT EDITORIAL DASHBOARD) */}
+        {/* 2. HOME TAB (ADAPTIVE EDITORIAL DASHBOARD) */}
         {!pendingNoticeTab && !showVideosSheet && !showSettingsSheet && tab === 'home' && (
-          <div className="flex-1 overflow-y-auto kp-scroll px-4 pt-2 pb-36 space-y-5">
+          <div className="flex-1 overflow-y-auto kp-scroll px-4 @min-[680px]:px-6 pt-2 @min-[680px]:pt-4 pb-36 @min-[680px]:pb-24">
+            <div className="max-w-5xl mx-auto w-full space-y-5">
             {/* Compact Top App Bar */}
             <header className="flex items-center justify-between min-h-[44px]">
               <div>
@@ -654,7 +740,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                   K <span style={{ color: theme.accent }}>Player</span>
                 </h1>
                 <p className="text-[12px] mt-1" style={{ color: theme.muted }}>
-                  Modo Retrato · {audioTracks.length} músicas · {videoTracks.length} vídeos
+                  Android Adaptativo · {audioTracks.length} músicas · {videoTracks.length} vídeos
                 </p>
               </div>
               <button
@@ -745,8 +831,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
               </div>
             </div>
 
-            {/* 2x2 Feature Grid (No Pill Clutter, Clean Unboxed Metadata) */}
-            <section className="grid grid-cols-2 gap-2.5">
+            {/* Adaptive Feature Grid: 2x2 on phones, 4-column strip on landscape/tablet */}
+            <section className="grid grid-cols-2 @min-[560px]:grid-cols-4 gap-2.5">
               {[
                 {
                   label: 'Músicas',
@@ -839,8 +925,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                   <Plus className="w-3.5 h-3.5" /> Importar áudio/.LRC
                 </button>
               </div>
-              <div className="space-y-1.5">
-                {audioTracks.slice(0, 4).map((t) => {
+              <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 gap-2">
+                {audioTracks.slice(0, 6).map((t) => {
                   const active = activeTrack?.id === t.id;
                   return (
                     <button
@@ -877,6 +963,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                 })}
               </div>
             </section>
+            </div>
           </div>
         )}
 
@@ -953,10 +1040,11 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
               })}
             </div>
 
-            {/* Folder Breadcrumb or Track List */}
-            <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 space-y-1.5">
+            {/* Folder Breadcrumb or Adaptive Track Grid */}
+            <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 @min-[680px]:pb-24">
               {musicFilter === 'folders' && !selectedFolder ? (
-                musicFolders.map(([folderName, list]) => (
+                <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
+                {musicFolders.map(([folderName, list]) => (
                   <button
                     key={folderName}
                     type="button"
@@ -975,7 +1063,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                     </div>
                     <ChevronRight className="w-4 h-4" style={{ color: theme.muted }} />
                   </button>
-                ))
+                ))}
+                </div>
               ) : (
                 <>
                   {selectedFolder && (
@@ -993,7 +1082,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                       Nenhuma faixa encontrada neste filtro.
                     </div>
                   ) : (
-                    filteredTracks.map((t) => {
+                    <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
+                    {filteredTracks.map((t) => {
                       const active = activeTrack?.id === t.id;
                       const fav = favoriteIds.has(t.id);
                       return (
@@ -1041,7 +1131,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                           </button>
                         </div>
                       );
-                    })
+                    })}
+                    </div>
                   )}
                 </>
               )}
@@ -1203,14 +1294,15 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
               />
             </div>
 
-            {/* Category / Item / Episode List */}
-            <div className="flex-1 overflow-y-auto kp-scroll mt-2.5 pb-36 space-y-1.5">
+            {/* Category / Item / Episode Adaptive Grid */}
+            <div className="flex-1 overflow-y-auto kp-scroll mt-2.5 pb-36 @min-[680px]:pb-24">
               {iptvLoading ? (
                 <div className="py-14 text-center text-[13px]" style={{ color: theme.muted }}>
                   Carregando catálogo...
                 </div>
               ) : iptvSeriesShow ? (
-                iptvEpisodes
+                <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
+                {iptvEpisodes
                   .filter((ep) => !iptvQuery.trim() || ep.name.toLowerCase().includes(iptvQuery.toLowerCase()))
                   .map((ep, idx) => (
                     <button
@@ -1235,9 +1327,11 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                       </div>
                       <Play className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />
                     </button>
-                  ))
+                  ))}
+                </div>
               ) : iptvSelectedCat ? (
-                iptvItems
+                <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
+                {iptvItems
                   .filter((it) => !iptvQuery.trim() || it.name.toLowerCase().includes(iptvQuery.toLowerCase()))
                   .map((it, idx) => (
                     <button
@@ -1291,9 +1385,11 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                         <Play className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />
                       )}
                     </button>
-                  ))
+                  ))}
+                </div>
               ) : (
-                iptvCategories
+                <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
+                {iptvCategories
                   .filter((c) => !iptvQuery.trim() || c.name.toLowerCase().includes(iptvQuery.toLowerCase()))
                   .map((cat) => (
                     <button
@@ -1313,7 +1409,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                         <ChevronRight className="w-4 h-4" style={{ color: theme.muted }} />
                       </div>
                     </button>
-                  ))
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -1379,13 +1476,14 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto kp-scroll mt-2.5 pb-36 space-y-1.5">
+            <div className="flex-1 overflow-y-auto kp-scroll mt-2.5 pb-36 @min-[680px]:pb-24">
               {radioLoading ? (
                 <div className="py-14 text-center text-[13px]" style={{ color: theme.muted }}>
                   Sintonizando estações...
                 </div>
               ) : (
-                (radioCat === 'Rádio do Usuário' ? userRadios : radioStations)
+                <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
+                {(radioCat === 'Rádio do Usuário' ? userRadios : radioStations)
                   .filter((st) => !radioQuery.trim() || st.name.toLowerCase().includes(radioQuery.toLowerCase()))
                   .map((st) => {
                     const active = activeRadio?.uuid === st.uuid;
@@ -1436,7 +1534,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                         </button>
                       </div>
                     );
-                  })
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -1492,7 +1591,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
               })}
             </div>
 
-            <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 space-y-2">
+            <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 @min-[680px]:pb-24">
               {footballLoading && filteredMatches.length === 0 ? (
                 <div className="py-14 text-center text-[13px]" style={{ color: theme.muted }}>
                   Atualizando jogos...
@@ -1502,7 +1601,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                   Nenhuma partida encontrada neste filtro.
                 </div>
               ) : (
-                filteredMatches.map((m) => {
+                <div className="grid grid-cols-1 @min-[600px]:grid-cols-2 @min-[980px]:grid-cols-3 gap-2.5">
+                {filteredMatches.map((m) => {
                   const isLive = m.state === 'in';
                   return (
                     <button
@@ -1558,7 +1658,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                       </div>
                     </button>
                   );
-                })
+                })}
+                </div>
               )}
             </div>
           </div>
@@ -1593,7 +1694,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                 + Importar
               </button>
             </header>
-            <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 space-y-2">
+            <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 @min-[680px]:pb-24">
               {videoTracks.length === 0 ? (
                 <div className="py-16 text-center space-y-3">
                   <Film className="w-9 h-9 mx-auto" style={{ color: theme.muted }} />
@@ -1602,7 +1703,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                   </p>
                 </div>
               ) : (
-                videoTracks.map((v) => (
+                <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
+                {videoTracks.map((v) => (
                   <button
                     key={v.id}
                     type="button"
@@ -1632,7 +1734,8 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                     </div>
                     <Play className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />
                   </button>
-                ))
+                ))}
+                </div>
               )}
             </div>
           </div>
@@ -1653,12 +1756,13 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
               <div>
                 <h1 className="text-[19px] font-extrabold leading-tight">Opções & Temas</h1>
                 <p className="text-[11.5px]" style={{ color: theme.muted }}>
-                  Sincronizado com o KPlayer v2.0.2
+                  Sincronizado com o KPlayer v2.0.3
                 </p>
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 space-y-5">
+            <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 @min-[680px]:pb-24">
+              <div className="max-w-3xl mx-auto w-full space-y-5">
               {/* 7 Theme Swatches */}
               <section>
                 <div className="flex items-center justify-between mb-2">
@@ -1791,16 +1895,16 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4" style={{ color: theme.muted }} />
               </button>
+              </div>
             </div>
           </div>
         )}
-      </div>
 
-      {/* ==================== FLOATING MINI-PLAYER + 5-TAB BOTTOM NAV ==================== */}
+      {/* ==================== FLOATING MINI-PLAYER + 5-TAB BOTTOM NAV (COMPACT ONLY) ==================== */}
       {!pendingNoticeTab && !showNowPlaying && !activeVideoOverlay && (
-        <div className="absolute bottom-0 inset-x-0 z-20 flex flex-col">
+        <div className="absolute bottom-0 inset-x-0 z-20 flex flex-col pointer-events-none">
           {hasMiniPlayer && (
-            <div className="px-3 pb-2">
+            <div className="px-3 pb-2 @min-[680px]:pb-3 pointer-events-auto">
               <div
                 onClick={() => setShowNowPlaying(true)}
                 role="button"
@@ -1812,7 +1916,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                   backgroundColor: theme.elevated,
                   border: `1px solid ${rgbToRgba(theme.accent, 0.25)}`,
                 }}
-                className="rounded-2xl overflow-hidden shadow-xl cursor-pointer"
+                className="rounded-2xl overflow-hidden shadow-xl cursor-pointer max-w-[640px] mx-auto w-full"
               >
                 <div className="px-3 py-2 flex items-center gap-2.5">
                   <VinylArt
@@ -1870,22 +1974,16 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
             </div>
           )}
 
-          {/* Fixed 5-Tab Bottom Navigation Bar (Thumb Zone) */}
+          {/* Fixed 5-Tab Bottom Navigation Bar (Phones only; replaced by Left Rail on >=680px) */}
           <nav
             aria-label="Navegação KPlayer Android"
             style={{
               backgroundColor: surfaceGlass,
               borderTop: `1px solid ${subtleBorder}`,
             }}
-            className="backdrop-blur-md grid grid-cols-5 h-[62px] px-1"
+            className="backdrop-blur-md grid @min-[680px]:hidden grid-cols-5 h-[62px] px-1 pointer-events-auto"
           >
-            {[
-              { id: 'home' as const, label: 'Início', icon: Home },
-              { id: 'music' as const, label: 'Música', icon: Music2 },
-              { id: 'iptv' as const, label: 'IPTV', icon: Tv },
-              { id: 'radio' as const, label: 'Rádio', icon: Radio },
-              { id: 'football' as const, label: 'Placar', icon: Trophy },
-            ].map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               const active = tab === item.id && !showVideosSheet && !showSettingsSheet;
               return (
@@ -1911,17 +2009,19 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
           </nav>
         </div>
       )}
+        </div>
+      </div>
 
-      {/* ==================== FULL-SCREEN MODERN NOW PLAYING SHEET ==================== */}
+      {/* ==================== FULL-SCREEN ADAPTIVE NOW PLAYING SHEET ==================== */}
       {showNowPlaying && (
         <div
           style={{
             background: `linear-gradient(180deg, ${mixRgb(theme.elevated, theme.accent, 0.18)} 0%, ${theme.bg} 42%, ${theme.bg} 100%)`,
           }}
-          className="absolute inset-0 z-30 flex flex-col px-5 pt-9 pb-5"
+          className="absolute inset-0 z-30 flex flex-col px-5 @min-[680px]:px-7 pt-9 @min-[680px]:pt-4 pb-5 overflow-hidden"
         >
           {/* Top Bar */}
-          <div className="flex items-center justify-between min-h-[44px] shrink-0">
+          <div className="flex items-center justify-between min-h-[44px] shrink-0 max-w-5xl mx-auto w-full">
             <button
               type="button"
               aria-label="Recolher player"
@@ -1970,6 +2070,291 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
             </button>
           </div>
 
+          {/* WIDE 2-PANE LAYOUT (Landscape Phones, Foldables, Tablets & Desktop >= 680px) */}
+          <div className="hidden @min-[680px]:grid flex-1 min-h-0 grid-cols-[minmax(260px,0.95fr)_minmax(260px,1.05fr)] gap-6 items-center max-w-5xl mx-auto w-full pt-3 overflow-hidden">
+            {/* Left Pane: Vinyl + Track Meta + Scrubber + Transport */}
+            <div className="h-full min-h-0 flex flex-col items-center justify-center gap-3 overflow-y-auto kp-scroll px-1">
+              <div
+                className="p-2.5 rounded-full shrink-0"
+                style={{ boxShadow: `0 18px 50px ${rgbToRgba(theme.accent, 0.24)}` }}
+              >
+                <VinylArt
+                  theme={theme}
+                  size={156}
+                  coverUrl={activeTrack?.coverUrl}
+                  centerLogoUrl={activeRadio?.favicon || undefined}
+                  spinning={isPlaying && !isPaused}
+                />
+              </div>
+              <AudioVisualizer theme={theme} bars={24} width={164} height={14} active={isPlaying && !isPaused} />
+              <div className="w-full text-center">
+                <h2 className="text-[19px] font-extrabold truncate leading-tight">
+                  {activeRadio?.name ?? activeTrack?.title ?? 'Nenhuma mídia selecionada'}
+                </h2>
+                <p className="text-[12.5px] truncate mt-0.5" style={{ color: theme.muted }}>
+                  {activeRadio
+                    ? `${activeRadio.country} · ${activeRadio.codec || 'Stream'} · ${activeRadio.bitrate || 128} kbps`
+                    : activeTrack
+                    ? `${activeTrack.artist} · ${activeTrack.album || activeTrack.folder}`
+                    : 'Escolha uma música ou estação'}
+                </p>
+              </div>
+              {!activeRadio && (
+                <div className="w-full max-w-[360px]">
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(1000, durationMs)}
+                    value={Math.min(currentMs, Math.max(1000, durationMs))}
+                    onChange={(e) => onSeekMs(Number(e.target.value))}
+                    style={{ accentColor: theme.accent }}
+                    className="w-full h-1.5 rounded-full cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[11px] tabular-nums mt-1" style={{ color: theme.dim }}>
+                    <span>{formatTime(currentMs)}</span>
+                    <span>{formatTime(durationMs)}</span>
+                  </div>
+                </div>
+              )}
+              <div className="w-full max-w-[340px] flex items-center justify-between">
+                <button
+                  type="button"
+                  aria-label="Aleatório"
+                  onClick={onToggleShuffle}
+                  className="w-10 h-10 flex items-center justify-center cursor-pointer"
+                >
+                  <Shuffle className="w-4 h-4" style={{ color: shuffle ? theme.accent : theme.muted }} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Anterior"
+                  onClick={() => onStepTrack(-1)}
+                  className="w-11 h-11 flex items-center justify-center cursor-pointer"
+                >
+                  <SkipBack className="w-6 h-6 fill-current" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={isPlaying && !isPaused ? 'Pausar' : 'Tocar'}
+                  onClick={onTogglePlayPause}
+                  style={{
+                    backgroundColor: theme.accent,
+                    color: theme.bg,
+                    boxShadow: `0 10px 26px ${rgbToRgba(theme.accent, 0.38)}`,
+                  }}
+                  className="w-14 h-14 rounded-full flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+                >
+                  {isPlaying && !isPaused ? (
+                    <Pause className="w-6 h-6 fill-current" />
+                  ) : (
+                    <Play className="w-6 h-6 fill-current ml-0.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Próxima"
+                  onClick={() => onStepTrack(1)}
+                  className="w-11 h-11 flex items-center justify-center cursor-pointer"
+                >
+                  <SkipForward className="w-6 h-6 fill-current" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Repetição"
+                  onClick={onCycleRepeat}
+                  className="w-10 h-10 flex items-center justify-center cursor-pointer"
+                >
+                  {repeatMode === 1 ? (
+                    <Repeat1 className="w-4 h-4" style={{ color: theme.accent }} />
+                  ) : (
+                    <Repeat className="w-4 h-4" style={{ color: repeatMode === 2 ? theme.accent : theme.muted }} />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Right Pane: Synchronized Lyrics / Queue / EQ & Sleep */}
+            <div
+              style={{ backgroundColor: rgbToRgba(theme.panel, 0.72), border: `1px solid ${subtleBorder}` }}
+              className="h-full min-h-0 rounded-3xl p-4 flex flex-col overflow-hidden"
+            >
+              <div
+                className="grid grid-cols-3 gap-1 p-1 rounded-xl shrink-0"
+                style={{ backgroundColor: theme.bg }}
+              >
+                {[
+                  { id: 'lyrics' as const, label: 'Letras .LRC', icon: Mic2 },
+                  { id: 'queue' as const, label: 'Fila', icon: ListMusic },
+                  { id: 'eq' as const, label: 'EQ · Sono', icon: sleepMinutes > 0 ? Timer : SlidersHorizontal },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const active = wideSideTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setWideSideTab(item.id)}
+                      style={
+                        active
+                          ? { backgroundColor: theme.accent, color: theme.bg }
+                          : { color: theme.muted }
+                      }
+                      className="min-h-[36px] rounded-lg flex items-center justify-center gap-1.5 text-[11.5px] font-bold cursor-pointer whitespace-nowrap"
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex-1 min-h-0 mt-3 overflow-y-auto kp-scroll">
+                {wideSideTab === 'lyrics' && (
+                  <div className="space-y-3 py-2 text-center">
+                    {activeTrack?.lyrics && activeTrack.lyrics.length > 0 ? (
+                      activeTrack.lyrics.map((line, i) => {
+                        const active = i === activeLyricIndex;
+                        return (
+                          <button
+                            key={`${line.timeMs}-${i}`}
+                            type="button"
+                            onClick={() => onSeekMs(line.timeMs)}
+                            style={{
+                              color: active ? theme.accent : theme.muted,
+                              opacity: active ? 1 : 0.65,
+                            }}
+                            className={`block w-full text-center cursor-pointer transition-all ${
+                              active ? 'text-[17px] font-extrabold scale-[1.02]' : 'text-[13.5px] font-medium'
+                            }`}
+                          >
+                            {line.text}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="py-12 flex flex-col items-center justify-center gap-2 text-[13px]" style={{ color: theme.muted }}>
+                        <Mic2 className="w-7 h-7" style={{ color: theme.dim }} />
+                        <p>Nenhuma letra .LRC sincronizada nesta faixa.</p>
+                        <button
+                          type="button"
+                          onClick={onImportLocalFiles}
+                          style={{ color: theme.accent }}
+                          className="text-[12.5px] font-bold cursor-pointer mt-1"
+                        >
+                          + Importar arquivo .LRC
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {wideSideTab === 'queue' && (
+                  <div className="space-y-1.5">
+                    {audioTracks.map((t) => {
+                      const active = activeTrack?.id === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => onPlayTrack(t)}
+                          style={{
+                            backgroundColor: active ? theme.elevated : theme.bg,
+                            border: `1px solid ${active ? rgbToRgba(theme.accent, 0.4) : subtleBorder}`,
+                          }}
+                          className="w-full min-h-[50px] px-3 rounded-2xl flex items-center justify-between text-left cursor-pointer"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div
+                              className="text-[13px] font-bold truncate"
+                              style={{ color: active ? theme.accent : theme.text }}
+                            >
+                              {t.title}
+                            </div>
+                            <div className="text-[11px] truncate" style={{ color: theme.muted }}>
+                              {t.artist}
+                            </div>
+                          </div>
+                          <span className="text-[11px] tabular-nums" style={{ color: theme.dim }}>
+                            {formatTime(t.durationMs)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {wideSideTab === 'eq' && (
+                  <div className="space-y-4 py-1">
+                    <div>
+                      <div className="text-[12.5px] font-bold mb-2">Equalizador ({eqPreset})</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {EQ_LIST.map((eq) => (
+                          <button
+                            key={eq}
+                            type="button"
+                            onClick={() => onSetEqPreset(eq)}
+                            style={
+                              eqPreset === eq
+                                ? { backgroundColor: theme.accent, color: theme.bg }
+                                : { backgroundColor: theme.bg, color: theme.text }
+                            }
+                            className="min-h-[34px] px-2.5 rounded-xl text-[11.5px] font-semibold cursor-pointer"
+                          >
+                            {eq}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[12.5px] font-bold mb-2">Velocidade ({playbackSpeed}x)</div>
+                      <div className="flex gap-1.5">
+                        {SPEED_LIST.map((sp) => (
+                          <button
+                            key={sp}
+                            type="button"
+                            onClick={() => onSetPlaybackSpeed(sp)}
+                            style={
+                              playbackSpeed === sp
+                                ? { backgroundColor: theme.accent, color: theme.bg }
+                                : { backgroundColor: theme.bg, color: theme.text }
+                            }
+                            className="flex-1 min-h-[34px] rounded-xl text-[11.5px] font-bold tabular-nums cursor-pointer"
+                          >
+                            {sp}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[12.5px] font-bold mb-2">
+                        Timer de sono ({sleepMinutes === 0 ? 'Desligado' : `${sleepMinutes} min`})
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {SLEEP_LIST.map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => onSetSleepMinutes(m)}
+                            style={
+                              sleepMinutes === m
+                                ? { backgroundColor: theme.accent, color: theme.bg }
+                                : { backgroundColor: theme.bg, color: theme.text }
+                            }
+                            className="min-h-[34px] rounded-xl text-[11.5px] font-semibold tabular-nums cursor-pointer"
+                          >
+                            {m === 0 ? 'Off' : `${m}m`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* COMPACT PORTRAIT LAYOUT (< 680px) */}
+          <div className="flex-1 min-h-0 flex flex-col @min-[680px]:hidden">
           {/* Center Interactive Stage: Art | Synced LRC Lyrics | Queue | EQ & Sleep */}
           <div className="flex-1 min-h-0 flex flex-col items-center justify-center my-3 overflow-hidden">
             {nowView === 'art' && (
@@ -2253,6 +2638,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
               );
             })}
           </div>
+          </div>
         </div>
       )}
 
@@ -2343,16 +2729,16 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
         </div>
       )}
 
-      {/* ==================== PLACAR DA BOLA MATCH DETAIL BOTTOM SHEET ==================== */}
+      {/* ==================== PLACAR DA BOLA MATCH DETAIL ADAPTIVE SHEET ==================== */}
       {selectedMatch && (
         <div
-          className="absolute inset-0 z-40 bg-black/65 backdrop-blur-xs flex flex-col justify-end"
+          className="absolute inset-0 z-40 bg-black/65 backdrop-blur-xs flex flex-col justify-end @min-[680px]:justify-center @min-[680px]:p-6"
           onClick={() => setSelectedMatch(null)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ backgroundColor: theme.bg, borderTop: `1px solid ${subtleBorder}` }}
-            className="h-[80%] rounded-t-3xl flex flex-col overflow-hidden"
+            style={{ backgroundColor: theme.bg, border: `1px solid ${subtleBorder}` }}
+            className="h-[80%] @min-[680px]:h-[84%] max-w-2xl mx-auto w-full rounded-t-3xl @min-[680px]:rounded-3xl flex flex-col overflow-hidden"
           >
             <div className="w-10 h-1 rounded-full mx-auto my-2.5 bg-white/20" />
             <div className="px-4 pb-3 flex items-center justify-between">
@@ -2490,13 +2876,13 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
       {/* ==================== TERMS & TRANSPARENCY MODAL ==================== */}
       {showTermsModal && (
         <div
-          className="absolute inset-0 z-50 bg-black/75 backdrop-blur-xs flex flex-col justify-end"
+          className="absolute inset-0 z-50 bg-black/75 backdrop-blur-xs flex flex-col justify-end @min-[680px]:justify-center @min-[680px]:p-6"
           onClick={() => setShowTermsModal(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ backgroundColor: theme.bg, borderTop: `1px solid ${subtleBorder}` }}
-            className="h-[84%] rounded-t-3xl flex flex-col overflow-hidden"
+            style={{ backgroundColor: theme.bg, border: `1px solid ${subtleBorder}` }}
+            className="h-[84%] max-w-2xl mx-auto w-full rounded-t-3xl @min-[680px]:rounded-3xl flex flex-col overflow-hidden"
           >
             <div className="px-4 py-3.5 flex items-center justify-between border-b" style={{ borderColor: subtleBorder }}>
               <h3 className="text-[16px] font-extrabold">Termos de Uso & Transparência</h3>

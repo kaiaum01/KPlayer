@@ -1,9 +1,9 @@
-# Media and Metadata / Mídias e Metadados — KPlayer v2.0.2
+# Media and Metadata / Mídias e Metadados — KPlayer v2.0.3
 
 ## English
 
-### Dedicated Fast-Loading Folders (v2.0.2)
-To avoid slowing down the R36S by scanning thousands of ROMs, BIOS files, and emulator saves, KPlayer v2.0.2 indexes **only four dedicated folders**, filtered strictly by media type (max recursion depth 8, files ≥ 50 KB, up to 4,096 items):
+### Dedicated Fast-Loading Folders (v2.0.3)
+To avoid slowing down the R36S by scanning thousands of ROMs, BIOS files, and emulator saves, KPlayer v2.0.3 indexes **only four dedicated folders**, filtered strictly by media type (max recursion depth 8, files ≥ 50 KB, up to 4,096 items):
 
 - **Music (Audio only):** `/roms/bgmusic` (SD1) and `/roms2/bgmusic` (SD2)
 - **Videos (Video only):** `/roms/videos` (SD1) and `/roms2/videos` (SD2)
@@ -21,8 +21,8 @@ The **Files** view gives direct access to those same four folders on SD1 and SD2
 
 ## Português
 
-### Pastas Dedicadas de Carregamento Rápido (v2.0.2)
-Para não sobrecarregar o console R36S varrendo milhares de ROMs, BIOS e saves no cartão SD, o KPlayer v2.0.2 carrega **exclusivamente quatro pastas dedicadas**, filtrando estritamente por tipo de mídia (profundidade máxima de 8 subpastas, arquivos ≥ 50 KB, limite de 4.096 entradas):
+### Pastas Dedicadas de Carregamento Rápido (v2.0.3)
+Para não sobrecarregar o console R36S varrendo milhares de ROMs, BIOS e saves no cartão SD, o KPlayer v2.0.3 carrega **exclusivamente quatro pastas dedicadas**, filtrando estritamente por tipo de mídia (profundidade máxima de 8 subpastas, arquivos ≥ 50 KB, limite de 4.096 entradas):
 
 - **Músicas (somente áudio):** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
 - **Vídeos (somente vídeo):** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
