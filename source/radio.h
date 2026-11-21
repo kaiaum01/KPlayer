@@ -134,8 +134,8 @@ static void *radio_art_worker(void *argument) {
   return NULL;
 }
 
-static void radio_update_art(const char *url) {
-  if (!url) url = "";
+static void radio_update_art(const char *raw_url) {
+  const char *url = raw_url ? raw_url : "";
   pthread_mutex_lock(&radio_art_mutex);
   if (radio_art_result_url[0]) {
     if (!strcmp(radio_art_result_url, url) && radio_art_bytes && radio_art_size) {
@@ -152,7 +152,10 @@ static void radio_update_art(const char *url) {
             SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
             if (radio_art_texture) SDL_DestroyTexture(radio_art_texture);
             radio_art_texture = texture;
-            snprintf(radio_art_display_url, sizeof(radio_art_display_url), "%s", url);
+            size_t ulen = strlen(url);
+            if (ulen >= sizeof(radio_art_display_url)) ulen = sizeof(radio_art_display_url) - 1;
+            memcpy(radio_art_display_url, url, ulen);
+            radio_art_display_url[ulen] = 0;
           }
           stbi_image_free(pixels);
         }
@@ -166,7 +169,10 @@ static void radio_update_art(const char *url) {
     radio_art_texture = NULL; radio_art_display_url[0] = 0;
   }
   if (!radio_art_busy && strcmp(url, radio_art_requested)) {
-    snprintf(radio_art_requested, sizeof(radio_art_requested), "%s", url);
+    size_t ulen = strlen(url);
+    if (ulen >= sizeof(radio_art_requested)) ulen = sizeof(radio_art_requested) - 1;
+    memcpy(radio_art_requested, url, ulen);
+    radio_art_requested[ulen] = 0;
     if (!strncmp(url, "http://", 7) || !strncmp(url, "https://", 8)) {
       char *copy = strdup(url);
       pthread_t worker;

@@ -79,6 +79,29 @@ static int iptv_done_source = 0;
 static int iptv_fetch_source = 0;
 static char iptv_done_path[256] = "";
 
+static void iptv_copy_str(char *dst, size_t cap, const char *src) {
+  if (!dst || !cap) return;
+  if (!src) {
+    dst[0] = 0;
+    return;
+  }
+  size_t len = strlen(src);
+  if (len >= cap) len = cap - 1;
+  memcpy(dst, src, len);
+  dst[len] = 0;
+}
+
+static void iptv_copy_n(char *dst, size_t cap, const char *src, size_t n) {
+  if (!dst || !cap) return;
+  if (!src) {
+    dst[0] = 0;
+    return;
+  }
+  if (n >= cap) n = cap - 1;
+  memcpy(dst, src, n);
+  dst[n] = 0;
+}
+
 static const char *iptv_source_slug(int src) {
   switch (src) {
     case 1: return "filmes";
@@ -166,7 +189,7 @@ static int iptv_read_list_dyn(const char *path, IptvChannel **arr, int *cap) {
       const char *comma = strchr(p, ',');
       const char *raw_name = comma && comma[1] ? comma + 1 : "";
       while (*raw_name == ' ' || *raw_name == '\t') raw_name++;
-      snprintf(name, sizeof(name), "%s", raw_name);
+      iptv_copy_str(name, sizeof(name), raw_name);
       iptv_attribute(p, "tvg-logo", logo, sizeof(logo));
       iptv_attribute(p, "group-title", group, sizeof(group));
       iptv_attribute(p, "tvg-id", id, sizeof(id));
@@ -179,11 +202,11 @@ static int iptv_read_list_dyn(const char *path, IptvChannel **arr, int *cap) {
         IptvChannel *dst = &(*arr)[count];
         memset(dst, 0, sizeof(*dst));
         memcpy(dst->url, p, url_len + 1);
-        if (name[0]) snprintf(dst->name, sizeof(dst->name), "%s", name);
+        if (name[0]) iptv_copy_str(dst->name, sizeof(dst->name), name);
         else snprintf(dst->name, sizeof(dst->name), "Canal %d", count + 1);
-        snprintf(dst->logo, sizeof(dst->logo), "%s", logo);
-        snprintf(dst->group, sizeof(dst->group), "%s", group);
-        snprintf(dst->id, sizeof(dst->id), "%s", id);
+        iptv_copy_str(dst->logo, sizeof(dst->logo), logo);
+        iptv_copy_str(dst->group, sizeof(dst->group), group);
+        iptv_copy_str(dst->id, sizeof(dst->id), id);
         count++;
       }
       name[0] = logo[0] = group[0] = id[0] = 0;
@@ -216,7 +239,7 @@ static __attribute__((unused)) int iptv_read_list(const char *path, IptvChannel 
       const char *comma = strchr(p, ',');
       const char *raw_name = comma && comma[1] ? comma + 1 : "";
       while (*raw_name == ' ' || *raw_name == '\t') raw_name++;
-      snprintf(name, sizeof(name), "%s", raw_name);
+      iptv_copy_str(name, sizeof(name), raw_name);
       iptv_attribute(p, "tvg-logo", logo, sizeof(logo));
       iptv_attribute(p, "group-title", group, sizeof(group));
       iptv_attribute(p, "tvg-id", id, sizeof(id));
@@ -225,11 +248,11 @@ static __attribute__((unused)) int iptv_read_list(const char *path, IptvChannel 
       if ((!strncmp(p, "http://", 7) || !strncmp(p, "https://", 8)) &&
           url_len < sizeof(out[0].url) && !strpbrk(p, " \t")) {
         memcpy(out[count].url, p, url_len + 1);
-        if (name[0]) snprintf(out[count].name, sizeof(out[count].name), "%s", name);
+        if (name[0]) iptv_copy_str(out[count].name, sizeof(out[count].name), name);
         else snprintf(out[count].name, sizeof(out[count].name), "Canal %d", count + 1);
-        snprintf(out[count].logo, sizeof(out[count].logo), "%s", logo);
-        snprintf(out[count].group, sizeof(out[count].group), "%s", group);
-        snprintf(out[count].id, sizeof(out[count].id), "%s", id);
+        iptv_copy_str(out[count].logo, sizeof(out[count].logo), logo);
+        iptv_copy_str(out[count].group, sizeof(out[count].group), group);
+        iptv_copy_str(out[count].id, sizeof(out[count].id), id);
         count++;
       }
       name[0] = logo[0] = group[0] = id[0] = 0;
@@ -255,8 +278,8 @@ static int iptv_read_categories_tsv(const char *path) {
     if (!tab2) continue;
     *tab2 = 0;
     if (!iptv_ensure_cats_cap(count + 1)) break;
-    snprintf(iptv_cats[count].id, sizeof(iptv_cats[count].id), "%s", line);
-    snprintf(iptv_cats[count].name, sizeof(iptv_cats[count].name), "%s", tab1 + 1);
+    iptv_copy_str(iptv_cats[count].id, sizeof(iptv_cats[count].id), line);
+    iptv_copy_str(iptv_cats[count].name, sizeof(iptv_cats[count].name), tab1 + 1);
     iptv_cats[count].count = atoi(tab2 + 1);
     count++;
   }
@@ -377,8 +400,8 @@ static void iptv_fetch_categories_start(bool refresh) {
 }
 
 static void iptv_fetch_items_start(const char *cat_id, const char *cat_name, bool refresh) {
-  snprintf(iptv_active_cat_id, sizeof(iptv_active_cat_id), "%s", cat_id);
-  snprintf(iptv_active_cat_name, sizeof(iptv_active_cat_name), "%s", cat_name);
+  iptv_copy_str(iptv_active_cat_id, sizeof(iptv_active_cat_id), cat_id);
+  iptv_copy_str(iptv_active_cat_name, sizeof(iptv_active_cat_name), cat_name);
   iptv_count = iptv_selected = iptv_offset = 0;
   iptv_view = IPTV_VIEW_ITEMS;
   IptvJobSpec spec;
@@ -386,16 +409,16 @@ static void iptv_fetch_items_start(const char *cat_id, const char *cat_name, boo
   spec.job = IPTV_JOB_ITEMS;
   spec.source = iptv_source;
   spec.refresh = refresh;
-  snprintf(spec.arg1, sizeof(spec.arg1), "%s", cat_id);
-  snprintf(spec.out_path, sizeof(spec.out_path), "iptv/.items-current.m3u8");
+  iptv_copy_str(spec.arg1, sizeof(spec.arg1), cat_id);
+  iptv_copy_str(spec.out_path, sizeof(spec.out_path), "iptv/.items-current.m3u8");
   iptv_start_job(&spec);
 }
 
 static void iptv_fetch_episodes_start(const char *letter, const char *shard, const char *title,
                                       bool refresh) {
-  snprintf(iptv_active_series_letter, sizeof(iptv_active_series_letter), "%s", letter);
-  snprintf(iptv_active_series_shard, sizeof(iptv_active_series_shard), "%s", shard);
-  snprintf(iptv_active_series_title, sizeof(iptv_active_series_title), "%s", title);
+  iptv_copy_str(iptv_active_series_letter, sizeof(iptv_active_series_letter), letter);
+  iptv_copy_str(iptv_active_series_shard, sizeof(iptv_active_series_shard), shard);
+  iptv_copy_str(iptv_active_series_title, sizeof(iptv_active_series_title), title);
   iptv_ep_count = iptv_ep_selected = iptv_ep_offset = 0;
   iptv_view = IPTV_VIEW_EPISODES;
   IptvJobSpec spec;
@@ -403,10 +426,10 @@ static void iptv_fetch_episodes_start(const char *letter, const char *shard, con
   spec.job = IPTV_JOB_EPISODES;
   spec.source = 2;
   spec.refresh = refresh;
-  snprintf(spec.arg1, sizeof(spec.arg1), "%s", letter);
-  snprintf(spec.arg2, sizeof(spec.arg2), "%s", shard);
-  snprintf(spec.arg3, sizeof(spec.arg3), "%s", title);
-  snprintf(spec.out_path, sizeof(spec.out_path), "iptv/.episodes-current.m3u8");
+  iptv_copy_str(spec.arg1, sizeof(spec.arg1), letter);
+  iptv_copy_str(spec.arg2, sizeof(spec.arg2), shard);
+  iptv_copy_str(spec.arg3, sizeof(spec.arg3), title);
+  iptv_copy_str(spec.out_path, sizeof(spec.out_path), "iptv/.episodes-current.m3u8");
   iptv_start_job(&spec);
 }
 
@@ -436,8 +459,8 @@ static void iptv_play_channel(const IptvChannel *channel) {
     return;
   }
   RadioStation station = {0};
-  snprintf(station.name, sizeof(station.name), "%.*s", (int)sizeof(station.name) - 1, channel->name);
-  snprintf(station.url, sizeof(station.url), "%s", channel->url);
+  iptv_copy_str(station.name, sizeof(station.name), channel->name);
+  iptv_copy_str(station.url, sizeof(station.url), channel->url);
   station.is_iptv = true;
   radio_cancel_retries();
   pthread_mutex_lock(&radio_play_mutex);
@@ -472,8 +495,8 @@ static bool iptv_parse_series_id(const IptvChannel *ch, char *letter_out, size_t
   const char *p2 = c1 + 1;
   const char *c2 = strchr(p2, ':');
   if (!c2 || c2 == p2) return false;
-  snprintf(letter_out, lcap, "%.*s", (int)(c1 - p1), p1);
-  snprintf(shard_out, scap, "%.*s", (int)(c2 - p2), p2);
+  iptv_copy_n(letter_out, lcap, p1, (size_t)(c1 - p1));
+  iptv_copy_n(shard_out, scap, p2, (size_t)(c2 - p2));
   return true;
 }
 

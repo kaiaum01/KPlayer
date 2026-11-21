@@ -435,6 +435,7 @@ int main(void) {
   automatic_roots[2].path = "/this-path-does-not-exist-kplayer";
   automatic_roots[3].path = "/this-path-does-not-exist-kplayer";
   category = 1;
+  media_preloaded = false;
   scan_automatic_media();
   assert(automatic_view && total == 1 &&
          !strcmp(items[0].name, "Grande.flac") && items[0].size >= 60 * 1024 &&
@@ -464,6 +465,8 @@ int main(void) {
   automatic_roots[1].path = auto1;
   automatic_roots[2].path = auto2;
   automatic_roots[3].path = auto3;
+  clear_cached_media();
+  media_preloaded = false;
   clear_items();
   unlink(automatic_track);
   assert(scan_music_folder(card2));
@@ -612,6 +615,7 @@ int main(void) {
   free(bolddata);
   if (cover_texture)
     SDL_DestroyTexture(cover_texture);
+  clear_cached_media();
   clear_music_entries();
   free(video.pixels);
   SDL_DestroyRenderer(renderer);
