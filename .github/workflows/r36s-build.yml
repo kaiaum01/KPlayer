@@ -7,13 +7,17 @@ on:
     paths:
       - 'source/**'
       - 'ports/**'
+      - 'patches/**'
       - 'tools/package_release.py'
+      - 'tools/build_libvlc_arm64.sh'
       - '.github/workflows/r36s-build.yml'
   pull_request:
     paths:
       - 'source/**'
       - 'ports/**'
+      - 'patches/**'
       - 'tools/package_release.py'
+      - 'tools/build_libvlc_arm64.sh'
       - '.github/workflows/r36s-build.yml'
 
 permissions:
@@ -37,7 +41,14 @@ jobs:
       - name: Instalar compilador ARM64
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libsdl2-2.0-0
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config patch xz-utils make flex bison file libsdl2-2.0-0
+      - name: Cachear núcleo libVLC ARM64
+        uses: actions/cache@v4
+        with:
+          path: ports/kplayer/lib
+          key: libvlc-3.0.23-arm64-${{ hashFiles('patches/kplayer-vlc.patch', 'tools/build_libvlc_arm64.sh') }}
+      - name: Compilar núcleo libVLC ARM64
+        run: bash tools/build_libvlc_arm64.sh
       - name: Testar interface e metadados com sanitizadores
         run: |
           mkdir -p output

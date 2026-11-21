@@ -29,7 +29,14 @@ jobs:
       - name: Instalar compilador ARM64
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu file
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config patch xz-utils make flex bison file
+      - name: Cachear núcleo libVLC ARM64
+        uses: actions/cache@v4
+        with:
+          path: ports/kplayer/lib
+          key: libvlc-3.0.23-arm64-${{ hashFiles('patches/kplayer-vlc.patch', 'tools/build_libvlc_arm64.sh') }}
+      - name: Compilar núcleo libVLC ARM64
+        run: bash tools/build_libvlc_arm64.sh
       - name: Testar conversão dos placares
         run: python3 -m unittest discover -s tests -p test_football.py -v
       - name: Compilar KPlayer
