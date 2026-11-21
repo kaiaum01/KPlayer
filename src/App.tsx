@@ -43,6 +43,7 @@ import { VideoScreen } from './components/VideoScreen';
 import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/PlacarDaBolaScreen';
 import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
+import { AndroidPlayerApp } from './components/AndroidPlayerApp';
 import portCoverImg from './assets/images/kplayer_port_cover_1795234394587.jpg';
 
 const RADIO_CATEGORIES = [
@@ -101,7 +102,9 @@ export default function App() {
     loadStorage('kp_fav_radios', [])
   );
   const [showDeck, setShowDeck] = useState<boolean>(true);
+  const [editionView, setEditionView] = useState<'r36s' | 'android' | 'split'>('r36s');
   const [showR36sModal, setShowR36sModal] = useState<boolean>(false);
+  const [showAndroidModal, setShowAndroidModal] = useState<boolean>(false);
   const [r36sInfo, setR36sInfo] = useState<{
     ready: boolean;
     version: string;
@@ -223,7 +226,8 @@ export default function App() {
     const updateScale = () => {
       const el = stageRef.current;
       if (!el) return;
-      const availW = el.clientWidth - 16;
+      const splitAllowance = editionView === 'split' ? 404 : 0;
+      const availW = Math.max(260, el.clientWidth - 16 - splitAllowance);
       const availH = el.clientHeight - 16;
       const s = Math.max(0.45, Math.min(availW / 640, availH / 480, 1.55));
       setScale(s);
@@ -236,7 +240,7 @@ export default function App() {
       ro.disconnect();
       window.removeEventListener('resize', updateScale);
     };
-  }, [showDeck]);
+  }, [showDeck, editionView]);
 
   // Persist settings
   useEffect(() => {
@@ -479,8 +483,42 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [sleepIdx, language, notify]);
 
-  // Audio playback helpers
+  // Audio & video library partitions + Android shared helpers
   const audioTracks = useMemo(() => tracks.filter((t) => t.kind === 'audio'), [tracks]);
+  const videoTracks = useMemo(() => tracks.filter((t) => t.kind === 'video'), [tracks]);
+  const favoriteTrackSet = useMemo(() => new Set(favoriteTrackIds), [favoriteTrackIds]);
+  const favoriteRadioSet = useMemo(() => new Set(favoriteRadios.map((r) => r.uuid)), [favoriteRadios]);
+
+  const toggleFavoriteTrackById = useCallback((id: string) => {
+    setFavoriteTrackIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }, []);
+
+  const toggleFavoriteRadioByUuid = useCallback(
+    (uuid: string) => {
+      setFavoriteRadios((prev) => {
+        if (prev.some((s) => s.uuid === uuid)) {
+          return prev.filter((s) => s.uuid !== uuid);
+        }
+        const match =
+          radioStations.find((s) => s.uuid === uuid) ??
+          userRadios.find((s) => s.uuid === uuid) ??
+          (activeRadio?.uuid === uuid ? activeRadio : undefined);
+        return match ? [...prev, match] : prev;
+      });
+    },
+    [radioStations, userRadios, activeRadio]
+  );
+
+  const seekAudioMs = useCallback((ms: number) => {
+    const audio = audioRef.current;
+    const clamped = Math.max(0, ms);
+    if (audio && Number.isFinite(audio.duration) && audio.duration > 0) {
+      audio.currentTime = Math.min(audio.duration, clamped / 1000);
+    }
+    setCurrentMs(clamped);
+  }, []);
 
   const playMediaTrack = useCallback(
     (track: MediaTrack) => {
@@ -1370,17 +1408,40 @@ export default function App() {
         }}
       />
 
-      {/* Minimal Top Utility Bar for Media Import & R36S Deck Toggle */}
-      <div className="h-10 px-4 bg-[#101319] border-b border-white/10 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2.5 text-xs">
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: theme.accent, boxShadow: `0 0 8px ${rgbToRgba(theme.accent, 0.7)}` }}
-          />
-          <span className="font-semibold text-zinc-100">KPlayer 2.0.2</span>
-          <span className="text-zinc-500">R36S • Visual Moderno • 640×480</span>
+      {/* Minimal Top Utility Bar for Edition Switcher, Media Import & Downloads */}
+      <div className="min-h-10 px-3 py-1.5 bg-[#101319] border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-3 text-xs">
+          <span className="font-bold text-zinc-100 whitespace-nowrap">KPlayer 2.0.2</span>
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[#181c25] border border-white/10">
+            {(
+              [
+                { id: 'r36s', label: 'R36S (Principal)' },
+                { id: 'android', label: 'Android (Retrato)' },
+                { id: 'split', label: 'Lado a Lado' },
+              ] as const
+            ).map((opt) => {
+              const active = editionView === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setEditionView(opt.id)}
+                  style={
+                    active
+                      ? { backgroundColor: theme.accent, color: theme.bg }
+                      : undefined
+                  }
+                  className={`px-2.5 py-1 rounded-md text-[11.5px] font-bold whitespace-nowrap cursor-pointer transition-colors ${
+                    active ? '' : 'text-zinc-300 hover:text-white'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             type="button"
             onClick={() => setShowR36sModal(true)}
@@ -1389,64 +1450,82 @@ export default function App() {
               color: theme.bg,
               boxShadow: `0 0 12px ${rgbToRgba(theme.accent, 0.35)}`,
             }}
-            className="px-2.5 py-1 rounded-md text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
+            className="px-2.5 py-1 rounded-md text-xs font-bold hover:brightness-110 transition-all cursor-pointer whitespace-nowrap"
           >
-            ⬇ Baixar para R36S (.zip)
+            ⬇ R36S (.zip)
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAndroidModal(true)}
+            className="px-2.5 py-1 rounded-md text-xs font-semibold bg-[#1e222c] text-zinc-100 hover:bg-[#282e3b] border border-white/15 transition-colors cursor-pointer whitespace-nowrap"
+          >
+            ⬇ Android (.apk)
           </button>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-100 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer"
+            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-100 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer whitespace-nowrap"
           >
             + {tr('Mídias locais', language)} / .LRC
           </button>
-          <button
-            type="button"
-            onClick={() => setScreen('welcome')}
-            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-200 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer"
-            title="Visualizar tela inicial de boas-vindas"
-          >
-            ✦ Boas-vindas
-          </button>
-          <button
-            type="button"
-            onClick={() => setBootRunId((n) => n + 1)}
-            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-200 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer"
-            title="Reproduzir tela de inicialização"
-          >
-            ↻ Reiniciar
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowDeck((v) => !v)}
-            className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-200 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer"
-          >
-            {showDeck ? 'Ocultar controles R36S' : 'Mostrar controles R36S'}
-          </button>
+          {editionView !== 'android' && (
+            <>
+              <button
+                type="button"
+                onClick={() => setScreen('welcome')}
+                className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-200 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer whitespace-nowrap"
+                title="Visualizar tela inicial de boas-vindas"
+              >
+                Boas-vindas
+              </button>
+              <button
+                type="button"
+                onClick={() => setBootRunId((n) => n + 1)}
+                className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-200 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer whitespace-nowrap"
+                title="Reproduzir tela de inicialização"
+              >
+                ↻ Reiniciar
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDeck((v) => !v)}
+                className="px-2.5 py-1 rounded-md text-xs font-medium bg-[#1e222c] text-zinc-200 hover:bg-[#282e3b] border border-white/10 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                {showDeck ? 'Ocultar R36S Deck' : 'Mostrar R36S Deck'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Main Responsive Stage holding exact 640x480 R36S Viewport */}
+      {/* Main Responsive Stage: R36S (Principal) / Android (Retrato) / Lado a Lado */}
       <div
         ref={stageRef}
-        className="flex-1 min-h-0 flex items-center justify-center p-2 overflow-hidden"
+        className="flex-1 min-h-0 flex items-center justify-center gap-6 p-3 overflow-auto"
       >
-        <div
-          style={{
-            width: 640 * scale,
-            height: 480 * scale,
-          }}
-          className="relative shrink-0 rounded-[14px] overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.75)] ring-2 ring-white/10"
-        >
-          <div
-            style={{
-              transform: `scale(${scale})`,
-              transformOrigin: 'top left',
-              backgroundColor: theme.bg,
-              color: theme.text,
-            }}
-            className="kp-screen"
-          >
+        {editionView !== 'android' && (
+          <div className="flex flex-col items-center gap-1.5 shrink-0">
+            {editionView === 'split' && (
+              <div className="text-[11px] font-semibold text-zinc-400">
+                R36S (Principal · 640×480 · dArkOS)
+              </div>
+            )}
+            <div
+              style={{
+                width: 640 * scale,
+                height: 480 * scale,
+              }}
+              className="relative shrink-0 rounded-[14px] overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.75)] ring-2 ring-white/10"
+            >
+              <div
+                style={{
+                  transform: `scale(${scale})`,
+                  transformOrigin: 'top left',
+                  backgroundColor: theme.bg,
+                  color: theme.text,
+                }}
+                className="kp-screen"
+              >
             {/* ==================== ANIMATED BOOT SPLASH SCREEN ==================== */}
             {screen === 'boot' && (
               <BootSplashScreen
@@ -3096,12 +3175,81 @@ export default function App() {
                 />
               </div>
             )}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Modern Portrait Android Edition (Side-by-Side or Dedicated View) */}
+        {editionView !== 'r36s' && (
+          <div className="flex flex-col items-center gap-1.5 h-full max-h-[770px] justify-center shrink-0">
+            {editionView === 'split' && (
+              <div className="text-[11px] font-semibold text-zinc-400">
+                Android (Retrato · Compose + Media3)
+              </div>
+            )}
+            <AndroidPlayerApp
+              theme={theme}
+              themeIndex={themeIndex}
+              setThemeIndex={setThemeIndex}
+              language={language}
+              setLanguage={setLanguage}
+              audioTracks={audioTracks}
+              videoTracks={videoTracks}
+              activeTrack={activeTrack}
+              activeRadio={activeRadio}
+              isPlaying={isPlaying}
+              isPaused={isPaused}
+              currentMs={currentMs}
+              durationMs={durationMs}
+              repeatMode={repeatMode}
+              shuffle={shuffle}
+              eqPreset={EQ_PRESETS[eqIdx]?.name ?? 'Desativada'}
+              sleepMinutes={SLEEP_OPTIONS[sleepIdx] ?? 0}
+              playbackSpeed={playbackRate}
+              favoriteIds={favoriteTrackSet}
+              radioFavorites={favoriteRadioSet}
+              noticeAccepted={streamNoticeAccepted}
+              onAcceptNotice={() => {
+                setStreamNoticeAccepted(true);
+                try {
+                  sessionStorage.setItem('kp_stream_notice_ok', '1');
+                } catch {
+                  // Ignore
+                }
+              }}
+              onPlayTrack={playMediaTrack}
+              onPlayRadio={playRadioStation}
+              onTogglePlayPause={togglePlayPause}
+              onStepTrack={(d) => stepTrack(d > 0 ? 1 : -1)}
+              onSeekMs={seekAudioMs}
+              onCycleRepeat={() => setRepeatMode((r) => ((r + 1) % 3) as RepeatMode)}
+              onToggleShuffle={() => setShuffle((s) => !s)}
+              onToggleFavoriteTrack={toggleFavoriteTrackById}
+              onToggleFavoriteRadio={toggleFavoriteRadioByUuid}
+              onSetEqPreset={(name) => {
+                const idx = EQ_PRESETS.findIndex((p) => p.name === name);
+                if (idx >= 0) setEqIdx(idx);
+              }}
+              onSetSleepMinutes={(mins) => {
+                const idx = SLEEP_OPTIONS.indexOf(mins as (typeof SLEEP_OPTIONS)[number]);
+                setSleepIdx(idx >= 0 ? idx : 0);
+              }}
+              onSetPlaybackSpeed={(speed) => {
+                setPlaybackRate(speed);
+                if (audioRef.current) audioRef.current.playbackRate = speed;
+              }}
+              onImportLocalFiles={() => fileInputRef.current?.click()}
+              preloadedMatches={preloadedMatches}
+              onMatchesLoaded={setPreloadedMatches}
+              compactFrame={true}
+            />
+          </div>
+        )}
       </div>
 
       {/* Optional Interactive R36S Handheld Control Deck */}
-      {showDeck && (
+      {showDeck && editionView !== 'android' && (
         <div className="px-3 pb-3 flex justify-center shrink-0">
           <R36SControls onPress={handleButton} />
         </div>
@@ -3218,6 +3366,102 @@ export default function App() {
               >
                 .sha256
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KPlayer Android Edition Info & Build Modal */}
+      {showAndroidModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setShowAndroidModal(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-[#131720] border border-white/15 p-5 shadow-2xl text-zinc-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold tracking-wide text-[#1db954]">
+                  Edição Android · Lado a Lado com R36S
+                </div>
+                <h2 className="text-xl font-extrabold mt-0.5">
+                  KPlayer v2.0.2 — Android Retrato
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAndroidModal(false)}
+                className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-4 flex gap-3.5 items-stretch">
+              <div className="w-[128px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
+                <img
+                  src={portCoverImg}
+                  alt="Capa KPlayer v2.0.2 Android"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex-1 rounded-xl bg-[#0c0f15] border border-white/10 p-3 text-xs space-y-1.5 min-w-0">
+                <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">Pacote</span>
+                  <span className="font-semibold text-zinc-100 truncate">io.kplayer.android</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">Stack Nativa</span>
+                  <span className="font-medium text-zinc-200 truncate">Kotlin · Compose · Media3</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">Android mínimo</span>
+                  <span className="font-medium text-zinc-200">Android 8.0+ (API 26–35)</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-zinc-400">Workflow CI</span>
+                  <span className="font-medium text-[#1db954]">android-build.yml (APK)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 text-xs text-zinc-300 space-y-2">
+              <div className="font-bold text-zinc-100">Mesmo KPlayer, design moderno em retrato:</div>
+              <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                <li>Player de música com disco/capa grande, letras sincronizadas (.LRC) com toque para avançar, fila, equalizador de hardware e timer de sono.</li>
+                <li>Vídeos locais e streams HLS via Media3 ExoPlayer sem as limitações de 640×480 do portátil.</li>
+                <li>IPTV desbloqueado (Canais · Filmes · Séries · Usuário com teclado nativo), Rádio Online, Placar da Bola e os mesmos 7 temas + Aviso de Transparência.</li>
+              </ul>
+              <p className="text-[11px] text-zinc-400 pt-1">
+                O projeto nativo está em <code className="text-zinc-200">android/</code> e é compilado automaticamente no GitHub Actions gerando <code className="text-zinc-200">KPlayer-v2.0.2-Android.apk</code> lado a lado com o pacote principal do R36S.
+              </p>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAndroidModal(false);
+                  setEditionView('android');
+                }}
+                style={{ backgroundColor: theme.accent, color: theme.bg }}
+                className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all cursor-pointer"
+              >
+                Abrir Preview Android Retrato
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAndroidModal(false);
+                  setEditionView('split');
+                }}
+                className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors cursor-pointer"
+              >
+                Ver Lado a Lado
+              </button>
             </div>
           </div>
         </div>

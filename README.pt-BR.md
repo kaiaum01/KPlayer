@@ -5,13 +5,14 @@
 <h1 align="center">KPlayer v2.0.2</h1>
 
 <p align="center">
-  <strong>Central de mídia portátil para R36S (dArkOS / PortMaster)</strong><br />
+  <strong>Central de mídia portátil para R36S (Principal — dArkOS / PortMaster) &amp; Android (Edição Retrato)</strong><br />
   Músicas com letras sincronizadas (.LRC) · Vídeos · Rádio Online · IPTV · <strong>Placar da Bola</strong>
 </p>
 
 <p align="center">
   <a href="README.md">English</a> ·
-  <a href="docs/INSTALL.md">Instalação</a> ·
+  <a href="docs/INSTALL.md">Instalação (R36S)</a> ·
+  <a href="docs/ANDROID.md">Edição Android (Retrato)</a> ·
   <a href="docs/CONTROLS.md">Controles</a> ·
   <a href="docs/MEDIA.md">Mídias e Letras</a> ·
   <a href="TERMS.md">Termos e Transparência</a> ·
@@ -34,6 +35,7 @@
   - **Vídeos:** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
 - **IPTV desbloqueado e categorizado (Canais · Filmes · Séries · Usuário):** sem limite de canais/filmes/episódios e com carregamento sob demanda categoria por categoria — **245 Canais de TV** em 12 categorias (`catalogo.txt` + reservas em `https://canais-saimo.pages.dev/`), **Filmes** (~30.000+ filmes por destaques, animes/kids, gêneros TMDB e A–Z), **Séries** (~13.000+ séries com seleção completa de temporadas e todos os episódios de `https://filmes-saimo.pages.dev/`) e **IPTV do Usuário** (teclado virtual para digitar URLs `.m3u`/`.m3u8` ou leitura automática de arquivos na pasta `ports/kplayer/iptv_usuario/`).
 - **Capa do Port e Metadados XML para dArkOS / EmulationStation:** o pacote `KPlayer-v2.0.2-R36S.zip` já inclui a capa oficial 640×480 (`images/KPlayer-image.png`), `gamelist.xml` pronto para uso e `kplayer/KPlayer-metadata.xml` para mesclar com seus outros ports.
+- **Nova Edição Android (Modo Retrato — Lado a Lado):** aplicativo Android nativo em **Kotlin + Jetpack Compose + Material 3 + Media3 (ExoPlayer)** na pasta `android/`, mantendo a edição **R36S como principal** e trazendo um player de música e entretenimento moderno em modo retrato com **todas as funções do KPlayer v2.0.2**, sem as limitações de tela 640×480 ou ausência de toque do console. Veja o guia completo em [docs/ANDROID.md](docs/ANDROID.md).
 
 ---
 
@@ -74,7 +76,24 @@
 
 4. Reinicie o EmulationStation (ou atualize a lista de jogos) e abra **Ports → KPlayer v2.0.2**.
 
-> **Requisitos:** R36S ARM64 com dArkOS e PortMaster, SDL2, ALSA e plugins VLC compatíveis em `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio Online, IPTV e Placar da Bola exigem conexão com a internet. Veja o guia completo em [docs/INSTALL.md](docs/INSTALL.md).
+> **Requisitos (R36S):** R36S ARM64 com dArkOS e PortMaster, SDL2, ALSA e plugins VLC compatíveis em `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio Online, IPTV e Placar da Bola exigem conexão com a internet. Veja o guia completo em [docs/INSTALL.md](docs/INSTALL.md).
+
+---
+
+## Edição Android v2.0.2 (Modo Retrato — Lado a Lado)
+
+Além da edição principal de **R36S**, o repositório mantém lado a lado o **KPlayer Android** (`android/`), um aplicativo nativo em **modo retrato** projetado para smartphones Android 8.0+ (API 26–35) com visual moderno e paridade total de recursos:
+
+- **Player de Música Moderno:** Mini-Player flutuante persistente, tela cheia **Now Playing**, capa em alta resolução, **Letras sincronizadas (`.LRC`) com toque para pular**, Fila, Favoritas, velocidade de reprodução (`0.75x–1.5x`), Timer de Sono e **Equalizador de hardware (5 bandas / 6 presets)**.
+- **Vídeos, IPTV Desbloqueado, Rádio Online e Placar da Bola:** todas as mesmas fontes e recursos do R36S — incluindo os **245 canais de TV** em 12 categorias, **Filmes e Séries** completos sob demanda, **IPTV do Usuário** (teclado nativo + importação `.m3u`), **Rádio Online (Radio-Browser)**, **Placar da Bola** (Estatísticas, Eventos e Escalações), **Tela de Aviso de Transparência**, **7 temas** e **3 idiomas**.
+- **Instalação:** baixe **`KPlayer-v2.0.2-Android.apk`** na aba **[Releases](../../releases)** (compilado automaticamente junto com o ZIP do R36S pelo GitHub Actions).
+
+| Edição | Plataforma | Motor | Empacotamento |
+| :--- | :--- | :--- | :--- |
+| **KPlayer R36S (Principal)** | R36S / dArkOS / PortMaster (640×480, D-Pad) | C + SDL2 + libVLC (ARM64) | `KPlayer-v2.0.2-R36S.zip` |
+| **KPlayer Android (Lado a Lado)** | Android 8.0+ (Modo Retrato, Toque) | Kotlin + Jetpack Compose + Media3 | `KPlayer-v2.0.2-Android.apk` |
+
+Veja a documentação completa, permissões e instruções de compilação em **[docs/ANDROID.md](docs/ANDROID.md)**.
 
 ---
 

@@ -55,7 +55,23 @@ python3 tools/generate_v2_screenshots.py
 bash tools/render-previews.sh
 ```
 
-## Web Preview (Dev / Test Simulator)
+## Android v2.0.2 (Side-by-Side Portrait Edition): GitHub Actions & Local Build
+
+The dedicated workflow **Compilar KPlayer Android (APK)** (`.github/workflows/android-build.yml`) compiles the Kotlin + Jetpack Compose + Media3 project under `android/` using Java 17 and Gradle 8.10.2, producing `releases/KPlayer-v2.0.2-Android.apk` and its `.sha256` checksum.
+
+Pushing a version tag (`v*.*.*`) triggers **KPlayer - Compilar e preparar release (R36S + Android)** (`.github/workflows/release-r36s.yml`), which builds **both** `KPlayer-v2.0.2-R36S.zip` (primary) and `KPlayer-v2.0.2-Android.apk` (portrait companion) in parallel and attaches them side-by-side to the draft GitHub Release.
+
+### Compile the Android APK Locally (JDK 17 + Android SDK 35)
+
+```bash
+cd android
+gradle assembleRelease --no-daemon
+```
+
+Output:
+- `android/app/build/outputs/apk/release/app-release.apk`
+
+## Web Preview (R36S Principal + Android Retrato Side-by-Side)
 
 ```bash
 npm install

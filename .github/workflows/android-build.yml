@@ -1,0 +1,59 @@
+name: Compilar KPlayer Android (APK)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compilar APK KPlayer Android v2.0.2
+        working-directory: android
+        run: |
+          gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Empacotar APK e gerar SHA-256
+        run: |
+          mkdir -p releases
+          VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
+          APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+          APK_DST="releases/KPlayer-v${VERSION}-Android.apk"
+          cp "$APK_SRC" "$APK_DST"
+          (cd releases && sha256sum "KPlayer-v${VERSION}-Android.apk" > "KPlayer-v${VERSION}-Android.apk.sha256")
+          ls -lh "$APK_DST" "${APK_DST}.sha256"
+
+      - name: Disponibilizar APK Android
+        uses: actions/upload-artifact@v4
+        with:
+          name: KPlayer-Android-${{ github.run_number }}
+          path: |
+            releases/KPlayer-v*-Android.apk
+            releases/KPlayer-v*-Android.apk.sha256
+          if-no-files-found: error
+          retention-days: 30

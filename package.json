@@ -12,6 +12,7 @@
   "dependencies": {
     "express": "^4.21.2",
     "hls.js": "^1.5.18",
+    "lucide-react": "^1.77.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

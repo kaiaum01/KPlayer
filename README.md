@@ -5,13 +5,14 @@
 <h1 align="center">KPlayer v2.0.2</h1>
 
 <p align="center">
-  <strong>Portable media center for R36S (dArkOS / PortMaster)</strong><br />
+  <strong>Portable media center for R36S (Primary — dArkOS / PortMaster) &amp; Android (Portrait Edition)</strong><br />
   Music with synced lyrics (.LRC) · Video · Online Radio · IPTV · <strong>Placar da Bola (Live Football)</strong>
 </p>
 
 <p align="center">
   <a href="README.pt-BR.md">Português (BR)</a> ·
-  <a href="docs/INSTALL.md">Installation</a> ·
+  <a href="docs/INSTALL.md">Installation (R36S)</a> ·
+  <a href="docs/ANDROID.md">Android Edition (Portrait)</a> ·
   <a href="docs/CONTROLS.md">Controls</a> ·
   <a href="docs/MEDIA.md">Media &amp; Lyrics</a> ·
   <a href="TERMS.md">Terms &amp; Transparency</a> ·
@@ -34,6 +35,7 @@
   - **Videos:** `/roms/videos` (SD1) and `/roms2/videos` (SD2)
 - **Unlocked Category-by-Category IPTV (Canais · Filmes · Séries · User IPTV):** Zero item limits with lazy on-demand category loading — **245 TV Channels** across 12 categories (`catalogo.txt` + reserves from `https://canais-saimo.pages.dev/`), **Filmes** (~30,000+ movies by highlights, anime/kids, TMDB genres, and A–Z), **Séries** (~13,000+ series with full seasons and all episodes from `https://filmes-saimo.pages.dev/`), and **User IPTV** (built-in virtual keyboard for `.m3u`/`.m3u8` URLs plus automatic scanning of `ports/kplayer/iptv_usuario/`).
 - **dArkOS / EmulationStation Port Artwork & XML Metadata:** `KPlayer-v2.0.2-R36S.zip` ships with a custom 640×480 cover (`images/KPlayer-image.png`), ready-to-use `gamelist.xml`, and a standalone `kplayer/KPlayer-metadata.xml` snippet to merge with existing ports.
+- **New Android Portrait Edition (Side-by-Side):** Native Android app built with **Kotlin + Jetpack Compose + Material 3 + Media3 (ExoPlayer)** under `android/`, living side-by-side with the primary **R36S** edition. Delivers a modern touch-first portrait music & media player with full KPlayer v2.0.2 feature parity and no 640×480 handheld constraints. See [docs/ANDROID.md](docs/ANDROID.md).
 
 ---
 
@@ -74,7 +76,24 @@
 
 4. Refresh the Ports list in EmulationStation and launch **Ports → KPlayer v2.0.2**.
 
-> **Requirements:** ARM64 R36S running dArkOS with PortMaster, SDL2, ALSA, and compatible VLC plugins in `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Online Radio, IPTV, and Placar da Bola require internet access. See [docs/INSTALL.md](docs/INSTALL.md) for full details.
+> **Requirements (R36S):** ARM64 R36S running dArkOS with PortMaster, SDL2, ALSA, and compatible VLC plugins in `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Online Radio, IPTV, and Placar da Bola require internet access. See [docs/INSTALL.md](docs/INSTALL.md) for full details.
+
+---
+
+## Android Edition v2.0.2 (Portrait — Side-by-Side)
+
+Alongside the primary **R36S** edition, this repository includes **KPlayer Android** (`android/`), a native **portrait-mode** app for Android 8.0+ (API 26–35) smartphones with a modern design and complete feature parity:
+
+- **Modern Portrait Music Player:** Persistent floating Mini-Player, full-screen **Now Playing** sheet, tap-to-seek synced **`.LRC` lyrics**, Queue, Favorites, playback speed (`0.75x–1.5x`), Sleep Timer, and a **5-band hardware Equalizer** (6 presets).
+- **Full Feature Parity:** Local videos (`MediaStore` + `PlayerView`), unlocked **245-channel Live TV + Movies + Series + User IPTV** (native keyboard & `.m3u` import), **Online Radio (Radio-Browser)**, **Placar da Bola** live match center (Stats, Events & Lineups), **Transparency Notice**, **7 color themes**, and **3 languages**.
+- **Install:** Download **`KPlayer-v2.0.2-Android.apk`** from **[Releases](../../releases)** (built automatically alongside the R36S ZIP via GitHub Actions).
+
+| Edition | Platform | Engine | Release Artifact |
+| :--- | :--- | :--- | :--- |
+| **KPlayer R36S (Primary)** | R36S / dArkOS / PortMaster (640×480, D-Pad) | C + SDL2 + libVLC (ARM64) | `KPlayer-v2.0.2-R36S.zip` |
+| **KPlayer Android (Side-by-Side)** | Android 8.0+ (Portrait, Touch) | Kotlin + Jetpack Compose + Media3 | `KPlayer-v2.0.2-Android.apk` |
+
+Read full details and build instructions in **[docs/ANDROID.md](docs/ANDROID.md)**.
 
 ---
 

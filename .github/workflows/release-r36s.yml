@@ -1,4 +1,4 @@
-name: KPlayer - Compilar e preparar release R36S
+name: KPlayer - Compilar e preparar release (R36S + Android)
 
 on:
   workflow_dispatch:
@@ -11,10 +11,9 @@ permissions:
 
 jobs:
   build-r36s:
+    name: Compilar R36S (Principal)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -45,11 +44,11 @@ jobs:
             -I source/include source/kplayer.c -o ports/kplayer/kplayer \
             -ldl -lpthread -lm
           file ports/kplayer/kplayer
-      - name: Gerar pacote e checksum
+      - name: Gerar pacote R36S e checksum
         env:
           KPLAYER_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: python3 tools/package_release.py
-      - name: Disponibilizar artefato para teste
+      - name: Disponibilizar artefato R36S
         uses: actions/upload-artifact@v4
         with:
           name: KPlayer-R36S
@@ -57,14 +56,77 @@ jobs:
             releases/KPlayer-v*-R36S.zip
             releases/KPlayer-v*-R36S.zip.sha256
           if-no-files-found: error
+
+  build-android:
+    name: Compilar Android (Retrato)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Compilar APK KPlayer Android
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --stacktrace
+      - name: Empacotar APK e gerar SHA-256
+        env:
+          TAG_NAME: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          mkdir -p releases
+          if [ -n "$TAG_NAME" ]; then
+            VERSION="${TAG_NAME#v}"
+          else
+            VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
+          fi
+          APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+          APK_DST="releases/KPlayer-v${VERSION}-Android.apk"
+          cp "$APK_SRC" "$APK_DST"
+          (cd releases && sha256sum "KPlayer-v${VERSION}-Android.apk" > "KPlayer-v${VERSION}-Android.apk.sha256")
+          ls -lh "$APK_DST" "${APK_DST}.sha256"
+      - name: Disponibilizar artefato Android
+        uses: actions/upload-artifact@v4
+        with:
+          name: KPlayer-Android
+          path: |
+            releases/KPlayer-v*-Android.apk
+            releases/KPlayer-v*-Android.apk.sha256
+          if-no-files-found: error
+
+  prepare-release:
+    name: Preparar rascunho da release (R36S + Android)
+    needs: [build-r36s, build-android]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar artefato R36S
+        uses: actions/download-artifact@v4
+        with:
+          name: KPlayer-R36S
+          path: releases
+      - name: Baixar artefato Android
+        uses: actions/download-artifact@v4
+        with:
+          name: KPlayer-Android
+          path: releases
       - name: Preparar rascunho da release
-        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          name: KPlayer ${{ github.ref_name }} — R36S / dArkOS
+          name: KPlayer ${{ github.ref_name }} — R36S (Principal) & Android
           body_path: releases/RELEASE_NOTES.md
           fail_on_unmatched_files: true
           files: |
             releases/KPlayer-v*-R36S.zip
             releases/KPlayer-v*-R36S.zip.sha256
+            releases/KPlayer-v*-Android.apk
+            releases/KPlayer-v*-Android.apk.sha256

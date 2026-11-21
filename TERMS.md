@@ -6,7 +6,7 @@
 
 ## 1. Natureza do Aplicativo
 
-O **KPlayer v2.0.2** é estritamente um **reprodutor de mídia independente** (músicas locais, vídeos locais, Rádio Online, listas IPTV e Placar da Bola) desenvolvido para o console portátil **R36S (dArkOS / PortMaster)** e interface web de pré-visualização.
+O **KPlayer v2.0.2** é estritamente um **reprodutor de mídia independente** (músicas locais, vídeos locais, Rádio Online, listas IPTV e Placar da Bola) desenvolvido para o console portátil **R36S (Principal — dArkOS / PortMaster)**, smartphones **Android (Edição Retrato)** e interface web de pré-visualização.
 
 - O KPlayer **não hospeda, não armazena, não retransmite e não comercializa** nenhum canal de TV, filme, série ou estação de rádio.
 - O aplicativo funciona exclusivamente como cliente reprodutor (*player*) de arquivos locais do usuário e endereços públicos informados ou consultados na internet.
@@ -23,8 +23,8 @@ Com total compromisso com a **transparência** perante o usuário:
 Todo usuário do KPlayer tem **total direito e liberdade** para adicionar, editar ou substituir as listas por **seus próprios links e arquivos pessoais**, sempre com transparência:
 
 - **IPTV do Usuário:**
-  - Digite ou cole qualquer link `.m3u` / `.m3u8` diretamente pelo **teclado virtual na tela** na aba **Usuário** do IPTV (salvo localmente em `ports/kplayer/iptv_usuario/playlists.txt`); ou
-  - Copie seus próprios arquivos `.m3u`, `.m3u8` ou `.txt` diretamente para a pasta `ports/kplayer/iptv_usuario/` no cartão SD.
+  - Digite ou cole qualquer link `.m3u` / `.m3u8` diretamente pelo **teclado virtual na tela** (R36S, salvo localmente em `ports/kplayer/iptv_usuario/playlists.txt`) ou pelo **teclado nativo / importação `.m3u`** no KPlayer Android; ou
+  - Copie seus próprios arquivos `.m3u`, `.m3u8` ou `.txt` diretamente para a pasta `ports/kplayer/iptv_usuario/` no cartão SD (R36S).
 - **Rádios do Usuário:**
   - Copie seus próprios arquivos `.pls`, `.m3u`, `.m3u8` ou `.asx` para a pasta `ports/kplayer/radios_usuario/`.
 
@@ -53,7 +53,7 @@ Antes de entrar nas funções de **IPTV** ou **Rádio Online**, o KPlayer exibe 
 
 ## 1. Nature of the Application
 
-**KPlayer v2.0.2** is strictly an **independent media player** (local music, local video, Online Radio, IPTV playlists, and Placar da Bola) built for the **R36S handheld console (dArkOS / PortMaster)** and web preview interface.
+**KPlayer v2.0.2** is strictly an **independent media player** (local music, local video, Online Radio, IPTV playlists, and Placar da Bola) built for the **R36S handheld console (Primary — dArkOS / PortMaster)**, **Android smartphones (Portrait Edition)**, and web preview interface.
 
 - KPlayer **does not host, store, rebroadcast, or sell** any TV channel, movie, series, or radio stream.
 - The software acts solely as a client media player for local files and publicly reachable stream URLs.
@@ -70,8 +70,8 @@ With complete **transparency** toward every user:
 Every KPlayer user has the **full right and freedom** to add, edit, or replace listings with **their own personal links and playlist files**:
 
 - **User IPTV:**
-  - Enter any `.m3u` / `.m3u8` URL using the **on-screen virtual keyboard** under the **User** tab (saved locally in `ports/kplayer/iptv_usuario/playlists.txt`); or
-  - Drop local `.m3u`, `.m3u8`, or `.txt` files into `ports/kplayer/iptv_usuario/`.
+  - Enter any `.m3u` / `.m3u8` URL using the **on-screen virtual keyboard** on R36S (saved locally in `ports/kplayer/iptv_usuario/playlists.txt`) or the **native keyboard / `.m3u` file import** on KPlayer Android; or
+  - Drop local `.m3u`, `.m3u8`, or `.txt` files into `ports/kplayer/iptv_usuario/` on R36S.
 - **User Radio:**
   - Drop local `.pls`, `.m3u`, `.m3u8`, or `.asx` files into `ports/kplayer/radios_usuario/`.
 
