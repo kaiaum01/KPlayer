@@ -41,8 +41,9 @@ import {
 import { R36SControls, type R36SButton } from './components/R36SControls';
 import { VideoScreen } from './components/VideoScreen';
 import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/PlacarDaBolaScreen';
+import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
-import portCoverImg from './assets/images/kplayer_port_cover_1795064951734.jpg';
+import portCoverImg from './assets/images/kplayer_port_cover_1795234394587.jpg';
 
 const RADIO_CATEGORIES = [
   'Brasil',
@@ -72,11 +73,6 @@ const OPTION_GROUPS = [
   { name: 'Biblioteca', items: ['favTrack', 'myFavs', 'resume', 'iptv', 'football'] as const },
   { name: 'Geral', items: ['language', 'theme', 'ipLocation', 'sleep', 'terms', 'exit'] as const },
 ];
-
-const IPTV_SOURCES = [
-  { id: 0 as const, key: 'canais' as const, label: 'Canais', url: 'https://canais-saimo.pages.dev/' },
-  { id: 1 as const, key: 'filmes' as const, label: 'Filmes e séries', url: 'https://filmes-saimo.pages.dev/' },
-] as const;
 
 function loadStorage<T>(key: string, fallback: T): T {
   try {
@@ -131,6 +127,15 @@ export default function App() {
   const [prevScreen, setPrevScreen] = useState<ScreenMode>('home');
   const [termsPage, setTermsPage] = useState(0);
   const [termsReturn, setTermsReturn] = useState<ScreenMode>('welcome');
+  const [streamNoticeAccepted, setStreamNoticeAccepted] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('kp_stream_notice_ok') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [pendingStreamTarget, setPendingStreamTarget] = useState<'radio' | 'iptv'>('iptv');
+  const [noticeReturn, setNoticeReturn] = useState<ScreenMode>('home');
   const [dashFocus, setDashFocus] = useState(0);
 
   // Boot splash animation & upfront preload state
@@ -150,7 +155,6 @@ export default function App() {
   });
   const [preloadedMatches, setPreloadedMatches] = useState<FootballMatch[]>([]);
   const radioCacheRef = useRef<Map<number, RadioStation[]>>(new Map());
-  const iptvCacheRef = useRef<Map<number, IptvChannel[]>>(new Map());
 
   // Header location & toast notification
   const [locationLabel, setLocationLabel] = useState('Mídias locais');
@@ -176,6 +180,7 @@ export default function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const placarRef = useRef<PlacarDaBolaHandle | null>(null);
+  const iptvRef = useRef<IptvScreenHandle | null>(null);
 
   const [activeTrack, setActiveTrack] = useState<MediaTrack | null>(() => tracks[0] ?? null);
   const [activeRadio, setActiveRadio] = useState<RadioStation | null>(null);
@@ -205,12 +210,6 @@ export default function App() {
   const [radioSelected, setRadioSelected] = useState(0);
   const [radioLoading, setRadioLoading] = useState(false);
   const [radioError, setRadioError] = useState<string | null>(null);
-
-  // IPTV State: 0 = Canais (canais-saimo.pages.dev), 1 = Filmes e séries (filmes-saimo.pages.dev)
-  const [iptvSource, setIptvSource] = useState<0 | 1>(0);
-  const [iptvChannels, setIptvChannels] = useState<IptvChannel[]>([]);
-  const [iptvSelected, setIptvSelected] = useState(0);
-  const [iptvLoading, setIptvLoading] = useState(false);
 
   // Options State
   const [optionGroupIdx, setOptionGroupIdx] = useState(0);
@@ -356,18 +355,16 @@ export default function App() {
         setBootProgress((p) => Math.max(p, 68));
       });
 
-      const iptvTask = fetch('/api/iptv?source=canais')
-        .then((r) => (r.ok ? r.json() : { channels: [] }))
-        .then((d: { channels?: IptvChannel[] }) => d.channels ?? [])
-        .catch(() => [] as IptvChannel[])
-        .then((channels) => {
+      const iptvTask = fetch('/api/iptv/categories?source=canais')
+        .then((r) => (r.ok ? r.json() : { totalCount: 0 }))
+        .then((d: { totalCount?: number }) => Number(d.totalCount ?? 0))
+        .catch(() => 0)
+        .then((count) => {
           if (cancelled) return;
-          iptvCacheRef.current.set(0, channels);
-          setIptvChannels(channels);
           setBootStatus((prev) => ({
             ...prev,
             iptvReady: true,
-            iptvCount: channels.length,
+            iptvCount: count,
           }));
           setBootProgress((p) => Math.max(p, 82));
         });
@@ -688,55 +685,19 @@ export default function App() {
     }
   }, [screen, radioCategory, loadRadioCategory]);
 
-  // Fetch IPTV channels or Filmes e séries (instant when cached)
-  const loadIptv = useCallback(
-    async (src: 0 | 1, force = false) => {
-      setIptvSelected(0);
-      const cached = iptvCacheRef.current.get(src);
-      if (!force && cached && cached.length > 0) {
-        setIptvChannels(cached);
-        setIptvLoading(false);
-        return;
-      }
-      setIptvLoading(true);
-      try {
-        const key = src === 1 ? 'filmes' : 'canais';
-        const r = await fetch(`/api/iptv?source=${key}${force ? '&refresh=1' : ''}`);
-        const d = (await r.json()) as { channels?: IptvChannel[] };
-        const list = d.channels ?? [];
-        if (list.length > 0) iptvCacheRef.current.set(src, list);
-        setIptvChannels(list);
-      } catch {
-        setIptvChannels([]);
-      } finally {
-        setIptvLoading(false);
-      }
-    },
-    []
-  );
-
-  const playIptvItem = useCallback(
-    (ch: IptvChannel) => {
-      audioRef.current?.pause();
-      setActiveRadio(null);
-      setActiveVideoTitle(ch.name);
-      setActiveVideoSrc(ch.url);
-      setActiveVideoFallbacks(ch.fallbackUrls ?? []);
-      setActiveVideoLive(ch.mediaType ? ch.mediaType === 'live' : iptvSource === 0);
-      setActiveVideoSection(tr(IPTV_SOURCES[iptvSource].label, language));
-      setIsPaused(false);
-      setShowVideoOsd(true);
-      setPrevScreen('iptv');
-      setScreen('video');
-    },
-    [iptvSource, language]
-  );
-
-  useEffect(() => {
-    if (screen === 'iptv') {
-      loadIptv(iptvSource, false);
-    }
-  }, [screen, iptvSource, loadIptv]);
+  const playIptvItem = useCallback((ch: IptvChannel, sectionLabel: string) => {
+    audioRef.current?.pause();
+    setActiveRadio(null);
+    setActiveVideoTitle(ch.name);
+    setActiveVideoSrc(ch.url);
+    setActiveVideoFallbacks(ch.fallbackUrls ?? []);
+    setActiveVideoLive(ch.mediaType ? ch.mediaType === 'live' : true);
+    setActiveVideoSection(sectionLabel);
+    setIsPaused(false);
+    setShowVideoOsd(true);
+    setPrevScreen('iptv');
+    setScreen('video');
+  }, []);
 
   // Handle local media / LRC upload
   const handleFilesSelected = useCallback(
@@ -841,6 +802,29 @@ export default function App() {
     notify(tr('Favorita atualizada', language));
   }, [activeTrack, language, notify]);
 
+  const openStreamingScreen = useCallback(
+    (target: 'radio' | 'iptv', from: ScreenMode = 'home') => {
+      if (streamNoticeAccepted) {
+        setScreen(target);
+        return;
+      }
+      setPendingStreamTarget(target);
+      setNoticeReturn(from);
+      setScreen('notice');
+    },
+    [streamNoticeAccepted]
+  );
+
+  const acceptStreamNotice = useCallback(() => {
+    setStreamNoticeAccepted(true);
+    try {
+      sessionStorage.setItem('kp_stream_notice_ok', '1');
+    } catch {
+      // ignore storage failure
+    }
+    setScreen(pendingStreamTarget);
+  }, [pendingStreamTarget]);
+
   // Open dashboard card
   const openDashboardCard = useCallback(
     (idx: number) => {
@@ -861,15 +845,14 @@ export default function App() {
         setLibLocationSelected(0);
         setScreen('library');
       } else if (idx === 3) {
-        setScreen('radio');
+        openStreamingScreen('radio', 'home');
       } else if (idx === 4) {
-        setIptvSource(0);
-        setScreen('iptv');
+        openStreamingScreen('iptv', 'home');
       } else if (idx === 5) {
         setScreen('football');
       }
     },
-    [activeTrack, audioTracks]
+    [activeTrack, audioTracks, openStreamingScreen]
   );
 
   // Settings action handler
@@ -913,8 +896,7 @@ export default function App() {
           }
           break;
         case 'iptv':
-          setIptvSource(0);
-          setScreen('iptv');
+          openStreamingScreen('iptv', 'options');
           break;
         case 'football':
           setScreen('football');
@@ -968,7 +950,7 @@ export default function App() {
       if (btn === 'SELECT') {
         if (screen === 'options') {
           setScreen(prevScreen);
-        } else if (screen !== 'welcome' && screen !== 'terms') {
+        } else if (screen !== 'welcome' && screen !== 'terms' && screen !== 'notice') {
           setPrevScreen(screen);
           setScreen('options');
         }
@@ -1001,6 +983,17 @@ export default function App() {
         return;
       }
 
+      if (screen === 'notice') {
+        if (btn === 'B') acceptStreamNotice();
+        else if (btn === 'A') setScreen(noticeReturn);
+        else if (btn === 'Y') {
+          setTermsReturn('notice');
+          setTermsPage(1);
+          setScreen('terms');
+        }
+        return;
+      }
+
       if (btn === 'L1') {
         stepTrack(-1);
         return;
@@ -1011,8 +1004,9 @@ export default function App() {
       }
 
       if (screen === 'terms') {
-        if (btn === 'LEFT') setTermsPage((p) => (p + 2) % 3);
-        else if (btn === 'RIGHT') setTermsPage((p) => (p + 1) % 3);
+        const total = TERMS_PAGES.length;
+        if (btn === 'LEFT') setTermsPage((p) => (p + total - 1) % total);
+        else if (btn === 'RIGHT') setTermsPage((p) => (p + 1) % total);
         else if (btn === 'A' || btn === 'B') setScreen(termsReturn);
         return;
       }
@@ -1022,8 +1016,10 @@ export default function App() {
         else if (btn === 'RIGHT') setDashFocus((f) => (f % 3 === 2 ? f - 2 : f + 1));
         else if (btn === 'UP' || btn === 'DOWN') setDashFocus((f) => (f + 3) % 6);
         else if (btn === 'B') openDashboardCard(dashFocus);
-        else if (btn === 'X') setScreen(activeRadio ? 'radio' : 'music');
-        else if (btn === 'Y') {
+        else if (btn === 'X') {
+          if (activeRadio) openStreamingScreen('radio', 'home');
+          else setScreen('music');
+        } else if (btn === 'Y') {
           setPrevScreen('home');
           setScreen('options');
         }
@@ -1144,18 +1140,7 @@ export default function App() {
       }
 
       if (screen === 'iptv') {
-        const len = iptvChannels.length;
-        if (btn === 'A') setScreen('home');
-        else if (btn === 'UP' && len) setIptvSelected((i) => (i + len - 1) % len);
-        else if (btn === 'DOWN' && len) setIptvSelected((i) => (i + 1) % len);
-        else if (btn === 'X' || btn === 'LEFT' || btn === 'RIGHT') {
-          setIptvSource((s) => (s === 0 ? 1 : 0));
-        } else if (btn === 'Y') {
-          loadIptv(iptvSource, true);
-        } else if (btn === 'B' && len) {
-          const ch = iptvChannels[iptvSelected];
-          if (ch) playIptvItem(ch);
-        }
+        iptvRef.current?.handleButton(btn);
         return;
       }
 
@@ -1212,14 +1197,12 @@ export default function App() {
       radioCategory,
       fetchUserRadios,
       loadRadioCategory,
-      iptvChannels,
-      iptvSelected,
-      iptvSource,
-      loadIptv,
-      playIptvItem,
       optionGroupIdx,
       optionRowIdx,
       activateOption,
+      acceptStreamNotice,
+      noticeReturn,
+      openStreamingScreen,
       notify,
     ]
   );
@@ -1348,7 +1331,6 @@ export default function App() {
 
   const selectedRadio = radioStations[radioSelected];
   const radioWindowStart = Math.max(0, Math.min(radioSelected - 2, Math.max(0, radioStations.length - 5)));
-  const iptvWindowStart = Math.max(0, Math.min(iptvSelected - 3, Math.max(0, iptvChannels.length - 6)));
   const libWindowStart = Math.max(0, Math.min(libSelected - 3, Math.max(0, filteredLibrary.length - 6)));
 
   return (
@@ -1395,7 +1377,7 @@ export default function App() {
             className="w-2 h-2 rounded-full"
             style={{ backgroundColor: theme.accent, boxShadow: `0 0 8px ${rgbToRgba(theme.accent, 0.7)}` }}
           />
-          <span className="font-semibold text-zinc-100">KPlayer 2.0.0</span>
+          <span className="font-semibold text-zinc-100">KPlayer 2.0.2</span>
           <span className="text-zinc-500">R36S • Visual Moderno • 640×480</span>
         </div>
         <div className="flex items-center gap-2">
@@ -1477,14 +1459,14 @@ export default function App() {
               />
             )}
 
-            {/* ==================== WELCOME / ONBOARDING (ANIMATED BOOT STYLE v2.0.0) ==================== */}
+            {/* ==================== WELCOME / ONBOARDING (ANIMATED BOOT STYLE v2.0.2) ==================== */}
             {screen === 'welcome' && (
-              <div className="w-full h-full relative overflow-hidden flex flex-col items-center">
+              <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center">
                 <ModernBackdrop theme={theme} />
 
                 {/* Ambient central aura matching Boot Splash */}
                 <div
-                  className="pointer-events-none absolute left-1/2 top-[110px] -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px] rounded-full blur-3xl opacity-30 transition-colors duration-500"
+                  className="pointer-events-none absolute left-1/2 top-[128px] -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px] rounded-full blur-3xl opacity-30 transition-colors duration-500"
                   style={{ backgroundColor: theme.accent }}
                 />
 
@@ -1510,16 +1492,8 @@ export default function App() {
                 </button>
 
                 {/* Animated Boot-style Centerpiece (Sonar rings + Orbiting sparks + Spinning Vinyl) */}
-                <div className="relative z-10 flex flex-col items-center pt-[26px] w-full">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOnboarded(true);
-                      setScreen('home');
-                    }}
-                    title={tr('Toque ou pressione B para continuar', language)}
-                    className="relative w-[112px] h-[112px] flex items-center justify-center kp-boot-float cursor-pointer"
-                  >
+                <div className="relative z-10 flex flex-col items-center justify-center w-full px-4">
+                  <div className="relative w-[108px] h-[108px] flex items-center justify-center kp-boot-float">
                     {[0, 0.7, 1.4].map((delay, i) => (
                       <span
                         key={i}
@@ -1552,11 +1526,11 @@ export default function App() {
                         boxShadow: `0 0 32px ${rgbToRgba(theme.accent, 0.42)}`,
                       }}
                     >
-                      <VinylArt theme={theme} size={78} spinning={true} />
+                      <VinylArt theme={theme} size={76} spinning={true} />
                     </div>
-                  </button>
+                  </div>
 
-                  {/* Brand wordmark + v2.0.0 pill + live equalizer */}
+                  {/* Brand wordmark + v2.0.2 pill + live equalizer */}
                   <div
                     className="mt-2 flex flex-col items-center kp-boot-rise"
                     style={{ animationDelay: '70ms' }}
@@ -1579,7 +1553,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.0 • R36S
+                      v2.0.2 • R36S
                     </div>
                   </div>
 
@@ -1724,7 +1698,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Minimal borderless pulsing continue hint (no B button box, no bottom bar) */}
+                  {/* Minimal borderless pulsing continue hint (R36S physical button only — no touch) */}
                   <button
                     type="button"
                     onClick={() => {
@@ -1732,9 +1706,9 @@ export default function App() {
                       setScreen('home');
                     }}
                     style={{ color: theme.muted }}
-                    className="mt-5 text-[11.5px] font-medium tracking-wide cursor-pointer hover:brightness-125 animate-pulse transition-colors"
+                    className="mt-4 text-[11.5px] font-medium tracking-wide cursor-pointer hover:brightness-125 animate-pulse transition-colors"
                   >
-                    {tr('Toque ou pressione B para continuar', language)}
+                    {tr('Pressione B para continuar', language)}
                   </button>
                 </div>
               </div>
@@ -1761,25 +1735,27 @@ export default function App() {
                       <div style={{ color: theme.accent }} className="text-[19px] font-bold mb-3">
                         {tr(TERMS_PAGES[termsPage].title, language)}
                       </div>
-                      <p style={{ color: theme.text }} className="text-[15px] leading-[1.6]">
-                        {TERMS_PAGES[termsPage].body[language]}
+                      <p style={{ color: theme.text }} className="text-[13.5px] leading-[1.55]">
+                        {TERMS_PAGES[termsPage]?.body[language]}
                       </p>
                     </div>
                     <div className="flex items-center justify-between pt-2">
                       <button
                         type="button"
-                        onClick={() => setTermsPage((p) => (p + 2) % 3)}
+                        onClick={() =>
+                          setTermsPage((p) => (p + TERMS_PAGES.length - 1) % TERMS_PAGES.length)
+                        }
                         style={{ backgroundColor: theme.elevated, color: theme.text }}
                         className="px-3 py-1 rounded-full text-xs cursor-pointer hover:brightness-110"
                       >
                         ◀
                       </button>
                       <span style={{ color: theme.muted }} className="text-[12px] font-semibold">
-                        {termsPage + 1} / 3
+                        {termsPage + 1} / {TERMS_PAGES.length}
                       </span>
                       <button
                         type="button"
-                        onClick={() => setTermsPage((p) => (p + 1) % 3)}
+                        onClick={() => setTermsPage((p) => (p + 1) % TERMS_PAGES.length)}
                         style={{ backgroundColor: theme.elevated, color: theme.text }}
                         className="px-3 py-1 rounded-full text-xs cursor-pointer hover:brightness-110"
                       >
@@ -1795,7 +1771,124 @@ export default function App() {
                   toast={toast}
                   hints={[
                     { key: 'A', label: tr('Voltar', language) },
-                    { key: 'DIR', label: '1 / 3' },
+                    { key: 'DIR', label: `${termsPage + 1} / ${TERMS_PAGES.length}` },
+                  ]}
+                />
+              </div>
+            )}
+
+            {/* ==================== TRANSPARENCY NOTICE BEFORE IPTV / RADIO ==================== */}
+            {screen === 'notice' && (
+              <div className="w-full h-full relative overflow-hidden">
+                <ModernBackdrop theme={theme} />
+                <HeaderBar
+                  theme={theme}
+                  section={tr('TRANSPARÊNCIA', language)}
+                  location={locationLabel}
+                />
+                <div className="relative z-10 px-6 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h2 style={{ color: theme.text }} className="text-[22px] font-extrabold leading-tight">
+                        {tr('Aviso de Transparência', language)}
+                      </h2>
+                      <div style={{ color: theme.muted }} className="text-[11.5px] mt-0.5">
+                        {tr('Antes de acessar Rádio Online ou IPTV', language)}
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        backgroundColor: mixRgb(theme.elevated, theme.accent, 0.2),
+                        color: theme.accent,
+                        border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
+                      }}
+                      className="px-2.5 py-1 rounded-full text-[10.5px] font-bold uppercase tracking-wider shrink-0"
+                    >
+                      {pendingStreamTarget === 'iptv' ? 'IPTV' : tr('Rádio Online', language)}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{ ...modernPanelStyle(theme, 14), height: 266 }}
+                    className="mt-2.5 p-4 flex flex-col justify-between gap-2.5"
+                  >
+                    <div className="space-y-2.5">
+                      <div>
+                        <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
+                          1. {tr('Fontes abertas e agregadores públicos', language)}
+                        </div>
+                        <p style={{ color: theme.text }} className="text-[12px] leading-[1.48] mt-0.5">
+                          {tr(
+                            'Todos os dados de IPTV e Rádio são obtidos de agregadores públicos da internet e fontes abertas (como Radio-Browser e catálogos web públicos). O KPlayer é apenas um reprodutor e não hospeda nem transmite conteúdo próprio.',
+                            language
+                          )}
+                        </p>
+                      </div>
+
+                      <div
+                        style={{ borderTop: `1px solid ${rgbToRgba(theme.text, 0.08)}` }}
+                        className="pt-2"
+                      >
+                        <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
+                          2. {tr('Você tem direito de colocar seu próprio link', language)}
+                        </div>
+                        <p style={{ color: theme.text }} className="text-[12px] leading-[1.48] mt-0.5">
+                          {tr(
+                            'Com total transparência, você pode inserir seus próprios links e listas .m3u/.m3u8 (pelo teclado virtual ou na pasta iptv_usuario/) e rádios .pls/.m3u (em radios_usuario/) a qualquer momento.',
+                            language
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={acceptStreamNotice}
+                        style={{ backgroundColor: theme.accent, color: theme.bg }}
+                        className="flex-1 py-2 px-3 rounded-xl text-[12px] font-extrabold cursor-pointer hover:brightness-110 transition-all"
+                      >
+                        B • {tr('Concordo e continuar', language)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTermsReturn('notice');
+                          setTermsPage(1);
+                          setScreen('terms');
+                        }}
+                        style={{
+                          backgroundColor: theme.elevated,
+                          color: theme.text,
+                          border: `1px solid ${rgbToRgba(theme.text, 0.12)}`,
+                        }}
+                        className="py-2 px-3 rounded-xl text-[11.5px] font-bold cursor-pointer hover:brightness-110 transition-all"
+                      >
+                        Y • {tr('Ler termos completos', language)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScreen(noticeReturn)}
+                        style={{
+                          backgroundColor: theme.elevated,
+                          color: theme.muted,
+                        }}
+                        className="py-2 px-3 rounded-xl text-[11.5px] font-bold cursor-pointer hover:brightness-110 transition-all"
+                      >
+                        A • {tr('Voltar', language)}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <FooterBar
+                  theme={theme}
+                  themeIndex={themeIndex}
+                  toast={toast}
+                  hints={[
+                    { key: 'B', label: tr('Concordo e continuar', language) },
+                    { key: 'Y', label: tr('Termos de uso', language) },
+                    { key: 'A', label: tr('Voltar', language) },
                   ]}
                 />
               </div>
@@ -2889,188 +2982,20 @@ export default function App() {
               );
             })()}
 
-            {/* ==================== IPTV (CANAIS & FILMES E SÉRIES) ==================== */}
-            {screen === 'iptv' && (() => {
-              const activeSource = IPTV_SOURCES[iptvSource];
-              const selectedItem = iptvChannels[iptvSelected];
-              const isVodCatalog = iptvSource === 1;
-              return (
-                <div className="w-full h-full relative overflow-hidden">
-                  <ModernBackdrop theme={theme} />
-                  <HeaderBar theme={theme} section={tr('IPTV', language)} location={locationLabel} />
-
-                  <div className="relative z-10 px-6 pt-2.5 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 style={{ color: theme.text }} className="text-[20px] font-extrabold leading-tight">
-                        {tr(activeSource.label, language)}
-                      </h2>
-                      <div
-                        style={{ color: theme.muted }}
-                        className="text-[10.5px] font-mono truncate mt-0.5"
-                      >
-                        {activeSource.url}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                      {IPTV_SOURCES.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => setIptvSource(s.id)}
-                          style={modernPillStyle(theme, iptvSource === s.id)}
-                          className="px-3.5 py-1 text-[11px] font-bold cursor-pointer transition-all"
-                        >
-                          {tr(s.label, language)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {iptvLoading ? (
-                    <div
-                      style={{ color: theme.accent }}
-                      className="relative z-10 h-[310px] flex flex-col items-center justify-center gap-2 text-[15px] font-semibold"
-                    >
-                      <span>{tr('Carregando lista...', language)}</span>
-                      <span style={{ color: theme.muted }} className="text-[11px] font-mono">
-                        {activeSource.url}
-                      </span>
-                    </div>
-                  ) : iptvChannels.length === 0 ? (
-                    <div className="relative z-10 h-[310px] flex flex-col items-center justify-center text-center px-8">
-                      <div style={{ color: theme.muted }} className="text-[17px] font-semibold">
-                        {tr('Nenhum item encontrado', language)}
-                      </div>
-                      <div style={{ color: theme.muted }} className="text-[12px] mt-2">
-                        {tr('Pressione Y para atualizar', language)}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="relative z-10 px-6 mt-2 flex gap-3.5">
-                      {/* Left Channel / Poster Info Card (w=200, h=308) */}
-                      <div
-                        style={{ ...modernPanelStyle(theme, 14), width: 200, height: 308 }}
-                        className="p-3 flex flex-col shrink-0"
-                      >
-                        <div
-                          style={{ backgroundColor: theme.elevated }}
-                          className="w-full h-[132px] rounded-[10px] flex items-center justify-center overflow-hidden p-1.5"
-                        >
-                          {selectedItem?.logo ? (
-                            <img
-                              src={selectedItem.logo}
-                              alt=""
-                              referrerPolicy="no-referrer"
-                              className={`max-w-full max-h-full ${isVodCatalog ? 'w-full h-full object-cover rounded-[8px]' : 'object-contain'}`}
-                            />
-                          ) : (
-                            <KpCardIcon kind="iptv" color={theme.accent} bg={theme.elevated} size={42} />
-                          )}
-                        </div>
-                        <div
-                          style={{ color: theme.text }}
-                          className="mt-2.5 text-[14px] font-bold text-center line-clamp-2 leading-tight min-h-[34px]"
-                        >
-                          {selectedItem?.name}
-                        </div>
-                        <div style={{ color: theme.muted }} className="mt-2 text-[10px] uppercase tracking-wider">
-                          {tr('Categoria', language)}
-                        </div>
-                        <div style={{ color: theme.text }} className="text-[12px] font-medium truncate">
-                          {selectedItem?.group || '--'}
-                        </div>
-                        <div style={{ color: theme.muted }} className="mt-2 text-[10px] uppercase tracking-wider">
-                          {tr('Detalhes', language)}
-                        </div>
-                        <div style={{ color: theme.accent }} className="text-[11.5px] font-semibold truncate">
-                          {selectedItem?.id || '--'}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => selectedItem && playIptvItem(selectedItem)}
-                          style={{ backgroundColor: theme.accent, color: theme.bg }}
-                          className="mt-auto w-full h-[26px] rounded-full text-[11px] font-extrabold cursor-pointer hover:brightness-110 transition-all"
-                        >
-                          B  {tr('Assistir', language)}
-                        </button>
-                      </div>
-
-                      {/* Right Channel / Catalog List (6 visible rows) */}
-                      <div className="flex-1 flex flex-col min-w-0">
-                        <div className="space-y-1.5 flex-1">
-                          {iptvChannels.slice(iptvWindowStart, iptvWindowStart + 6).map((ch, idx) => {
-                            const realIdx = iptvWindowStart + idx;
-                            const focus = realIdx === iptvSelected;
-                            return (
-                              <button
-                                key={ch.url + realIdx}
-                                type="button"
-                                onMouseEnter={() => setIptvSelected(realIdx)}
-                                onClick={() => playIptvItem(ch)}
-                                style={{
-                                  ...modernCardStyle(theme, focus, 9, theme.panel),
-                                  height: 45,
-                                }}
-                                className="w-full px-3 flex items-center justify-between gap-2 text-left cursor-pointer transition-all"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <span
-                                    style={{ color: focus ? theme.accent : theme.muted }}
-                                    className="text-[11.5px] font-bold w-6 shrink-0 tabular-nums"
-                                  >
-                                    {realIdx + 1}
-                                  </span>
-                                  <div className="min-w-0">
-                                    <div style={{ color: theme.text }} className="text-[13.5px] font-semibold truncate leading-tight">
-                                      {ch.name}
-                                    </div>
-                                    <div style={{ color: theme.muted }} className="text-[10px] truncate leading-tight mt-0.5">
-                                      {ch.group || activeSource.label}
-                                    </div>
-                                  </div>
-                                </div>
-                                <span
-                                  style={{
-                                    backgroundColor: focus ? rgbToRgba(theme.accent, 0.2) : theme.elevated,
-                                    color: focus ? theme.accent : theme.muted,
-                                  }}
-                                  className="px-2 py-0.5 rounded-full text-[9.5px] font-bold uppercase shrink-0"
-                                >
-                                  {ch.mediaType === 'series'
-                                    ? 'SÉRIE'
-                                    : ch.mediaType === 'movie'
-                                    ? 'FILME'
-                                    : tr('AO VIVO', language)}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div
-                          style={{ color: theme.dim }}
-                          className="text-[10.5px] text-right mt-1 tabular-nums"
-                        >
-                          {iptvSelected + 1} / {iptvChannels.length}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <FooterBar
-                    theme={theme}
-                    themeIndex={themeIndex}
-                    toast={toast}
-                    hints={[
-                      { key: 'DIR', label: tr('Navegar', language) },
-                      { key: 'B', label: tr('Assistir', language) },
-                      { key: 'X', label: tr('Alternar', language) },
-                      { key: 'Y', label: tr('Atualizar', language) },
-                      { key: 'A', label: tr('Voltar', language) },
-                    ]}
-                  />
-                </div>
-              );
-            })()}
+            {/* ==================== IPTV (CANAIS, FILMES, SÉRIES & USUÁRIO) ==================== */}
+            {screen === 'iptv' && (
+              <IptvScreen
+                ref={iptvRef}
+                theme={theme}
+                themeIndex={themeIndex}
+                language={language}
+                locationLabel={locationLabel}
+                toast={toast}
+                notify={notify}
+                onBackHome={() => setScreen('home')}
+                onPlayItem={playIptvItem}
+              />
+            )}
 
             {/* ==================== PLACAR DA BOLA (SOFASCORE STYLE) ==================== */}
             {screen === 'football' && (
@@ -3198,7 +3123,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.0 — Visual Moderno
+                  KPlayer v2.0.2 — Visual Moderno
                 </h2>
               </div>
               <button
@@ -3214,7 +3139,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
                   src={portCoverImg}
-                  alt="Capa do Port KPlayer v2.0.0 para R36S dArkOS"
+                  alt="Capa do Port KPlayer v2.0.2 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -3223,7 +3148,7 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.0-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.2-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -3256,7 +3181,7 @@ export default function App() {
             <div className="mt-4 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.0-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.2-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code>,{' '}
                   <code className="text-zinc-100">kplayer/</code>,{' '}
@@ -3273,22 +3198,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 v2.0.0, capa 640×480 e XML dArkOS, tela de boas-vindas animada com seletor de temas, libVLC ARM64, <strong>Placar da Bola</strong>, IPTV e rádios <code className="text-zinc-300">.pls</code>.
+                Inclui binário ARM64 v2.0.2, capa 640×480 e XML dArkOS, tela de boas-vindas animada com seletor de temas, libVLC ARM64, <strong>Placar da Bola</strong>, IPTV categorizado (245 canais + filmes/séries + IPTV do Usuário) e rádios <code className="text-zinc-300">.pls</code>.
               </p>
             </div>
 
             <div className="mt-5 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.0-R36S.zip"
+                download="KPlayer-v2.0.2-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.0-R36S.zip
+                ⬇ Baixar KPlayer-v2.0.2-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.0-R36S.zip.sha256"
+                download="KPlayer-v2.0.2-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

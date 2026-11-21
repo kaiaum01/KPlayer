@@ -4,6 +4,7 @@ export type ScreenMode =
   | 'boot'
   | 'welcome'
   | 'terms'
+  | 'notice'
   | 'home'
   | 'library'
   | 'music'
@@ -51,14 +52,35 @@ export interface RadioStation {
   isUser?: boolean;
 }
 
+export type IptvSourceKey = 'canais' | 'filmes' | 'series' | 'usuario';
+
+export interface IptvCategory {
+  id: string;
+  name: string;
+  count: number;
+  section: string;
+}
+
+export interface UserPlaylistSource {
+  kind: 'url' | 'file';
+  name: string;
+  target: string;
+}
+
 export interface IptvChannel {
   name: string;
   url: string;
   fallbackUrls?: string[];
-  mediaType?: 'live' | 'movie' | 'series';
+  mediaType?: 'live' | 'movie' | 'series' | 'series-show';
   logo: string;
   group: string;
   id: string;
+  letter?: string;
+  shard?: string;
+  year?: string;
+  episodeCount?: number;
+  season?: number;
+  episode?: number;
 }
 
 export interface FootballMatch {

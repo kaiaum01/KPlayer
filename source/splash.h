@@ -193,6 +193,7 @@ static void run_boot_splash(void) {
   network_location_start();
   mkdir(root, 0755);
   mkdir("radios_usuario", 0755);
+  mkdir("iptv_usuario", 0755);
   snprintf(folder, sizeof(folder), "%s", root);
   refresh_locations();
   boot_animate_to(0.26f, "Iniciando K PLAYER", 0, 420);
@@ -208,7 +209,7 @@ static void run_boot_splash(void) {
   radio_refresh();
   iptv_source = 0;
   iptv_reload();
-  iptv_fetch_start();
+  iptv_fetch_categories_start(false);
   football_read();
   football_refresh();
   boot_animate_to(0.92f, "Preparando rádios, IPTV e Placar da Bola", cached_media_total, 580);

@@ -144,7 +144,7 @@ export const BootSplashScreen: React.FC<BootSplashScreenProps> = ({
             }}
             className="mt-2 px-3 py-0.5 rounded-full text-[10.5px] font-extrabold tracking-wider"
           >
-            v2.0.0 • R36S
+            v2.0.2 • R36S
           </div>
 
           <p style={{ color: theme.muted }} className="mt-1.5 text-[12px] font-medium">

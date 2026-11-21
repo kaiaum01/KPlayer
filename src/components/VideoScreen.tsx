@@ -111,6 +111,7 @@ export function VideoScreen({
     const isHls =
       lower.includes('.m3u8') ||
       lower.includes('master.txt') ||
+      lower.includes('error.txt') ||
       lower.includes('playlist.m3u') ||
       lower.includes('/hls/');
     const streamSrc =

@@ -19,7 +19,7 @@ static void draw_welcome(void) {
   centered(tr("Y  Termos de uso"), 460, 19, 160, 11, muted);
 
   /* Animated Boot-style centerpiece: sonar rings + halo + spinning vinyl + orbiting sparks */
-  int cx = W / 2, cy = 86 + slide_y / 2;
+  int cx = W / 2, cy = 90 + slide_y / 2;
   for (int k = 0; k < 3; k++) {
     float phase = fmodf(elapsed_s * 0.55f + (float)k * 0.333f, 1.0f);
     int r = 44 + (int)(phase * 58.0f);
@@ -41,51 +41,51 @@ static void draw_welcome(void) {
     fill_circle(ox, oy, dot_r, mix(accent, textc, 0.35f));
   }
 
-  /* Brand wordmark + v2.0.0 badge + live equalizer (same look as Boot screen) */
-  centered("K PLAYER", 20, 144 + slide_y, 600, 28, alpha(textc, (int)(255 * ease)));
+  /* Brand wordmark + version badge + live equalizer (same look as Boot screen) */
+  centered("K PLAYER", 20, 148 + slide_y, 600, 28, alpha(textc, (int)(255 * ease)));
   char ver_text[36];
   snprintf(ver_text, sizeof(ver_text), "v%s  •  R36S", KPLAYER_VERSION);
   int vw = (int)measure(ver_text, 10) + 22;
   int vx = (W - vw) / 2;
-  rounded(vx, 179 + slide_y, vw, 19, 9, mix(elevated, accent, 0.16f));
-  centered(ver_text, vx, 183 + slide_y, vw, 10, accent);
+  rounded(vx, 183 + slide_y, vw, 19, 9, mix(elevated, accent, 0.16f));
+  centered(ver_text, vx, 187 + slide_y, vw, 10, accent);
 
-  visualizer(210, 208 + slide_y / 2, 220, 14, 24, true);
+  visualizer(210, 212 + slide_y / 2, 220, 14, 24, true);
 
   /* Row 0: Slim unified segmented Language capsule */
-  centered(tr("Idioma"), 20, 236, 600, 11, welcome_focus == 0 ? accent : muted);
+  centered(tr("Idioma"), 20, 240, 600, 11, welcome_focus == 0 ? accent : muted);
   if (welcome_focus == 0) {
-    glow_rect(96, 254, 448, 38, 19, accent, 3);
-    rounded(96, 254, 448, 38, 19, alpha(accent, 140));
-    rounded(97, 255, 446, 36, 18, panel);
+    glow_rect(96, 258, 448, 38, 19, accent, 3);
+    rounded(96, 258, 448, 38, 19, alpha(accent, 140));
+    rounded(97, 259, 446, 36, 18, panel);
   } else {
-    panel_card(96, 254, 448, 38, 19);
+    panel_card(96, 258, 448, 38, 19);
   }
   for (int i = 0; i < 3; i++) {
     int sx = 100 + i * 148;
     bool chosen = i == language;
     if (chosen) {
-      glow_rect(sx, 258, 144, 30, 15, accent, 2);
-      rounded(sx, 258, 144, 30, 15, accent);
+      glow_rect(sx, 262, 144, 30, 15, accent, 2);
+      rounded(sx, 262, 144, 30, 15, accent);
     }
-    centered(language_names[i], sx + 4, 266, 136, 13, chosen ? bg : muted);
+    centered(language_names[i], sx + 4, 270, 136, 13, chosen ? bg : muted);
   }
 
   /* Row 1: Slim Theme color selector dots ("bolinhas") */
   char theme_hdr[96];
   snprintf(theme_hdr, sizeof(theme_hdr), "%s  •  %s", tr("Tema"),
            tr(themes[theme_index].name));
-  centered(theme_hdr, 20, 310, 600, 11, welcome_focus == 1 ? accent : muted);
+  centered(theme_hdr, 20, 314, 600, 11, welcome_focus == 1 ? accent : muted);
   if (welcome_focus == 1) {
-    glow_rect(146, 328, 348, 46, 23, accent, 3);
-    rounded(146, 328, 348, 46, 23, alpha(accent, 140));
-    rounded(147, 329, 346, 44, 22, panel);
+    glow_rect(146, 332, 348, 46, 23, accent, 3);
+    rounded(146, 332, 348, 46, 23, alpha(accent, 140));
+    rounded(147, 333, 346, 44, 22, panel);
   } else {
-    panel_card(146, 328, 348, 46, 23);
+    panel_card(146, 332, 348, 46, 23);
   }
   for (int i = 0; i < THEME_COUNT; i++) {
     int dcx = 179 + i * 47;
-    int dcy = 351;
+    int dcy = 355;
     bool chosen = i == theme_index;
     bool is_light = (i == 2 || i == 3);
     SDL_Color outer = is_light ? themes[i].background : themes[i].highlight;
@@ -99,44 +99,93 @@ static void draw_welcome(void) {
       fill_circle(dcx, dcy, 4, inner);
   }
 
-  /* Minimal borderless pulsing prompt (no B button box, no bottom bar) */
+  /* Minimal borderless pulsing prompt (R36S physical button only — no touch) */
   int hint_a = (int)(120.0f + 95.0f * (0.5f + 0.5f * sinf(elapsed_s * 2.6f)));
-  centered(tr("Pressione B para continuar"), 20, 416, 600, 12,
+  centered(tr("Pressione B para continuar"), 20, 418, 600, 12,
            alpha(muted, hint_a));
 }
-static const char *terms_titles[] = {
-    "Sobre o aplicativo", "Seus arquivos e preferências", "Licenças e avisos"};
-static const char *terms_text[] = {
-    "K PLAYER é um reprodutor independente para suas músicas e vídeos. Não "
-    "inclui conteúdo de terceiros. Use mídias que você tenha direito de "
-    "acessar. A compatibilidade e o desempenho dependem do arquivo, dos codecs "
-    "e do aparelho.",
-    "O explorador permite ler mídias nas pastas acessíveis do aparelho. "
-    "Idioma, opções e favoritos são salvos na pasta do K PLAYER. Preserve seus "
-    "arquivos e configurações ao atualizar. Você pode mudar o idioma e "
-    "consultar estes avisos em Opções.",
+#define TERMS_COUNT 4
+static bool stream_notice_accepted = false;
+static int stream_notice_target = 8; /* 7 = radio, 8 = iptv */
+static int stream_notice_return = 3;
+static const char *terms_titles[TERMS_COUNT] = {
+    "Sobre o aplicativo",
+    "Transparência: IPTV e Rádio",
+    "Seus arquivos e preferências",
+    "Licenças e avisos"};
+static const char *terms_text[TERMS_COUNT] = {
+    "K PLAYER é um reprodutor independente para suas músicas, vídeos, rádios e "
+    "listas IPTV. O aplicativo não hospeda, armazena nem distribui conteúdo "
+    "próprio. Use mídias que você tenha direito de acessar. A compatibilidade "
+    "e o desempenho dependem do arquivo, dos codecs e do aparelho.",
+    "Todos os dados de IPTV e Rádio são retirados de agregadores públicos da "
+    "internet ou de fontes abertas (como Radio-Browser e catálogos web "
+    "públicos). Você tem total direito de colocar seu próprio link ou arquivo "
+    "(.m3u/.m3u8 pelo teclado na tela ou em iptv_usuario/, e .pls/.m3u em "
+    "radios_usuario/), sempre com transparência.",
+    "O explorador lê apenas as pastas dedicadas (/roms(2)/bgmusic e "
+    "/roms(2)/videos) e suas pastas de playlists (iptv_usuario/ e "
+    "radios_usuario/). Idioma, tema, opções e favoritos são salvos localmente. "
+    "Preserve seus arquivos ao atualizar.",
     "Este software é fornecido sem garantia, nos limites das licenças "
-    "aplicáveis. O K PLAYER utiliza VLC, SDL2, stb e Inter. As licenças estão "
-    "na pasta licencas e o código-fonte acompanha o pacote. Estes avisos não "
-    "limitam os direitos concedidos pelas licenças de software livre. Sem "
-    "afiliação com a VideoLAN."};
+    "aplicáveis (GPL-2.0-or-later). O K PLAYER utiliza VLC/libVLC, SDL2, stb e "
+    "fontes livres. As licenças estão na pasta licencas e o código-fonte "
+    "acompanha o pacote. Sem afiliação com VideoLAN, PortMaster ou SofaScore."};
 static void draw_terms(void) {
   backdrop();
   draw_header(tr("Termos de uso"));
   label(tr("Termos de uso"), 28, 59, 28, textc, 570);
   panel_card(20, 108, 600, 300, 16);
-  label(tr(terms_titles[terms_page]), 38, 126, 20, accent, 560);
-  wrapped(tr(terms_text[terms_page]), 38, 169, 560, 16, 26, 8, textc);
+  label(tr(terms_titles[terms_page % TERMS_COUNT]), 38, 126, 20, accent, 560);
+  wrapped(tr(terms_text[terms_page % TERMS_COUNT]), 38, 169, 560, 15, 25, 9, textc);
   char count[24];
-  snprintf(count, sizeof(count), "%d / 3", terms_page + 1);
+  snprintf(count, sizeof(count), "%d / %d", (terms_page % TERMS_COUNT) + 1, TERMS_COUNT);
   centered(count, 270, 416, 100, 12, muted);
   const FooterHint hints[] = {{"A", "Voltar"}, {"DIR", "Páginas"}};
   footer_hints(hints, 2);
+}
+static void draw_stream_notice(void) {
+  backdrop();
+  draw_header(tr("TRANSPARÊNCIA"));
+  label(tr("Aviso de Transparência"), 24, 56, 24, textc, 460);
+  const char *badge = stream_notice_target == 8 ? "IPTV" : tr("Rádio Online");
+  int bw = (int)measure(badge, 11) + 22;
+  rounded(W - 24 - bw, 60, bw, 22, 11, mix(elevated, accent, 0.2f));
+  centered(badge, W - 24 - bw, 65, bw, 11, accent);
+  label(tr("Antes de acessar Rádio Online ou IPTV"), 24, 86, 12, muted, 560);
+
+  panel_card(20, 108, 600, 316, 16);
+  label(tr("1. Fontes abertas e agregadores públicos"), 36, 124, 14, accent, 568);
+  wrapped(tr("Todos os dados de IPTV e Rádio são retirados de agregadores públicos da internet ou de fontes abertas (Radio-Browser e catálogos web públicos). O KPlayer é apenas um reprodutor e não hospeda conteúdo próprio."),
+          36, 148, 568, 13, 20, 4, textc);
+
+  rect(36, 240, 568, 1, alpha(textc, 24));
+  label(tr("2. Você tem direito de colocar seu próprio link"), 36, 252, 14, accent, 568);
+  wrapped(tr("Com total transparência, você pode inserir seus próprios links e playlists .m3u/.m3u8 (pelo teclado virtual ou em iptv_usuario/) e rádios .pls/.m3u (em radios_usuario/) a qualquer momento."),
+          36, 276, 568, 13, 20, 4, textc);
+
+  rounded(36, 372, 272, 36, 12, accent);
+  centered(tr("B  Concordo e continuar"), 36, 383, 272, 13, bg);
+  rounded(320, 372, 174, 36, 12, elevated);
+  centered(tr("Y  Termos"), 320, 383, 174, 13, textc);
+  rounded(504, 372, 100, 36, 12, elevated);
+  centered(tr("A  Voltar"), 504, 383, 100, 13, muted);
+
+  const FooterHint hints[] = {
+      {"B", "Concordo e continuar"},
+      {"Y", "Termos de uso"},
+      {"A", "Voltar"}};
+  footer_hints(hints, 3);
 }
 static void open_terms(int from) {
   terms_return = from;
   terms_page = 0;
   mode = 6;
+}
+static void open_stream_notice(int target_mode, int from_mode) {
+  stream_notice_target = target_mode;
+  stream_notice_return = from_mode;
+  mode = 10;
 }
 static void finish_onboarding(void) {
   save_settings();

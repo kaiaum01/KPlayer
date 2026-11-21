@@ -64,7 +64,7 @@ export function HeaderBar({
           K PLAYER
         </span>
         <span style={{ color: theme.dim }} className="text-[11px] shrink-0">
-          2.0.0
+          2.0.2
         </span>
         <span
           style={{ color: theme.muted }}

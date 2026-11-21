@@ -1015,7 +1015,10 @@ static void change_option(int dir) {
     } else notify(tr("Equalizador indisponível"));
     break;
   case 17:
-    iptv_open();
+    if (stream_notice_accepted)
+      iptv_open();
+    else
+      open_stream_notice(8, 2);
     break;
   }
   menu_dirty = true;
@@ -1091,9 +1094,24 @@ static void key(SDL_Keycode k, bool repeat) {
     if ((k == SDLK_BACKSPACE || k == SDLK_m) && !repeat)
       mode = terms_return;
     else if (k == SDLK_LEFT || k == SDLK_UP)
-      terms_page = (terms_page + 2) % 3;
+      terms_page = (terms_page + TERMS_COUNT - 1) % TERMS_COUNT;
     else if (k == SDLK_RIGHT || k == SDLK_DOWN)
-      terms_page = (terms_page + 1) % 3;
+      terms_page = (terms_page + 1) % TERMS_COUNT;
+    return;
+  }
+  if (mode == 10) {
+    if (k == SDLK_RETURN && !repeat) {
+      stream_notice_accepted = true;
+      if (stream_notice_target == 7)
+        radio_open();
+      else
+        iptv_open();
+    } else if (k == SDLK_m && !repeat) {
+      open_terms(10);
+      terms_page = 1;
+    } else if (k == SDLK_BACKSPACE && !repeat) {
+      mode = stream_notice_return;
+    }
     return;
   }
   osd_until = SDL_GetTicks() + 3000;
@@ -1131,11 +1149,17 @@ static void key(SDL_Keycode k, bool repeat) {
         scan_automatic_media();
       else if (dash_focus == 2)
         show_locations();
-      else if (dash_focus == 3)
-        radio_open();
-      else if (dash_focus == 4)
-        iptv_open();
-      else if (dash_focus == 5)
+      else if (dash_focus == 3) {
+        if (stream_notice_accepted)
+          radio_open();
+        else
+          open_stream_notice(7, 3);
+      } else if (dash_focus == 4) {
+        if (stream_notice_accepted)
+          iptv_open();
+        else
+          open_stream_notice(8, 3);
+      } else if (dash_focus == 5)
         football_open();
     } else if (k == SDLK_SPACE && !repeat && active)
       mode = playing_audio ? 4 : 1;
@@ -1260,10 +1284,10 @@ static void key(SDL_Keycode k, bool repeat) {
     else
       open_options();
   } else if ((k == SDLK_q || k == SDLK_e) && !repeat) {
-    if (playing_iptv && iptv_view_count) {
-      iptv_selected = (iptv_selected + (k == SDLK_q ? iptv_view_count - 1 : 1)) % iptv_view_count;
-      iptv_play_selected();
-    } else next_media(k == SDLK_q ? -1 : 1);
+    if (playing_iptv)
+      iptv_step_channel(k == SDLK_q ? -1 : 1);
+    else
+      next_media(k == SDLK_q ? -1 : 1);
   }
   else if (k == SDLK_LEFT || k == SDLK_RIGHT)
     seek_media(k == SDLK_LEFT ? -10000 : 10000);
@@ -1421,8 +1445,11 @@ int main(int argc, char **argv) {
       draw_welcome();
     else if (!strcmp(argv[1], "--preview-terms")) {
       if (argc > 4)
-        terms_page = atoi(argv[4]) % 3;
+        terms_page = atoi(argv[4]) % TERMS_COUNT;
       draw_terms();
+    } else if (!strcmp(argv[1], "--preview-notice")) {
+      stream_notice_target = 8;
+      draw_stream_notice();
     } else if (!strcmp(argv[1], "--preview-audio")) {
       active = true;
       playing_audio = true;
@@ -1469,14 +1496,20 @@ int main(int argc, char **argv) {
       radio_filter = 5;
       draw_radio();
     } else if (!strcmp(argv[1], "--preview-iptv")) {
-      iptv_source = 1; iptv_count = 3;
-      snprintf(iptv_channels[0].name, sizeof(iptv_channels[0].name), "Canal exemplo");
-      snprintf(iptv_channels[0].group, sizeof(iptv_channels[0].group), "Notícias");
-      snprintf(iptv_channels[1].name, sizeof(iptv_channels[1].name), "Outro canal");
-      snprintf(iptv_channels[1].group, sizeof(iptv_channels[1].group), "Esportes");
-      snprintf(iptv_channels[2].name, sizeof(iptv_channels[2].name), "Mais um canal");
-      snprintf(iptv_channels[2].group, sizeof(iptv_channels[2].group), "Esportes");
-      iptv_build_groups();
+      iptv_source = 0;
+      iptv_view = IPTV_VIEW_CATS;
+      if (iptv_ensure_cats_cap(3)) {
+        iptv_cat_count = 3;
+        snprintf(iptv_cats[0].id, sizeof(iptv_cats[0].id), "all");
+        snprintf(iptv_cats[0].name, sizeof(iptv_cats[0].name), "Todos os canais");
+        iptv_cats[0].count = 8;
+        snprintf(iptv_cats[1].id, sizeof(iptv_cats[1].id), "grp:ESPORTES");
+        snprintf(iptv_cats[1].name, sizeof(iptv_cats[1].name), "ESPORTES");
+        iptv_cats[1].count = 4;
+        snprintf(iptv_cats[2].id, sizeof(iptv_cats[2].id), "grp:FILMES");
+        snprintf(iptv_cats[2].name, sizeof(iptv_cats[2].name), "FILMES E SÉRIES");
+        iptv_cats[2].count = 3;
+      }
       draw_iptv();
     } else if (!strcmp(argv[1], "--preview-football")) {
       football_count = 1;
@@ -1604,6 +1637,8 @@ int main(int argc, char **argv) {
       draw_football();
     else if (mode == 8)
       draw_iptv();
+    else if (mode == 10)
+      draw_stream_notice();
     else
       draw_menu();
     SDL_RenderPresent(renderer);

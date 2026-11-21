@@ -24,10 +24,29 @@ interface IptvChannel {
   name: string;
   url: string;
   fallbackUrls?: string[];
-  mediaType?: 'live' | 'movie' | 'series';
+  mediaType?: 'live' | 'movie' | 'series' | 'series-show';
   logo: string;
   group: string;
   id: string;
+  letter?: string;
+  shard?: string;
+  year?: string;
+  episodeCount?: number;
+  season?: number;
+  episode?: number;
+}
+
+interface IptvCategory {
+  id: string;
+  name: string;
+  count: number;
+  section: string;
+}
+
+interface UserPlaylistSource {
+  kind: 'url' | 'file';
+  name: string;
+  target: string;
 }
 
 interface FootballMatch {
@@ -132,7 +151,7 @@ function parsePlsOrM3u(filename: string, content: string): RadioStation[] {
   }));
 }
 
-function parseIptvM3u(content: string, max = 2048): IptvChannel[] {
+function parseIptvM3u(content: string, defaultGroup = ''): IptvChannel[] {
   const lines = content.split(/\r?\n/);
   const out: IptvChannel[] = [];
   let name = '';
@@ -146,7 +165,6 @@ function parseIptvM3u(content: string, max = 2048): IptvChannel[] {
   };
 
   for (const rawLine of lines) {
-    if (out.length >= max) break;
     const line = rawLine.replace(/^\ufeff/, '').trim();
     if (!line) continue;
     if (line.toUpperCase().startsWith('#EXTINF:')) {
@@ -161,7 +179,7 @@ function parseIptvM3u(content: string, max = 2048): IptvChannel[] {
         url: line,
         mediaType: 'live',
         logo,
-        group,
+        group: group || defaultGroup,
         id,
       });
       name = '';
@@ -182,7 +200,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.0.0' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.0.2' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -258,32 +276,405 @@ function saimoLetterSlug(letter: string): string {
   return ch.length === 1 && ch >= 'A' && ch <= 'Z' ? ch : '%23';
 }
 
-async function fetchSaimoFilmesCatalog(): Promise<IptvChannel[]> {
-  const [indiceText, destaquesText] = await Promise.all([
-    fetchTextTimeout(`${SAIMO_FILMES_BASE}indice.txt`, 14_000),
-    fetchTextTimeout(`${SAIMO_FILMES_BASE}destaques.txt`, 14_000),
-  ]);
+function saimoLetterForTitle(title: string): string {
+  const s = title.trim();
+  if (!s) return '#';
+  const ch = s[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  return ch >= 'A' && ch <= 'Z' ? ch : '#';
+}
 
-  const bases = new Map<string, string>();
-  for (const raw of indiceText.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line.startsWith('base:')) continue;
-    const parts = line.slice(5).trim().split(/\s+/);
-    if (parts.length >= 2) bases.set(parts[0], parts.slice(1).join(' '));
-  }
+function saimoNormTitle(title: string): string {
+  return title.trim().toLowerCase().replace(/\s*\(\d{4}\)\s*$/, '');
+}
 
-  let capaBase = 'https://image.tmdb.org/t/p/w342';
-  let shelf = 'Em alta';
-  const featured: Array<{
+const SAIMO_CAT_LABELS: Record<string, string> = {
+  anime: 'Animes',
+  dorama: 'Doramas',
+  kids: 'Kids',
+  novela: 'Novelas',
+};
+
+interface SaimoMeta {
+  ts: number;
+  bases: Map<string, string>;
+  letters: Array<{ letter: string; movieCount: number; seriesCount: number }>;
+  featured: Array<{
     kind: 'f' | 's';
     title: string;
     letter: string;
     year: string;
     logo: string;
+    shelf: string;
+  }>;
+  posterByMovie: Map<string, string>;
+  yearByMovie: Map<string, string>;
+  posterBySeries: Map<string, string>;
+  categories: Array<{ kind: 'f' | 's'; title: string; cats: string[] }>;
+  genres: Array<{ kind: 'f' | 's'; title: string; gens: string[] }>;
+}
+
+let saimoMetaCache: SaimoMeta | null = null;
+const saimoMovieLetterCache = new Map<
+  string,
+  { ts: number; items: Array<{ title: string; urls: string[]; lang: string }> }
+>();
+const saimoSeriesLetterCache = new Map<
+  string,
+  { ts: number; items: Array<{ title: string; year: string; shard: string; episodeCount: number }> }
+>();
+const saimoSeriesShardCache = new Map<
+  string,
+  {
+    ts: number;
+    blocks: Map<string, Array<{ season: number; ep: number; lang: string; urls: string[] }>>;
+  }
+>();
+
+const USER_IPTV_DIR = path.resolve(__dirname, 'ports', 'kplayer', 'iptv_usuario');
+const LEGACY_IPTV_DIR = path.resolve(__dirname, 'ports', 'kplayer', 'iptv');
+const USER_IPTV_PLAYLISTS_FILE = path.join(USER_IPTV_DIR, 'playlists.txt');
+let userIptvCache: { ts: number; channels: IptvChannel[]; playlists: UserPlaylistSource[] } | null = null;
+
+function sanitizeUserFilename(raw: string): string {
+  const base = path.basename(raw || 'lista.m3u').replace(/[^a-zA-Z0-9._ -]/g, '_').trim();
+  const noLeadingDots = base.replace(/^\.+/, '') || 'lista';
+  const hasExt = /\.(m3u8?|txt)$/i.test(noLeadingDots);
+  const withExt = hasExt ? noLeadingDots : `${noLeadingDots}.m3u`;
+  const low = withExt.toLowerCase();
+  if (low === 'playlists.txt' || low === 'readme.txt') {
+    return `usuario_${withExt}`;
+  }
+  return withExt.slice(0, 96);
+}
+
+async function readUserPlaylistUrls(): Promise<Array<{ name: string; url: string }>> {
+  await fs.mkdir(USER_IPTV_DIR, { recursive: true });
+  try {
+    const raw = await fs.readFile(USER_IPTV_PLAYLISTS_FILE, 'utf8');
+    const out: Array<{ name: string; url: string }> = [];
+    const seen = new Set<string>();
+    for (const lineRaw of raw.split(/\r?\n/)) {
+      const line = lineRaw.trim();
+      if (!line || line.startsWith('#')) continue;
+      let name = '';
+      let url = line;
+      const tabIdx = line.indexOf('\t');
+      if (tabIdx >= 0) {
+        name = line.slice(0, tabIdx).trim();
+        url = line.slice(tabIdx + 1).trim();
+      }
+      if (!isSafeExternalUrl(url) || seen.has(url)) continue;
+      seen.add(url);
+      if (!name) {
+        try {
+          name = new URL(url).hostname || 'Lista IPTV';
+        } catch {
+          name = 'Lista IPTV';
+        }
+      }
+      out.push({ name, url });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function writeUserPlaylistUrls(list: Array<{ name: string; url: string }>): Promise<void> {
+  await fs.mkdir(USER_IPTV_DIR, { recursive: true });
+  const content = list.map((item) => `${item.name.replace(/[\r\n\t]/g, ' ').trim()}\t${item.url.trim()}`).join('\n');
+  await fs.writeFile(USER_IPTV_PLAYLISTS_FILE, content ? `${content}\n` : '', 'utf8');
+}
+
+async function loadUserIptvAll(force = false): Promise<{
+  channels: IptvChannel[];
+  playlists: UserPlaylistSource[];
+}> {
+  if (!force && userIptvCache && Date.now() - userIptvCache.ts < 5 * 60_000) {
+    return { channels: userIptvCache.channels, playlists: userIptvCache.playlists };
+  }
+  await fs.mkdir(USER_IPTV_DIR, { recursive: true });
+
+  const channels: IptvChannel[] = [];
+  const seenUrls = new Set<string>();
+  const playlists: UserPlaylistSource[] = [];
+
+  // 1) Local playlist files from ports/kplayer/iptv_usuario/ and non-hidden files in ports/kplayer/iptv/
+  const scanDirs = [
+    { dir: USER_IPTV_DIR, trackInUi: true },
+    { dir: LEGACY_IPTV_DIR, trackInUi: false },
+  ];
+  for (const { dir, trackInUi } of scanDirs) {
+    try {
+      const files = (await fs.readdir(dir)).sort();
+      for (const file of files) {
+        if (file.startsWith('.')) continue;
+        const low = file.toLowerCase();
+        if (low === 'readme.txt' || low === 'playlists.txt') continue;
+        if (!/\.(m3u8?|txt)$/i.test(low)) continue;
+        const full = path.resolve(dir, file);
+        if (!full.startsWith(dir + path.sep)) continue;
+        const stat = await fs.stat(full);
+        if (!stat.isFile()) continue;
+        if (trackInUi) {
+          playlists.push({ kind: 'file', name: file, target: file });
+        }
+        const content = await fs.readFile(full, 'utf8');
+        const defaultGroup = file.replace(/\.(m3u8?|txt)$/i, '').replace(/_/g, ' ').trim() || 'Minha Lista';
+        for (const ch of parseIptvM3u(content, defaultGroup)) {
+          if (!seenUrls.has(ch.url)) {
+            seenUrls.add(ch.url);
+            channels.push(ch);
+          }
+        }
+      }
+    } catch {
+      // Directory missing
+    }
+  }
+
+  // 2) Remote playlist URLs persisted in ports/kplayer/iptv_usuario/playlists.txt
+  const urlItems = await readUserPlaylistUrls();
+  for (const item of urlItems) {
+    playlists.push({ kind: 'url', name: item.name, target: item.url });
+  }
+  await Promise.all(
+    urlItems.map(async (item) => {
+      try {
+        const content = await fetchTextTimeout(item.url, 18_000);
+        for (const ch of parseIptvM3u(content, item.name)) {
+          if (!seenUrls.has(ch.url)) {
+            seenUrls.add(ch.url);
+            channels.push(ch);
+          }
+        }
+      } catch {
+        // Skip unreachable playlist
+      }
+    })
+  );
+
+  userIptvCache = { ts: Date.now(), channels, playlists };
+  return { channels, playlists };
+}
+
+interface StreamHeadersMeta {
+  referer?: string;
+  userAgent?: string;
+}
+
+const streamHeaderMap = new Map<string, StreamHeadersMeta>();
+const streamHostHeaderMap = new Map<string, StreamHeadersMeta>();
+
+function normalizeCanaisKey(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\bchannel\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function normalizeReserveGroup(raw: string): string {
+  const low = raw.trim().toLowerCase();
+  if (!low) return 'Canais';
+  if (low === 'esportes' || low === 'espn') return 'Esportes';
+  if (low === 'filmes e séries' || low === 'filmes e series') return 'Filmes e Séries';
+  return raw.trim();
+}
+
+function parseSaimoCatalogo(text: string): IptvChannel[] {
+  interface RawSource {
+    url: string;
+    referer: string;
+    agent: string;
+    key: string;
+    quality: string;
+    order: number;
+  }
+  interface RawChannel {
+    name: string;
     group: string;
-  }> = [];
-  const movieLetters = new Set<string>();
-  const seriesLetters = new Set<string>();
+    logo: string;
+    sources: RawSource[];
+  }
+
+  const parsed: RawChannel[] = [];
+  let cur: RawChannel | null = null;
+  let curSrc: RawSource | null = null;
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.replace(/^\uFEFF/, '').trim();
+    if (!line || line.startsWith('#')) continue;
+    const colonIdx = line.indexOf(':');
+    if (colonIdx <= 0) continue;
+    const key = line.slice(0, colonIdx).trim().toLowerCase();
+    const val = line.slice(colonIdx + 1).trim();
+
+    if (key === 'canal') {
+      if (cur && cur.sources.length > 0) parsed.push(cur);
+      cur = { name: val || 'Canal', group: 'Canais', logo: '', sources: [] };
+      curSrc = null;
+    } else if (cur) {
+      if (key === 'categoria' && val) {
+        cur.group = val;
+      } else if (key === 'logo' && val) {
+        cur.logo = val;
+      } else if (key === 'fonte' && (val.startsWith('http://') || val.startsWith('https://'))) {
+        curSrc = {
+          url: val,
+          referer: '',
+          agent: '',
+          key: '',
+          quality: '',
+          order: cur.sources.length,
+        };
+        cur.sources.push(curSrc);
+      } else if (curSrc) {
+        if (key === 'referer' && val) curSrc.referer = val;
+        else if (key === 'agente' && val) curSrc.agent = val;
+        else if (key === 'chave' && val) curSrc.key = val;
+        else if (key === 'qualidade' && val) curSrc.quality = val;
+      }
+    }
+  }
+  if (cur && cur.sources.length > 0) parsed.push(cur);
+
+  const scoreSource = (s: RawSource): number => {
+    const low = s.url.toLowerCase();
+    const hasKey = s.key.length > 0;
+    const isMpd = low.includes('.mpd');
+    const isM3u8 = low.includes('.m3u8');
+    const isErrorTxt = low.endsWith('/error.txt');
+    let score = 0;
+    if (hasKey || isMpd) score -= 50;
+    else if (isM3u8 && !s.referer) score += 30;
+    else if (isM3u8 && s.referer) score += 24;
+    else if (isErrorTxt) score += 12;
+    else score += 16;
+    if (s.url.startsWith('https://')) score += 2;
+    return score;
+  };
+
+  const out: IptvChannel[] = [];
+  for (const ch of parsed) {
+    const ranked = [...ch.sources].sort((a, b) => scoreSource(b) - scoreSource(a) || a.order - b.order);
+    const urls: string[] = [];
+    let bestQuality = '';
+    for (const s of ranked) {
+      if (!urls.includes(s.url)) urls.push(s.url);
+      if (!bestQuality && s.quality) bestQuality = s.quality;
+      if (s.referer || s.agent) {
+        const meta: StreamHeadersMeta = {
+          ...(s.referer ? { referer: s.referer } : {}),
+          ...(s.agent ? { userAgent: s.agent } : {}),
+        };
+        streamHeaderMap.set(s.url, meta);
+        try {
+          const host = new URL(s.url).host;
+          if (host) streamHostHeaderMap.set(host, meta);
+        } catch {
+          // ignore malformed URL
+        }
+      }
+    }
+    if (urls.length === 0) continue;
+    out.push({
+      name: ch.name,
+      url: urls[0],
+      fallbackUrls: urls.slice(1),
+      mediaType: 'live',
+      logo: ch.logo,
+      group: ch.group || 'Canais',
+      id: bestQuality || `${urls.length} fontes`,
+    });
+  }
+  return out;
+}
+
+async function loadSaimoCanais(force = false): Promise<IptvChannel[]> {
+  const cached = iptvCache.get('canais');
+  if (!force && cached && Date.now() - cached.ts < 10 * 60_000) {
+    return cached.data;
+  }
+  const [catalogoText, reserveText] = await Promise.all([
+    fetchTextTimeout(`${SAIMO_CANAIS_BASE}catalogo.txt`, 18_000).catch(() => ''),
+    fetchTextTimeout(`${SAIMO_CANAIS_BASE}canais.txt`, 12_000).catch(() => ''),
+  ]);
+
+  const channels = catalogoText ? parseSaimoCatalogo(catalogoText) : [];
+  const byNorm = new Map<string, IptvChannel>();
+  for (const ch of channels) {
+    byNorm.set(normalizeCanaisKey(ch.name), ch);
+  }
+
+  if (reserveText) {
+    const reserves = parseIptvM3u(reserveText, 'Canais');
+    for (const r of reserves) {
+      const nk = normalizeCanaisKey(r.name);
+      const existing = byNorm.get(nk);
+      if (existing) {
+        const allUrls = [existing.url, ...(existing.fallbackUrls ?? [])];
+        if (!allUrls.includes(r.url)) {
+          existing.fallbackUrls = [...(existing.fallbackUrls ?? []), r.url];
+        }
+        if (!existing.logo && r.logo) existing.logo = r.logo;
+      } else {
+        const added: IptvChannel = {
+          ...r,
+          mediaType: 'live',
+          group: normalizeReserveGroup(r.group),
+        };
+        channels.push(added);
+        byNorm.set(nk, added);
+      }
+    }
+  }
+
+  if (channels.length > 0) {
+    iptvCache.set('canais', { ts: Date.now(), data: channels });
+  }
+  return channels.length > 0 ? channels : cached?.data ?? [];
+}
+
+async function loadSaimoMeta(force = false): Promise<SaimoMeta> {
+  if (!force && saimoMetaCache && Date.now() - saimoMetaCache.ts < 45 * 60_000) {
+    return saimoMetaCache;
+  }
+  const [indiceText, destaquesText, categoriasText, generosText] = await Promise.all([
+    fetchTextTimeout(`${SAIMO_FILMES_BASE}indice.txt`, 16_000),
+    fetchTextTimeout(`${SAIMO_FILMES_BASE}destaques.txt`, 16_000),
+    fetchTextTimeout(`${SAIMO_FILMES_BASE}categorias.txt`, 16_000).catch(() => ''),
+    fetchTextTimeout(`${SAIMO_FILMES_BASE}generos.txt`, 20_000).catch(() => ''),
+  ]);
+
+  const bases = new Map<string, string>();
+  const letters: Array<{ letter: string; movieCount: number; seriesCount: number }> = [];
+  for (const raw of indiceText.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith('base:')) {
+      const parts = line.slice(5).trim().split(/\s+/);
+      if (parts.length >= 2) bases.set(parts[0], parts.slice(1).join(' '));
+      continue;
+    }
+    const cols = line.split('\t');
+    if (cols.length >= 3 && cols[0].trim().length === 1 && /^\d+$/.test(cols[1].trim()) && /^\d+$/.test(cols[2].trim())) {
+      letters.push({
+        letter: cols[0].trim().toUpperCase(),
+        movieCount: Number(cols[1].trim()),
+        seriesCount: Number(cols[2].trim()),
+      });
+    }
+  }
+
+  let capaBase = 'https://image.tmdb.org/t/p/w342';
+  let shelf = 'Em alta';
+  const featured: SaimoMeta['featured'] = [];
+  const posterByMovie = new Map<string, string>();
+  const yearByMovie = new Map<string, string>();
+  const posterBySeries = new Map<string, string>();
 
   for (const raw of destaquesText.split(/\r?\n/)) {
     const trimmed = raw.trim();
@@ -300,165 +691,473 @@ async function fetchSaimoFilmesCatalog(): Promise<IptvChannel[]> {
     if ((cols[0] === 'f' || cols[0] === 's') && cols.length >= 3) {
       const kind = cols[0];
       const title = cols[1].trim();
-      const letter = (cols[2].trim().toUpperCase() || '#');
+      const letter = cols[2].trim().toUpperCase() || '#';
       const year = (cols[3] ?? '').trim();
       const poster = (cols[4] ?? '').trim();
       const logo = poster.startsWith('/') ? capaBase + poster : poster;
-      featured.push({ kind, title, letter, year, logo, group: shelf });
-      if (kind === 'f') movieLetters.add(letter);
-      else seriesLetters.add(letter);
+      featured.push({ kind, title, letter, year, logo, shelf });
+      const tl = title.toLowerCase();
+      if (kind === 'f') {
+        if (logo) posterByMovie.set(tl, logo);
+        if (year) yearByMovie.set(tl, year);
+      } else if (logo) {
+        posterBySeries.set(tl, logo);
+      }
     }
   }
 
-  const movieMap = new Map<string, { urls: string[]; lang: string }>();
-  const extraMovies: Array<{ title: string; urls: string[]; lang: string }> = [];
-  const seriesShardMap = new Map<string, string>();
-
-  await Promise.all([
-    ...Array.from(movieLetters).map(async (ltr) => {
-      try {
-        const txt = await fetchTextTimeout(`${SAIMO_FILMES_BASE}filmes-${saimoLetterSlug(ltr)}.txt`, 14_000);
-        let extrasAdded = 0;
-        for (const raw of txt.split(/\r?\n/)) {
-          const cols = raw.replace(/\r$/, '').split('\t');
-          if (cols.length < 2) continue;
-          const title = cols[0].trim();
-          const parsed = parseSaimoMovieUrls(cols.slice(1), bases);
-          if (parsed.urls.length > 0) {
-            movieMap.set(`${ltr}:${title.toLowerCase()}`, parsed);
-            if (extrasAdded < 20) {
-              extraMovies.push({ title, urls: parsed.urls, lang: parsed.lang });
-              extrasAdded++;
-            }
-          }
-        }
-      } catch {
-        // Ignore missing shard
-      }
-    }),
-    ...Array.from(seriesLetters).map(async (ltr) => {
-      try {
-        const txt = await fetchTextTimeout(`${SAIMO_FILMES_BASE}series-${saimoLetterSlug(ltr)}.txt`, 14_000);
-        for (const raw of txt.split(/\r?\n/)) {
-          const cols = raw.replace(/\r$/, '').split('\t');
-          if (cols.length >= 3) {
-            seriesShardMap.set(`${ltr}:${cols[0].trim().toLowerCase()}`, cols[2].trim());
-          }
-        }
-      } catch {
-        // Ignore missing index
-      }
-    }),
-  ]);
-
-  const neededShards = new Set<string>();
-  for (const item of featured) {
-    if (item.kind !== 's') continue;
-    const shard = seriesShardMap.get(`${item.letter}:${item.title.toLowerCase()}`);
-    if (shard) neededShards.add(`${item.letter}\t${shard}`);
+  const categories: SaimoMeta['categories'] = [];
+  for (const raw of categoriasText.split(/\r?\n/)) {
+    if (!raw || raw.startsWith('#')) continue;
+    const cols = raw.replace(/\r$/, '').split('\t');
+    if (cols.length >= 3 && (cols[0] === 'f' || cols[0] === 's')) {
+      const cats = cols[2].split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+      if (cats.length > 0) categories.push({ kind: cols[0], title: cols[1].trim(), cats });
+    }
   }
 
-  const seriesEpisodes = new Map<
-    string,
-    Array<{ season: string; ep: string; lang: string; urls: string[] }>
-  >();
+  const genres: SaimoMeta['genres'] = [];
+  for (const raw of generosText.split(/\r?\n/)) {
+    if (!raw || raw.startsWith('#')) continue;
+    const cols = raw.replace(/\r$/, '').split('\t');
+    if (cols.length >= 3 && (cols[0] === 'f' || cols[0] === 's')) {
+      const gens = cols[2].split(',').map((g) => g.trim()).filter(Boolean);
+      if (gens.length > 0) genres.push({ kind: cols[0], title: cols[1].trim(), gens });
+    }
+  }
 
-  await Promise.all(
-    Array.from(neededShards).map(async (key) => {
-      const [ltr, shard] = key.split('\t');
-      try {
-        const txt = await fetchTextTimeout(
-          `${SAIMO_FILMES_BASE}series-${saimoLetterSlug(ltr)}-${encodeURIComponent(shard)}.txt`,
-          14_000
-        );
-        let curTitle = '';
-        for (const raw of txt.split(/\r?\n/)) {
-          if (raw.startsWith('@')) {
-            curTitle = raw.slice(1).trim().toLowerCase();
-            if (!seriesEpisodes.has(`${ltr}:${curTitle}`)) {
-              seriesEpisodes.set(`${ltr}:${curTitle}`, []);
-            }
-            continue;
-          }
-          if (!curTitle) continue;
-          const cols = raw.replace(/\r$/, '').split('\t');
-          if (cols.length < 4) continue;
-          const season = cols[0].trim();
-          const ep = cols[1].trim();
-          if (season === '0' && ep === '0') continue;
-          const lang = cols[2].trim().toUpperCase();
-          const urls = rankSaimoUrls(cols[3].split(','), bases);
-          if (urls.length > 0) {
-            const list = seriesEpisodes.get(`${ltr}:${curTitle}`)!;
-            if (list.length < 6) list.push({ season, ep, lang, urls });
-          }
-        }
-      } catch {
-        // Ignore shard error
-      }
-    })
+  saimoMetaCache = {
+    ts: Date.now(),
+    bases,
+    letters,
+    featured,
+    posterByMovie,
+    yearByMovie,
+    posterBySeries,
+    categories,
+    genres,
+  };
+  return saimoMetaCache;
+}
+
+async function loadSaimoMovieLetter(
+  letter: string,
+  bases: Map<string, string>,
+  force = false
+): Promise<Array<{ title: string; urls: string[]; lang: string }>> {
+  const key = letter.trim().toUpperCase() || '#';
+  const cached = saimoMovieLetterCache.get(key);
+  if (!force && cached && Date.now() - cached.ts < 45 * 60_000) return cached.items;
+  const txt = await fetchTextTimeout(`${SAIMO_FILMES_BASE}filmes-${saimoLetterSlug(key)}.txt`, 18_000);
+  const items: Array<{ title: string; urls: string[]; lang: string }> = [];
+  for (const raw of txt.split(/\r?\n/)) {
+    const cols = raw.replace(/\r$/, '').split('\t');
+    if (cols.length < 2) continue;
+    const title = cols[0].trim();
+    const parsed = parseSaimoMovieUrls(cols.slice(1), bases);
+    if (title && parsed.urls.length > 0) {
+      items.push({ title, urls: parsed.urls, lang: parsed.lang });
+    }
+  }
+  saimoMovieLetterCache.set(key, { ts: Date.now(), items });
+  return items;
+}
+
+async function loadSaimoSeriesLetter(
+  letter: string,
+  force = false
+): Promise<Array<{ title: string; year: string; shard: string; episodeCount: number }>> {
+  const key = letter.trim().toUpperCase() || '#';
+  const cached = saimoSeriesLetterCache.get(key);
+  if (!force && cached && Date.now() - cached.ts < 45 * 60_000) return cached.items;
+  const txt = await fetchTextTimeout(`${SAIMO_FILMES_BASE}series-${saimoLetterSlug(key)}.txt`, 18_000);
+  const items: Array<{ title: string; year: string; shard: string; episodeCount: number }> = [];
+  for (const raw of txt.split(/\r?\n/)) {
+    const cols = raw.replace(/\r$/, '').split('\t');
+    if (cols.length < 3) continue;
+    const title = cols[0].trim();
+    const year = cols[1].trim();
+    const shard = cols[2].trim();
+    const episodeCount = cols[3] && /^\d+$/.test(cols[3].trim()) ? Number(cols[3].trim()) : 0;
+    if (title && shard) items.push({ title, year, shard, episodeCount });
+  }
+  saimoSeriesLetterCache.set(key, { ts: Date.now(), items });
+  return items;
+}
+
+async function loadSaimoSeriesShard(
+  letter: string,
+  shard: string,
+  bases: Map<string, string>,
+  force = false
+): Promise<Map<string, Array<{ season: number; ep: number; lang: string; urls: string[] }>>> {
+  const ltr = letter.trim().toUpperCase() || '#';
+  const key = `${ltr}:${shard}`;
+  const cached = saimoSeriesShardCache.get(key);
+  if (!force && cached && Date.now() - cached.ts < 45 * 60_000) return cached.blocks;
+
+  const txt = await fetchTextTimeout(
+    `${SAIMO_FILMES_BASE}series-${saimoLetterSlug(ltr)}-${encodeURIComponent(shard)}.txt`,
+    18_000
   );
+  const blocks = new Map<string, Array<{ season: number; ep: number; lang: string; urls: string[] }>>();
+  let curTitle = '';
+  for (const raw of txt.split(/\r?\n/)) {
+    if (raw.startsWith('@')) {
+      curTitle = raw.slice(1).split('\t')[0].trim().toLowerCase();
+      if (!blocks.has(curTitle)) blocks.set(curTitle, []);
+      continue;
+    }
+    if (!curTitle) continue;
+    const cols = raw.replace(/\r$/, '').split('\t');
+    if (cols.length < 4) continue;
+    const sStr = cols[0].trim();
+    const eStr = cols[1].trim();
+    if (sStr === '0' && eStr === '0') continue;
+    const season = Number.parseInt(sStr, 10) || 0;
+    const ep = Number.parseInt(eStr, 10) || 0;
+    const lang = cols[2].trim().toUpperCase();
+    const urls = rankSaimoUrls(cols[3].split(','), bases);
+    if (urls.length > 0) {
+      blocks.get(curTitle)!.push({ season, ep, lang, urls });
+    }
+  }
+  saimoSeriesShardCache.set(key, { ts: Date.now(), blocks });
+  return blocks;
+}
 
-  const out: IptvChannel[] = [];
-  const seen = new Set<string>();
-  const MAX_ITEMS = 1200;
-
-  for (const item of featured) {
-    if (out.length >= MAX_ITEMS) break;
-    const lk = `${item.letter}:${item.title.toLowerCase()}`;
-    if (item.kind === 'f') {
-      const hit = movieMap.get(lk);
-      if (!hit || hit.urls.length === 0) continue;
-      const dedup = `f:${item.title.toLowerCase()}`;
-      if (seen.has(dedup)) continue;
-      seen.add(dedup);
-      out.push({
-        name: item.title,
-        url: hit.urls[0],
-        fallbackUrls: hit.urls.slice(1),
-        mediaType: 'movie',
-        logo: item.logo,
-        group: item.group,
-        id: item.year ? `Filme • ${item.year} • ${hit.lang}` : `Filme • ${hit.lang}`,
-      });
+async function getIptvCategories(
+  source: 'canais' | 'filmes' | 'series' | 'usuario',
+  force = false
+): Promise<{
+  source: string;
+  sourceUrl: string;
+  totalCount: number;
+  categories: IptvCategory[];
+  userPlaylists?: UserPlaylistSource[];
+}> {
+  if (source === 'canais' || source === 'usuario') {
+    let entries: IptvChannel[] = [];
+    let userPlaylists: UserPlaylistSource[] | undefined;
+    if (source === 'canais') {
+      entries = await loadSaimoCanais(force);
     } else {
-      const eps = seriesEpisodes.get(lk) ?? [];
-      for (const e of eps) {
-        if (out.length >= MAX_ITEMS) break;
-        const epTag = `T${e.season}E${e.ep}`;
-        const dedup = `s:${item.title.toLowerCase()}:${epTag}`;
-        if (seen.has(dedup)) continue;
-        seen.add(dedup);
+      const u = await loadUserIptvAll(force);
+      entries = u.channels;
+      userPlaylists = u.playlists;
+    }
+    const counts = new Map<string, number>();
+    for (const ch of entries) {
+      const g = ch.group || (source === 'canais' ? 'Canais' : 'Minha Lista');
+      counts.set(g, (counts.get(g) ?? 0) + 1);
+    }
+    const categories: IptvCategory[] = [
+      { id: 'all', name: 'Todos os canais', count: entries.length, section: 'Geral' },
+      ...Array.from(counts.entries())
+        .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'))
+        .map(([g, count]) => ({ id: `grp:${g}`, name: g, count, section: 'Categorias' })),
+    ];
+    return {
+      source,
+      sourceUrl: source === 'canais' ? SAIMO_CANAIS_BASE : 'ports/kplayer/iptv_usuario/',
+      totalCount: entries.length,
+      categories,
+      ...(userPlaylists ? { userPlaylists } : {}),
+    };
+  }
+
+  const meta = await loadSaimoMeta(force);
+  const kind: 'f' | 's' = source === 'filmes' ? 'f' : 's';
+  const categories: IptvCategory[] = [];
+
+  // 1) Destaques shelves
+  const shelfCounts = new Map<string, number>();
+  for (const d of meta.featured) {
+    if (d.kind !== kind) continue;
+    shelfCounts.set(d.shelf, (shelfCounts.get(d.shelf) ?? 0) + 1);
+  }
+  for (const [sh, count] of shelfCounts.entries()) {
+    categories.push({ id: `shelf:${sh}`, name: sh, count, section: 'Destaques' });
+  }
+
+  // 2) Special categories (Animes, Doramas, Kids, Novelas)
+  const catCounts = new Map<string, number>();
+  for (const row of meta.categories) {
+    if (row.kind !== kind) continue;
+    for (const c of row.cats) catCounts.set(c, (catCounts.get(c) ?? 0) + 1);
+  }
+  for (const slug of ['anime', 'dorama', 'kids', 'novela']) {
+    const count = catCounts.get(slug) ?? 0;
+    if (count > 0) {
+      categories.push({ id: `cat:${slug}`, name: SAIMO_CAT_LABELS[slug], count, section: 'Categorias' });
+    }
+  }
+
+  // 3) TMDB Genres sorted by item count desc
+  const genCounts = new Map<string, number>();
+  for (const row of meta.genres) {
+    if (row.kind !== kind) continue;
+    for (const g of row.gens) genCounts.set(g, (genCounts.get(g) ?? 0) + 1);
+  }
+  for (const [g, count] of Array.from(genCounts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))) {
+    categories.push({ id: `gen:${g}`, name: g, count, section: 'Gêneros' });
+  }
+
+  // 4) Full A-Z catalog
+  let totalCount = 0;
+  const prefix = kind === 'f' ? 'Filmes' : 'Séries';
+  for (const row of meta.letters) {
+    const count = kind === 'f' ? row.movieCount : row.seriesCount;
+    totalCount += count;
+    if (count > 0) {
+      categories.push({ id: `az:${row.letter}`, name: `${prefix} • ${row.letter}`, count, section: 'Catálogo A-Z' });
+    }
+  }
+
+  return {
+    source,
+    sourceUrl: SAIMO_FILMES_BASE,
+    totalCount,
+    categories,
+  };
+}
+
+async function getIptvCategoryItems(
+  source: 'canais' | 'filmes' | 'series' | 'usuario',
+  catId: string,
+  force = false
+): Promise<IptvChannel[]> {
+  if (source === 'canais' || source === 'usuario') {
+    const all = source === 'canais' ? await loadSaimoCanais(force) : (await loadUserIptvAll(force)).channels;
+    if (!catId || catId === 'all') return all;
+    if (catId.startsWith('grp:')) {
+      const target = catId.slice(4);
+      return all.filter((c) => (c.group || '') === target);
+    }
+    return all;
+  }
+
+  const meta = await loadSaimoMeta(force);
+
+  if (source === 'filmes') {
+    if (catId.startsWith('az:')) {
+      const ltr = catId.slice(3).trim().toUpperCase() || '#';
+      const list = await loadSaimoMovieLetter(ltr, meta.bases, force);
+      return list.map((m) => {
+        const tl = m.title.toLowerCase();
+        const year = meta.yearByMovie.get(tl) || '';
+        return {
+          name: m.title,
+          url: m.urls[0],
+          fallbackUrls: m.urls.slice(1),
+          mediaType: 'movie' as const,
+          logo: meta.posterByMovie.get(tl) || '',
+          group: `Filmes • ${ltr}`,
+          id: year ? `Filme • ${year} • ${m.lang}` : `Filme • ${m.lang}`,
+        };
+      });
+    }
+
+    if (catId.startsWith('shelf:')) {
+      const shelf = catId.slice(6);
+      const wanted = meta.featured.filter((d) => d.kind === 'f' && d.shelf === shelf);
+      const lettersNeeded = Array.from(new Set(wanted.map((d) => d.letter)));
+      const mapExact = new Map<string, { urls: string[]; lang: string }>();
+      const mapNorm = new Map<string, { urls: string[]; lang: string }>();
+      await Promise.all(
+        lettersNeeded.map(async (ltr) => {
+          try {
+            const list = await loadSaimoMovieLetter(ltr, meta.bases, force);
+            for (const m of list) {
+              mapExact.set(`${ltr}:${m.title.toLowerCase()}`, { urls: m.urls, lang: m.lang });
+              const nk = `${ltr}:${saimoNormTitle(m.title)}`;
+              if (!mapNorm.has(nk)) mapNorm.set(nk, { urls: m.urls, lang: m.lang });
+            }
+          } catch {
+            // Skip failed shard
+          }
+        })
+      );
+      const out: IptvChannel[] = [];
+      for (const d of wanted) {
+        const hit =
+          mapExact.get(`${d.letter}:${d.title.toLowerCase()}`) ||
+          mapNorm.get(`${d.letter}:${saimoNormTitle(d.title)}`);
+        if (!hit) continue;
         out.push({
-          name: `${item.title} (${epTag})`,
-          url: e.urls[0],
-          fallbackUrls: e.urls.slice(1),
-          mediaType: 'series',
-          logo: item.logo,
-          group: item.group,
-          id: `Série • ${epTag} • ${e.lang}`,
+          name: d.title,
+          url: hit.urls[0],
+          fallbackUrls: hit.urls.slice(1),
+          mediaType: 'movie',
+          logo: d.logo,
+          group: shelf,
+          id: d.year ? `Filme • ${d.year} • ${hit.lang}` : `Filme • ${hit.lang}`,
         });
       }
+      return out;
     }
+
+    if (catId.startsWith('cat:') || catId.startsWith('gen:')) {
+      const isCat = catId.startsWith('cat:');
+      const target = isCat ? catId.slice(4).toLowerCase() : catId.slice(4);
+      const grpLabel = isCat ? SAIMO_CAT_LABELS[target] || target : target;
+      const titles = isCat
+        ? meta.categories.filter((r) => r.kind === 'f' && r.cats.includes(target)).map((r) => r.title)
+        : meta.genres.filter((r) => r.kind === 'f' && r.gens.includes(target)).map((r) => r.title);
+
+      const byLetterExact = new Map<string, Set<string>>();
+      const byLetterNorm = new Map<string, Set<string>>();
+      for (const t of titles) {
+        const ltr = saimoLetterForTitle(t);
+        if (!byLetterExact.has(ltr)) byLetterExact.set(ltr, new Set());
+        if (!byLetterNorm.has(ltr)) byLetterNorm.set(ltr, new Set());
+        byLetterExact.get(ltr)!.add(t.toLowerCase());
+        byLetterNorm.get(ltr)!.add(saimoNormTitle(t));
+      }
+
+      const out: IptvChannel[] = [];
+      await Promise.all(
+        Array.from(byLetterExact.keys()).map(async (ltr) => {
+          try {
+            const list = await loadSaimoMovieLetter(ltr, meta.bases, force);
+            const ex = byLetterExact.get(ltr)!;
+            const nm = byLetterNorm.get(ltr)!;
+            for (const m of list) {
+              const tl = m.title.toLowerCase();
+              if (ex.has(tl) || nm.has(saimoNormTitle(m.title))) {
+                const year = meta.yearByMovie.get(tl) || '';
+                out.push({
+                  name: m.title,
+                  url: m.urls[0],
+                  fallbackUrls: m.urls.slice(1),
+                  mediaType: 'movie',
+                  logo: meta.posterByMovie.get(tl) || '',
+                  group: grpLabel,
+                  id: year ? `Filme • ${year} • ${m.lang}` : `Filme • ${m.lang}`,
+                });
+              }
+            }
+          } catch {
+            // Skip failed letter
+          }
+        })
+      );
+      out.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+      return out;
+    }
+
+    return [];
   }
 
-  for (const m of extraMovies) {
-    if (out.length >= MAX_ITEMS) break;
-    const dedup = `f:${m.title.toLowerCase()}`;
-    if (seen.has(dedup)) continue;
-    seen.add(dedup);
-    out.push({
-      name: m.title,
-      url: m.urls[0],
-      fallbackUrls: m.urls.slice(1),
-      mediaType: 'movie',
-      logo: '',
-      group: 'Catálogo de Filmes',
-      id: `Filme • ${m.lang}`,
-    });
+  // source === 'series'
+  const toShow = (
+    title: string,
+    ltr: string,
+    year: string,
+    shard: string,
+    episodeCount: number,
+    group: string,
+    logo = ''
+  ): IptvChannel => ({
+    name: title,
+    url: '',
+    mediaType: 'series-show',
+    letter: ltr,
+    shard,
+    year,
+    episodeCount,
+    logo: logo || meta.posterBySeries.get(title.toLowerCase()) || '',
+    group,
+    id: year && episodeCount
+      ? `Série • ${year} • ${episodeCount} eps`
+      : episodeCount
+        ? `Série • ${episodeCount} eps`
+        : 'Série',
+  });
+
+  if (catId.startsWith('az:')) {
+    const ltr = catId.slice(3).trim().toUpperCase() || '#';
+    const list = await loadSaimoSeriesLetter(ltr, force);
+    return list.map((s) => toShow(s.title, ltr, s.year, s.shard, s.episodeCount, `Séries • ${ltr}`));
   }
 
-  return out;
+  if (catId.startsWith('shelf:')) {
+    const shelf = catId.slice(6);
+    const wanted = meta.featured.filter((d) => d.kind === 's' && d.shelf === shelf);
+    const lettersNeeded = Array.from(new Set(wanted.map((d) => d.letter)));
+    const mapExact = new Map<string, { year: string; shard: string; episodeCount: number }>();
+    const mapNorm = new Map<string, { year: string; shard: string; episodeCount: number }>();
+    await Promise.all(
+      lettersNeeded.map(async (ltr) => {
+        try {
+          const list = await loadSaimoSeriesLetter(ltr, force);
+          for (const s of list) {
+            mapExact.set(`${ltr}:${s.title.toLowerCase()}`, {
+              year: s.year,
+              shard: s.shard,
+              episodeCount: s.episodeCount,
+            });
+            const nk = `${ltr}:${saimoNormTitle(s.title)}`;
+            if (!mapNorm.has(nk)) {
+              mapNorm.set(nk, { year: s.year, shard: s.shard, episodeCount: s.episodeCount });
+            }
+          }
+        } catch {
+          // Skip failed letter
+        }
+      })
+    );
+    const out: IptvChannel[] = [];
+    for (const d of wanted) {
+      const hit =
+        mapExact.get(`${d.letter}:${d.title.toLowerCase()}`) ||
+        mapNorm.get(`${d.letter}:${saimoNormTitle(d.title)}`);
+      if (!hit) continue;
+      out.push(toShow(d.title, d.letter, d.year || hit.year, hit.shard, hit.episodeCount, shelf, d.logo));
+    }
+    return out;
+  }
+
+  if (catId.startsWith('cat:') || catId.startsWith('gen:')) {
+    const isCat = catId.startsWith('cat:');
+    const target = isCat ? catId.slice(4).toLowerCase() : catId.slice(4);
+    const grpLabel = isCat ? SAIMO_CAT_LABELS[target] || target : target;
+    const titles = isCat
+      ? meta.categories.filter((r) => r.kind === 's' && r.cats.includes(target)).map((r) => r.title)
+      : meta.genres.filter((r) => r.kind === 's' && r.gens.includes(target)).map((r) => r.title);
+
+    const byLetterExact = new Map<string, Set<string>>();
+    const byLetterNorm = new Map<string, Set<string>>();
+    for (const t of titles) {
+      const ltr = saimoLetterForTitle(t);
+      if (!byLetterExact.has(ltr)) byLetterExact.set(ltr, new Set());
+      if (!byLetterNorm.has(ltr)) byLetterNorm.set(ltr, new Set());
+      byLetterExact.get(ltr)!.add(t.toLowerCase());
+      byLetterNorm.get(ltr)!.add(saimoNormTitle(t));
+    }
+
+    const out: IptvChannel[] = [];
+    await Promise.all(
+      Array.from(byLetterExact.keys()).map(async (ltr) => {
+        try {
+          const list = await loadSaimoSeriesLetter(ltr, force);
+          const ex = byLetterExact.get(ltr)!;
+          const nm = byLetterNorm.get(ltr)!;
+          for (const s of list) {
+            if (ex.has(s.title.toLowerCase()) || nm.has(saimoNormTitle(s.title))) {
+              out.push(toShow(s.title, ltr, s.year, s.shard, s.episodeCount, grpLabel));
+            }
+          }
+        } catch {
+          // Skip failed letter
+        }
+      })
+    );
+    out.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    return out;
+  }
+
+  return [];
 }
 
 async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise<unknown> {
@@ -469,7 +1168,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.0.0' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.0.2' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -484,12 +1183,13 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
 
 async function createServer() {
   const app = express();
+  app.use(express.json({ limit: '25mb' }));
 
   // Serve real R36S sprites and Manrope fonts from the latest commit
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipPath = path.join(__dirname, 'releases', 'KPlayer-v2.0.0-R36S.zip');
+  const r36sZipPath = path.join(__dirname, 'releases', 'KPlayer-v2.0.2-R36S.zip');
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
   app.get('/api/r36s/info', async (_req, res) => {
@@ -503,8 +1203,8 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.0.0',
-        filename: 'KPlayer-v2.0.0-R36S.zip',
+        version: '2.0.2',
+        filename: 'KPlayer-v2.0.2-R36S.zip',
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
@@ -517,7 +1217,7 @@ async function createServer() {
   app.get('/api/r36s/download', async (_req, res) => {
     try {
       await fs.access(r36sZipPath);
-      return res.download(r36sZipPath, 'KPlayer-v2.0.0-R36S.zip');
+      return res.download(r36sZipPath, 'KPlayer-v2.0.2-R36S.zip');
     } catch {
       return res.status(404).json({ error: 'Pacote R36S não encontrado' });
     }
@@ -526,7 +1226,7 @@ async function createServer() {
   app.get('/api/r36s/sha256', async (_req, res) => {
     try {
       await fs.access(r36sShaPath);
-      return res.download(r36sShaPath, 'KPlayer-v2.0.0-R36S.zip.sha256');
+      return res.download(r36sShaPath, 'KPlayer-v2.0.2-R36S.zip.sha256');
     } catch {
       return res.status(404).json({ error: 'Checksum não encontrado' });
     }
@@ -607,36 +1307,214 @@ async function createServer() {
     }
   });
 
+  app.get('/api/iptv/categories', async (req, res) => {
+    const rawSource = String(req.query.source ?? 'canais');
+    const source =
+      rawSource === 'filmes' || rawSource === 'series' || rawSource === 'usuario'
+        ? rawSource
+        : 'canais';
+    const force = req.query.refresh === '1';
+    try {
+      const payload = await getIptvCategories(source, force);
+      return res.json(payload);
+    } catch {
+      return res.status(502).json({
+        source,
+        sourceUrl: source === 'canais' ? SAIMO_CANAIS_BASE : SAIMO_FILMES_BASE,
+        totalCount: 0,
+        categories: [],
+        error: 'unavailable',
+      });
+    }
+  });
+
+  app.get('/api/iptv/items', async (req, res) => {
+    const rawSource = String(req.query.source ?? 'canais');
+    const source =
+      rawSource === 'filmes' || rawSource === 'series' || rawSource === 'usuario'
+        ? rawSource
+        : 'canais';
+    const category = String(req.query.category ?? 'all').slice(0, 160);
+    const q = String(req.query.q ?? '').trim().toLowerCase();
+    const force = req.query.refresh === '1';
+    try {
+      let items = await getIptvCategoryItems(source, category, force);
+      if (q) {
+        items = items.filter(
+          (item) =>
+            item.name.toLowerCase().includes(q) ||
+            item.group.toLowerCase().includes(q) ||
+            item.id.toLowerCase().includes(q)
+        );
+      }
+      return res.json({ source, category, total: items.length, items });
+    } catch {
+      return res.status(502).json({ source, category, total: 0, items: [], error: 'unavailable' });
+    }
+  });
+
+  app.get('/api/iptv/episodes', async (req, res) => {
+    const letterRaw = String(req.query.letter ?? '#').trim().toUpperCase();
+    const letter = letterRaw.length === 1 && letterRaw >= 'A' && letterRaw <= 'Z' ? letterRaw : '#';
+    const shard = String(req.query.shard ?? '').trim();
+    const title = String(req.query.title ?? '').trim();
+    const force = req.query.refresh === '1';
+    if (!/^\d{1,4}$/.test(shard) || !title) {
+      return res.status(400).json({ error: 'Invalid series shard or title' });
+    }
+    try {
+      const meta = await loadSaimoMeta(force);
+      const blocks = await loadSaimoSeriesShard(letter, shard, meta.bases, force);
+      let rawEps = blocks.get(title.toLowerCase());
+      if (!rawEps) {
+        const targetNorm = saimoNormTitle(title);
+        for (const [k, v] of blocks.entries()) {
+          if (saimoNormTitle(k) === targetNorm) {
+            rawEps = v;
+            break;
+          }
+        }
+      }
+      const best = new Map<string, { season: number; ep: number; lang: string; urls: string[] }>();
+      for (const e of rawEps ?? []) {
+        const k = `${e.season}:${e.ep}`;
+        const prev = best.get(k);
+        if (!prev) {
+          best.set(k, { ...e, urls: [...e.urls] });
+        } else if (prev.lang !== 'DUB' && e.lang === 'DUB') {
+          best.set(k, { ...e, urls: [...e.urls, ...prev.urls.filter((u) => !e.urls.includes(u))] });
+        } else {
+          for (const u of e.urls) {
+            if (!prev.urls.includes(u)) prev.urls.push(u);
+          }
+        }
+      }
+      const sorted = Array.from(best.values()).sort((a, b) => a.season - b.season || a.ep - b.ep);
+      const seasons = Array.from(new Set(sorted.map((e) => e.season))).sort((a, b) => a - b);
+      const logo = meta.posterBySeries.get(title.toLowerCase()) || '';
+      const episodes: IptvChannel[] = sorted.map((e) => {
+        const epTag = `T${String(e.season).padStart(2, '0')}E${String(e.ep).padStart(2, '0')}`;
+        return {
+          name: `${title} — ${epTag}`,
+          url: e.urls[0],
+          fallbackUrls: e.urls.slice(1),
+          mediaType: 'series',
+          logo,
+          group: `Temporada ${e.season}`,
+          id: `Série • ${epTag} • ${e.lang}`,
+          season: e.season,
+          episode: e.ep,
+        };
+      });
+      return res.json({ title, seasons, totalEpisodes: episodes.length, episodes });
+    } catch {
+      return res.status(502).json({ title, seasons: [], totalEpisodes: 0, episodes: [], error: 'unavailable' });
+    }
+  });
+
+  app.post('/api/iptv/user/url', async (req, res) => {
+    const rawUrl = String(req.body?.url ?? '').trim();
+    const rawName = String(req.body?.name ?? '').replace(/[\r\n\t]/g, ' ').trim().slice(0, 80);
+    if (!isSafeExternalUrl(rawUrl)) {
+      return res.status(400).json({ error: 'URL inválida. Use um link http:// ou https:// público.' });
+    }
+    try {
+      const existing = await readUserPlaylistUrls();
+      if (!existing.some((x) => x.url === rawUrl)) {
+        const label = rawName || new URL(rawUrl).hostname || 'Lista IPTV';
+        existing.push({ name: label, url: rawUrl });
+        await writeUserPlaylistUrls(existing);
+      }
+      userIptvCache = null;
+      const loaded = await loadUserIptvAll(true);
+      return res.json({
+        ok: true,
+        totalChannels: loaded.channels.length,
+        userPlaylists: loaded.playlists,
+      });
+    } catch {
+      return res.status(500).json({ error: 'Não foi possível salvar a URL.' });
+    }
+  });
+
+  app.post('/api/iptv/user/upload', async (req, res) => {
+    const rawFilename = String(req.body?.filename ?? 'minha_lista.m3u');
+    const content = typeof req.body?.content === 'string' ? req.body.content : '';
+    if (!content.trim()) {
+      return res.status(400).json({ error: 'Arquivo vazio.' });
+    }
+    if (Buffer.byteLength(content, 'utf8') > 24 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Arquivo excede o limite de 24 MB.' });
+    }
+    const safeName = sanitizeUserFilename(rawFilename);
+    const resolved = path.resolve(USER_IPTV_DIR, safeName);
+    if (!resolved.startsWith(USER_IPTV_DIR + path.sep)) {
+      return res.status(400).json({ error: 'Nome de arquivo inválido.' });
+    }
+    try {
+      await fs.mkdir(USER_IPTV_DIR, { recursive: true });
+      await fs.writeFile(resolved, content, 'utf8');
+      userIptvCache = null;
+      const loaded = await loadUserIptvAll(true);
+      return res.json({
+        ok: true,
+        filename: safeName,
+        totalChannels: loaded.channels.length,
+        userPlaylists: loaded.playlists,
+      });
+    } catch {
+      return res.status(500).json({ error: 'Não foi possível salvar o arquivo.' });
+    }
+  });
+
+  app.delete('/api/iptv/user', async (req, res) => {
+    const kind = req.body?.kind === 'file' ? 'file' : req.body?.kind === 'url' ? 'url' : '';
+    const target = String(req.body?.target ?? '').trim();
+    if (!kind || !target) {
+      return res.status(400).json({ error: 'Parâmetros inválidos.' });
+    }
+    try {
+      if (kind === 'url') {
+        const existing = await readUserPlaylistUrls();
+        await writeUserPlaylistUrls(existing.filter((x) => x.url !== target));
+      } else {
+        const safeName = sanitizeUserFilename(target);
+        const resolved = path.resolve(USER_IPTV_DIR, safeName);
+        if (!resolved.startsWith(USER_IPTV_DIR + path.sep)) {
+          return res.status(400).json({ error: 'Arquivo inválido.' });
+        }
+        await fs.unlink(resolved).catch(() => {});
+      }
+      userIptvCache = null;
+      const loaded = await loadUserIptvAll(true);
+      return res.json({
+        ok: true,
+        totalChannels: loaded.channels.length,
+        userPlaylists: loaded.playlists,
+      });
+    } catch {
+      return res.status(500).json({ error: 'Não foi possível remover a playlist.' });
+    }
+  });
+
   app.get('/api/iptv', async (req, res) => {
     const source = req.query.source === 'filmes' ? 'filmes' : 'canais';
     const force = req.query.refresh === '1';
-    const cached = iptvCache.get(source);
-    if (!force && cached && Date.now() - cached.ts < 10 * 60_000) {
-      return res.json({
-        source,
-        sourceUrl: source === 'filmes' ? SAIMO_FILMES_BASE : SAIMO_CANAIS_BASE,
-        channels: cached.data,
-      });
-    }
-
     try {
       const channels =
         source === 'filmes'
-          ? await fetchSaimoFilmesCatalog()
-          : parseIptvM3u(await fetchTextTimeout(`${SAIMO_CANAIS_BASE}canais.txt`, 15_000), 2048);
-      if (channels.length > 0) {
-        iptvCache.set(source, { ts: Date.now(), data: channels });
-      }
+          ? await getIptvCategoryItems('filmes', 'shelf:Em alta', force)
+          : await loadSaimoCanais(force);
       return res.json({
         source,
         sourceUrl: source === 'filmes' ? SAIMO_FILMES_BASE : SAIMO_CANAIS_BASE,
-        channels: channels.length > 0 ? channels : cached?.data ?? [],
+        channels,
       });
     } catch {
       return res.json({
         source,
         sourceUrl: source === 'filmes' ? SAIMO_FILMES_BASE : SAIMO_CANAIS_BASE,
-        channels: cached?.data ?? [],
+        channels: [],
         stale: true,
       });
     }
@@ -680,7 +1558,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.0' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.2' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -791,7 +1669,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.0' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.2' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1010,10 +1888,26 @@ async function createServer() {
     const controller = new AbortController();
     req.on('close', () => controller.abort());
     try {
+      let hostMeta: StreamHeadersMeta | undefined = streamHeaderMap.get(target);
+      if (!hostMeta) {
+        try {
+          hostMeta = streamHostHeaderMap.get(new URL(target).host);
+        } catch {
+          hostMeta = undefined;
+        }
+      }
       const headers: Record<string, string> = {
-        'User-Agent': 'KPlayer-R36S/2.0.0',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.2',
         Accept: '*/*',
       };
+      if (hostMeta?.referer) {
+        headers.Referer = hostMeta.referer;
+        try {
+          headers.Origin = new URL(hostMeta.referer).origin;
+        } catch {
+          // ignore
+        }
+      }
       if (typeof req.headers.range === 'string' && req.headers.range.startsWith('bytes=')) {
         headers.Range = req.headers.range;
       }
@@ -1032,7 +1926,8 @@ async function createServer() {
       const isPlaylist =
         contentType.toLowerCase().includes('mpegurl') ||
         lowerTarget.includes('.m3u8') ||
-        lowerTarget.includes('master.txt');
+        lowerTarget.includes('master.txt') ||
+        lowerTarget.endsWith('/error.txt');
 
       if (isPlaylist) {
         const text = await upstream.text();
@@ -1098,7 +1993,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.0.0 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.0.2 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

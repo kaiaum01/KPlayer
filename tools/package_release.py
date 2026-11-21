@@ -45,6 +45,7 @@ files = [
     runtime / "lib" / "libvlccore.so.9",
     runtime / "midias" / "README.txt",
     runtime / "iptv" / "README.txt",
+    runtime / "iptv_usuario" / "README.txt",
     runtime / "radios_usuario" / "README.txt",
     runtime / "radios_usuario" / "Radio_Ilha_107_1.pls",
     runtime / "radios_usuario" / "Radio Massa.pls",
@@ -78,6 +79,7 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out
         out.writestr(info, path.read_bytes())
 
     out.write(BASE / "docs" / "INSTALL.md", "README_INSTALL.md")
+    out.write(BASE / "TERMS.md", "TERMS.md")
     out.write(BASE / "LICENSE", "LICENSE")
     out.writestr("kplayer/installed-version.txt", VERSION + "\n")
     out.writestr("kplayer/app-version.txt", VERSION + "\n")

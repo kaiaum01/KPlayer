@@ -29,10 +29,10 @@
   <circle cx="262" cy="126" r="5" fill="#34e877"/>
   <circle cx="88" cy="242" r="4" fill="#1db954"/>
 
-  <!-- Wordmark + v2.0.0 badge -->
+  <!-- Wordmark + v2.0.2 badge -->
   <text x="330" y="152" fill="#ffffff" font-family="DejaVu Sans,Arial,sans-serif" font-size="74" font-weight="700" letter-spacing="1">K PLAYER</text>
   <rect x="722" y="96" width="154" height="58" rx="29" fill="#143220" stroke="#1db954" stroke-width="2"/>
-  <text x="799" y="136" text-anchor="middle" fill="#34e877" font-family="DejaVu Sans,Arial,sans-serif" font-size="30" font-weight="700">v2.0.0</text>
+  <text x="799" y="136" text-anchor="middle" fill="#34e877" font-family="DejaVu Sans,Arial,sans-serif" font-size="30" font-weight="700">v2.0.2</text>
 
   <!-- Tagline -->
   <text x="332" y="206" fill="#c6d1cb" font-family="DejaVu Sans,Arial,sans-serif" font-size="25">Central de Mídia Portátil para R36S · dArkOS · PortMaster</text>

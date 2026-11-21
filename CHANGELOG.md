@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.2 — Transparency Notice, Full 245-Channel TV Catalog & User IPTV
+
+- **In-App Transparency Notice Screen (`Aviso de Transparência`):** Added a dedicated notice screen displayed before entering **IPTV** or **Online Radio** (in both the native R36S C/SDL2 app and web preview), clearly declaring that all IPTV and Radio listings come from public internet aggregators or open sources, that KPlayer hosts no content, and that users always have the right to add their own links/playlists.
+- **Terms of Use & Documentation (`TERMS.md` + 4-Page In-App Terms):** Added bilingual `TERMS.md` and expanded the in-app Terms of Use to 4 pages (PT-BR / EN / ES) explicitly documenting open-source/aggregator data provenance and user freedom to insert custom links (`iptv_usuario/` + on-screen keyboard, `radios_usuario/`).
+- **Full 245-Channel Live TV Catalog:** Fixed live TV loading to parse `catalogo.txt` (244 channels across 11 categories: Esportes, Filmes e Séries, TV Aberta, Variedades, Infantil, Documentários, 24 Horas, Notícias, PPV, Músicas, Séries) merged with `canais.txt` reserve sources (totaling **245 channels** across 12 categories), with automatic multi-mirror fallback and trusted CDN `Referer`/`User-Agent` header forwarding in the proxy.
+- **Version Bump to `2.0.2`:** Updated native `KPLAYER_VERSION`, web UI badges, package metadata, `banner.svg`, release notes, and documentation to `v2.0.2`.
+
 ## v2.0.0 — R36S / dArkOS Major Release
 
 - **Animated Boot Splash Screen:** Added an animated startup splash (spinning vinyl, sonar rings, orbiting glowing sparks, 28-bar equalizer, progress bar with shimmer, and module status chips) that runs on every boot and preloads media, radio, IPTV, and Placar da Bola upfront so internal navigation is instant.
@@ -7,7 +14,7 @@
 - **Placar da Bola (SofaScore-style Match Center):** Replaced the experimental YouTube player with **Placar da Bola**, featuring live/finished/scheduled football matches, category filters (`Todos`, `Ao vivo`, `Brasil`, `Europa`), and a 3-tab Match Detail screen (**Estatísticas** with comparison bars, **Eventos** timeline, and **Escalações**).
 - **Music Player Alignment & Icon Polish:** Re-centered the middle transport controls (previous / white play-pause circle / next) directly above the progress bar and sharpened playback/category icons across native C/SDL2 and the web preview.
 - **Dedicated Fast-Loading Media Folders:** Replaced full-SD recursive scanning with dedicated media-type roots (`/roms/bgmusic` and `/roms2/bgmusic` for audio only; `/roms/videos` and `/roms2/videos` for video only) with capped recursion depth to keep R36S startup fast and lightweight.
-- **IPTV — Canais + Filmes e séries:** Replaced legacy IPTV lists with direct fetching and playback of **Canais** (`https://canais-saimo.pages.dev/`) and **Filmes e séries** (`https://filmes-saimo.pages.dev/`), including live channels, VOD movies, series episodes, posters, and direct libVLC/web playback.
+- **IPTV — Unlimited Category-by-Category (`Canais`, `Filmes`, `Séries`, `IPTV do Usuário`):** Removed all artificial channel/movie/episode caps, added lazy on-demand category loading across ~30,000+ movies and ~13,000+ series (with full season & episode browsing from `https://filmes-saimo.pages.dev/` and live channels from `https://canais-saimo.pages.dev/`), and added **IPTV do Usuário** supporting both an on-screen virtual keyboard for `.m3u`/`.m3u8` URLs and local playlist files in `ports/kplayer/iptv_usuario/`.
 - **Auto-Updater Removed:** Completely removed the experimental startup/settings auto-updater (`updater.py`, exit-42 restart loop, and update option) for faster, cleaner boots on R36S.
 - **dArkOS / EmulationStation Port Artwork & XML Metadata:** Bundled custom 640×480 cover artwork (`images/KPlayer-image.png` and `kplayer/cover.png`), ready-to-use `gamelist.xml`, and mergeable `kplayer/KPlayer-metadata.xml` inside `KPlayer-v2.0.0-R36S.zip`.
 - **Updated Documentation & Screenshots:** Regenerated all 640×480 screenshots, `docs/images/banner.svg`, bilingual READMEs, controls, media docs, and unit tests for v2.0.0.

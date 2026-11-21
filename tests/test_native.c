@@ -113,36 +113,67 @@ int main(void) {
   assert(unlink(iptv_file) == 0);
   assert(unlink(radio_file) == 0 && unlink(radio_asx) == 0 && unlink(radio_m3u) == 0);
   assert(rmdir(radio_dir) == 0);
-  /* Exercise successful and failed Saimo IPTV downloads without network. */
+  /* Exercise unlimited category-by-category IPTV & series workers without network. */
   char test_cwd[PATH_MAX], fetch_dir[] = "/tmp/kplayer-iptv-XXXXXX";
   assert(getcwd(test_cwd, sizeof(test_cwd)) && mkdtemp(fetch_dir));
-  assert(chdir(fetch_dir) == 0 && mkdir("iptv", 0755) == 0);
+  assert(chdir(fetch_dir) == 0 && mkdir("iptv", 0755) == 0 && mkdir("iptv_usuario", 0755) == 0);
   rf = fopen("python3", "w"); assert(rf);
-  fputs("#!/bin/sh\nout=$3\n"
+  fputs("#!/bin/sh\n"
         "if [ \"$KP_TEST_FAIL\" = 1 ]; then exit 1; fi\n"
-        "if [ \"$2\" = filmes ]; then\n"
-        "  printf '#EXTM3U\\n#EXTINF:-1 tvg-id=\"Filme • DUB\" group-title=\"Em alta\",Filme Teste\\nhttps://example.org/movie.mp4\\n' > \"$out\"\n"
-        "else\n"
-        "  printf '#EXTM3U\\n#EXTINF:-1 tvg-id=\"Canal\" group-title=\"ESPORTES\",Canal Teste\\nhttps://example.org/live.m3u8\\n' > \"$out\"\n"
+        "cmd=$2\n"
+        "if [ \"$cmd\" = categories ]; then\n"
+        "  printf 'all\\tTodos os canais\\t2\\ngrp:ESPORTES\\tESPORTES\\t2\\n' > \"$4\"\n"
+        "elif [ \"$cmd\" = list ]; then\n"
+        "  printf '#EXTM3U\\n#EXTINF:-1 tvg-id=\"series:T:1:Série • 2025 • 18 eps\" group-title=\"Séries em alta\",Terra da Máfia\\nkplayer-series://T/1\\n#EXTINF:-1 tvg-id=\"Canal\" group-title=\"ESPORTES\",Canal Teste\\nhttps://example.org/live.m3u8\\n' > \"$5\"\n"
+        "elif [ \"$cmd\" = episodes ]; then\n"
+        "  printf '#EXTM3U\\n#EXTINF:-1 tvg-id=\"Série • T01E01 • DUB\" group-title=\"Temporada 1\",Terra da Máfia — T01E01\\nhttps://example.org/ep1.mp4\\n' > \"$6\"\n"
         "fi\n", rf);
   fclose(rf); assert(chmod("python3", 0755) == 0);
   const char *old_path = getenv("PATH");
   char *saved_path = old_path ? strdup(old_path) : NULL;
   assert(setenv("PATH", fetch_dir, 1) == 0);
   unsetenv("KP_TEST_FAIL");
-  iptv_fetch_worker((void *)(intptr_t)0);
-  assert(iptv_fetch_ok && iptv_read_list(IPTV_CANAIS_CACHE, channels, 0, 4) == 1);
-  assert(!strcmp(channels[0].name, "Canal Teste"));
-  assert(setenv("KP_TEST_FAIL", "1", 1) == 0);
-  iptv_fetch_worker((void *)(intptr_t)0);
-  assert(!iptv_fetch_ok && iptv_read_list(IPTV_CANAIS_CACHE, channels, 0, 4) == 1);
-  unsetenv("KP_TEST_FAIL");
-  iptv_fetch_worker((void *)(intptr_t)1);
-  assert(iptv_fetch_ok && iptv_read_list(IPTV_FILMES_CACHE, channels, 0, 4) == 1);
-  assert(!strcmp(channels[0].name, "Filme Teste"));
+  IptvJobSpec *sp = calloc(1, sizeof(*sp));
+  assert(sp);
+  sp->job = IPTV_JOB_CATS; sp->source = 0;
+  snprintf(sp->out_path, sizeof(sp->out_path), "iptv/.cats-canais.tsv");
+  iptv_job_worker(sp);
+  assert(iptv_fetch_ok && iptv_read_categories_tsv("iptv/.cats-canais.tsv") == 2);
+  assert(!strcmp(iptv_cats[1].id, "grp:ESPORTES") && iptv_cats[1].count == 2);
+  sp = calloc(1, sizeof(*sp));
+  assert(sp);
+  sp->job = IPTV_JOB_ITEMS; sp->source = 2;
+  snprintf(sp->arg1, sizeof(sp->arg1), "shelf:Séries em alta");
+  snprintf(sp->out_path, sizeof(sp->out_path), "iptv/.items-current.m3u8");
+  iptv_job_worker(sp);
+  assert(iptv_fetch_ok);
+  int dyn_n = iptv_read_list_dyn("iptv/.items-current.m3u8", &iptv_channels, &iptv_cap);
+  assert(dyn_n == 2 && !strcmp(iptv_channels[0].name, "Terra da Máfia"));
+  char sltr[16] = "", ssh[32] = "";
+  assert(iptv_parse_series_id(&iptv_channels[0], sltr, sizeof(sltr), ssh, sizeof(ssh)));
+  assert(!strcmp(sltr, "T") && !strcmp(ssh, "1"));
+  sp = calloc(1, sizeof(*sp));
+  assert(sp);
+  sp->job = IPTV_JOB_EPISODES; sp->source = 2;
+  snprintf(sp->arg1, sizeof(sp->arg1), "T");
+  snprintf(sp->arg2, sizeof(sp->arg2), "1");
+  snprintf(sp->arg3, sizeof(sp->arg3), "Terra da Máfia");
+  snprintf(sp->out_path, sizeof(sp->out_path), "iptv/.episodes-current.m3u8");
+  iptv_job_worker(sp);
+  assert(iptv_fetch_ok);
+  int ep_n = iptv_read_list_dyn("iptv/.episodes-current.m3u8", &iptv_episodes, &iptv_ep_cap);
+  assert(ep_n == 1 && !strcmp(iptv_episodes[0].group, "Temporada 1"));
+  snprintf(iptv_kb_url, sizeof(iptv_kb_url), "https://");
+  iptv_kb_append("tv.m3u8");
+  assert(!strcmp(iptv_kb_url, "https://tv.m3u8"));
+  iptv_kb_backspace();
+  assert(!strcmp(iptv_kb_url, "https://tv.m3u"));
   if (saved_path) { assert(setenv("PATH", saved_path, 1) == 0); free(saved_path); }
   else unsetenv("PATH");
-  assert(unlink(IPTV_CANAIS_CACHE) == 0 && unlink(IPTV_FILMES_CACHE) == 0 && rmdir("iptv") == 0 && unlink("python3") == 0);
+  unlink("iptv/.cats-canais.tsv");
+  unlink("iptv/.items-current.m3u8");
+  unlink("iptv/.episodes-current.m3u8");
+  assert(rmdir("iptv") == 0 && rmdir("iptv_usuario") == 0 && unlink("python3") == 0);
   assert(chdir(test_cwd) == 0 && rmdir(fetch_dir) == 0);
   char original_dir[PATH_MAX], theme_dir[] = "/tmp/kplayer-theme-XXXXXX";
   assert(getcwd(original_dir, sizeof(original_dir)) && mkdtemp(theme_dir));

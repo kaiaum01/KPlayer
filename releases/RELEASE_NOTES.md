@@ -1,79 +1,48 @@
-# KPlayer v2.0.0 — R36S / dArkOS
+# KPlayer v2.0.2 — R36S / dArkOS
 
 Central de mídia portátil para **R36S (dArkOS / PortMaster)** em C + SDL2 + libVLC (640×480, ARM64).
 
 ---
 
-## Novidades da v2.0.0
+## Novidades da v2.0.2
 
-### Tela de Boot Animada (Splash Screen)
-- Nova tela de carregamento animada exibida toda vez que o KPlayer liga, com vinil giratório, anéis de sonar, faíscas orbitais, equalizador de 28 barras, barra de progresso com brilho e chips de status.
-- Pré-carrega a biblioteca de mídias, rádios, IPTV e jogos do Placar da Bola na abertura, removendo telas de carregamento lentas ao navegar dentro do app.
+### Aviso de Transparência e Termos de Uso Atualizados
+- **Tela de Aviso de Transparência antes de entrar em Rádio Online ou IPTV:** deixa explícito ao usuário que todos os dados de IPTV e Rádio vêm de **agregadores públicos da internet ou fontes abertas**, que o KPlayer é apenas um reprodutor (não hospeda conteúdo) e que **você sempre tem o direito de colocar seu próprio link ou playlist**.
+- **Termos de Uso expandidos (4 páginas no player + `TERMS.md`):** disponíveis em Português (BR), English e Español diretamente no aviso (`Y`), na tela de Boas-Vindas e em **Opções → Termos de uso**.
 
-### Tela de Boas-Vindas Slim e Animada
-- Visual enxuto e animado alinhado à tela de boot, sem os 3 blocos gigantes antigos, sem a caixa `B Iniciar KPlayer` e sem barra inferior.
-- **Seletor unificado de idioma** (`Português (BR)`, `English`, `Español`) e **seletor de cores do tema em bolinhas** com troca ao vivo dos 7 temas.
+### IPTV — 245 Canais + Filmes e Séries Sem Limites + IPTV do Usuário
+- **Lista totalmente desbloqueada** (sem limite de canais, filmes, séries ou episódios), com **carregamento sob demanda categoria por categoria** em 4 abas:
+  - **Canais** (`https://canais-saimo.pages.dev/`): catálogo completo (`catalogo.txt` + reservas `canais.txt`) com **245 canais** em **12 categorias** (*Esportes, Filmes e Séries, TV Aberta, Variedades, Infantil, Documentários, 24 Horas, Notícias, PPV, Músicas, Séries* e *Todos*), múltiplas fontes de fallback e troca rápida por `L1`/`R1`.
+  - **Filmes** (`https://filmes-saimo.pages.dev/`): catálogo completo (~30.000+ filmes) por destaques, gêneros e índice A–Z.
+  - **Séries** (`https://filmes-saimo.pages.dev/`): catálogo completo (~13.000+ séries) com navegação por categoria, filtro de temporada e **todos os episódios** sob demanda.
+  - **IPTV do Usuário**: adicione seus próprios links `.m3u`/`.m3u8` usando o **teclado virtual na tela** (salvo em `kplayer/iptv_usuario/playlists.txt`) ou copie arquivos `.m3u`/`.m3u8`/`.txt` diretamente na pasta `kplayer/iptv_usuario/`.
 
-### Placar da Bola (estilo SofaScore)
-- Substituiu o player experimental de YouTube pelo **Placar da Bola**, com jogos ao vivo, encerrados e futuros (**Brasileirão, Libertadores, Champions League, Premier League** e outras ligas).
-- Filtros rápidos (`Todos`, `Ao vivo`, `Brasil`, `Europa`) e **Central da Partida** completa com 3 abas:
-  - **Estatísticas:** posse de bola, finalizações, chutes no gol, escanteios, precisão de passe e faltas com barras comparativas.
-  - **Eventos:** gols, cartões e substituições minuto a minuto.
-  - **Escalações:** titulares e formações das equipes.
-
-### Player de Música Revisado
-- Barra central de controles (anterior / play-pause / próxima) perfeitamente centralizada acima da barra de progresso.
-- Ícones ajustados e mais nítidos, suporte completo a capas embutidas/externas, metadados técnicos e letras sincronizadas (`.lrc`).
-
-### Pastas Dedicadas (Carregamento Leve e Rápido)
-Para não sobrecarregar o R36S varrendo pastas de ROMs, BIOS e saves, o KPlayer v2.0.0 carrega **exclusivamente**:
-- **Músicas (somente áudio):** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
-- **Vídeos (somente vídeo):** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
-
-### IPTV — Canais + Filmes e séries (sem auto-atualizador)
-- Sistema de atualização automática removido completamente para um boot mais limpo e rápido.
-- IPTV atualizado com leitura e reprodução direta das duas listas:
-  - **Canais:** `https://canais-saimo.pages.dev/`
-  - **Filmes e séries:** `https://filmes-saimo.pages.dev/` (filmes e episódios de séries com capa e reprodução direta no player).
-
-### Capa do Port e Metadados XML para dArkOS / EmulationStation
-O pacote **`KPlayer-v2.0.0-R36S.zip`** já traz tudo pronto para o KPlayer aparecer bonito no menu **Ports** do R36S:
-- `images/KPlayer-image.png` (640×480 PNG — também em `kplayer/cover.png`)
-- `gamelist.xml` pronto para copiar direto para `/roms/ports/`
-- `kplayer/KPlayer-metadata.xml` (bloco `<game>...</game>` avulso para colar no seu `gamelist.xml` caso já tenha outros ports)
+### Tela de Boot Animada, Boas-Vindas Slim, Placar da Bola e Pastas Dedicadas
+- **Boot animado e Boas-Vindas Slim:** vinil giratório, anéis de sonar, equalizador, seletor de idioma (PT-BR / EN / ES) e 7 temas em bolinhas ao vivo.
+- **Placar da Bola (estilo SofaScore):** jogos ao vivo, encerrados e futuros com Estatísticas, Eventos e Escalações.
+- **Pastas Dedicadas (carregamento rápido):** `/roms/bgmusic`, `/roms2/bgmusic` (músicas + `.lrc`) e `/roms/videos`, `/roms2/videos` (vídeos).
+- **Capa do Port e XML para dArkOS / EmulationStation:** inclui `images/KPlayer-image.png`, `gamelist.xml` e `kplayer/KPlayer-metadata.xml`.
 
 ---
 
 ## Como Instalar no R36S
 
-1. Baixe **`KPlayer-v2.0.0-R36S.zip`** nos anexos desta release.
+1. Baixe **`KPlayer-v2.0.2-R36S.zip`** nos anexos desta release.
 2. Extraia e copie para `/roms/ports/` (ou `/roms2/ports/` no SD2):
    - `KPlayer.sh`
    - pasta `kplayer/`
    - `images/KPlayer-image.png`
    - `gamelist.xml` *(ou mescle `kplayer/KPlayer-metadata.xml` no seu `gamelist.xml` atual)*
-3. Coloque suas músicas em `/roms/bgmusic` (ou `/roms2/bgmusic`) e vídeos em `/roms/videos` (ou `/roms2/videos`).
-4. Abra **Ports → KPlayer v2.0.0** no R36S.
+3. Coloque suas músicas em `/roms/bgmusic` (ou `/roms2/bgmusic`), vídeos em `/roms/videos` (ou `/roms2/videos`), suas playlists IPTV em `ports/kplayer/iptv_usuario/` e suas rádios em `ports/kplayer/radios_usuario/`.
+4. Abra **Ports → KPlayer v2.0.2** no R36S.
 
-> **Importante:** Faça backup de `settings.cfg`, `preferences.cfg`, `favorites.cfg` e `radio-favorites.tsv` antes de atualizar uma instalação anterior.
-
----
-
-## Verificação de Integridade (SHA-256)
-
-| Arquivo | Tamanho | SHA-256 |
-| :--- | :---: | :--- |
-| `KPlayer-v2.0.0-R36S.zip` | 6.7 MB (`7.006.362 bytes`) | `332eb575876f27f1cc50537119ac185c62b13ea8b543dc8b9dd94f929f585ed6` |
+> **Importante:** Faça backup de `settings.cfg`, `preferences.cfg`, `favorites.cfg` e `radio-favorites.tsv` antes de atualizar uma instalação anterior. Consulte os termos e transparência completos em **[TERMS.md](../TERMS.md)**.
 
 ---
 
 ## English Summary
 
-**KPlayer v2.0.0 for R36S / dArkOS (PortMaster):**
-- Animated boot splash screen with upfront library, radio, IPTV, and football preloading.
-- Redesigned slim animated welcome screen with unified language capsule and live 7-color theme dots.
-- **Placar da Bola** (SofaScore-style live football scores, match stats, minute-by-minute events, and lineups).
-- Re-centered music transport bar and sharpened icons.
-- **IPTV (`Canais` & `Filmes e séries`):** Direct fetching and playback from `https://canais-saimo.pages.dev/` and `https://filmes-saimo.pages.dev/`; auto-updater completely removed.
-- Dedicated fast-loading media folders: `/roms/bgmusic` & `/roms2/bgmusic` (audio only), `/roms/videos` & `/roms2/videos` (video only).
-- Bundled 640×480 dArkOS port cover (`images/KPlayer-image.png`), `gamelist.xml`, and mergeable `kplayer/KPlayer-metadata.xml`.
+**KPlayer v2.0.2 for R36S / dArkOS (PortMaster):**
+- **Transparency Notice & Updated Terms (`TERMS.md`):** Displays an in-app Transparency Notice before entering **Online Radio** or **IPTV**, clearly stating that all IPTV and Radio listings come from public internet aggregators or open sources, KPlayer hosts no content, and every user has the right to add their own links/playlists.
+- **Unlocked Category-by-Category IPTV (245 TV Channels + Movies + Series + User IPTV):** Full live TV catalog (`catalogo.txt` + `canais.txt` reserves = 245 channels in 12 categories), ~30,000+ movies and ~13,000+ series with all seasons and episodes on demand, plus **User IPTV** via on-screen virtual keyboard or `ports/kplayer/iptv_usuario/`.
+- **Animated Boot Splash, Slim Welcome Screen, Placar da Bola Match Center, Dedicated SD1/SD2 Media Folders, and dArkOS Cover/XML Metadata.**
