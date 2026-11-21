@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import os
+import re
 import sys
 import urllib.parse
 import urllib.request
@@ -93,6 +94,11 @@ def sanitize_title(val: str) -> str:
     return val.replace("\r", " ").replace("\n", " ").strip()
 
 
+def norm_title(val: str) -> str:
+    """Título normalizado (sem ano final) para casar destaque com catálogo."""
+    return re.sub(r"\s*\(\d{4}\)\s*$", "", val.strip().lower())
+
+
 def fetch_canais(out_path: Path) -> bool:
     text = fetch_text(CANAIS_BASE + "canais.txt", timeout=15)
     if "#EXTINF" not in text:
@@ -106,19 +112,22 @@ def fetch_canais(out_path: Path) -> bool:
 def fetch_filmes(out_path: Path) -> bool:
     indice_text = fetch_text(FILMES_BASE + "indice.txt", timeout=15)
     bases: dict[str, str] = {}
+    letters: list[str] = []
     for line in indice_text.splitlines():
         line = line.strip()
         if line.startswith("base:"):
             parts = line[5:].strip().split(None, 1)
             if len(parts) == 2:
                 bases[parts[0].strip()] = parts[1].strip()
+            continue
+        cols = line.split("\t")
+        if len(cols) == 4 and len(cols[0].strip()) == 1 and cols[1].strip().isdigit():
+            letters.append(cols[0].strip())
 
     destaques_text = fetch_text(FILMES_BASE + "destaques.txt", timeout=15)
     capa_base = "https://image.tmdb.org/t/p/w342"
     shelf = "Em alta"
     featured: list[dict[str, str]] = []
-    movie_letters: set[str] = set()
-    series_letters: set[str] = set()
 
     for raw in destaques_text.splitlines():
         line = raw.strip()
@@ -148,69 +157,74 @@ def fetch_filmes(out_path: Path) -> bool:
                     "group": shelf,
                 }
             )
-            if kind == "f":
-                movie_letters.add(letter)
-            else:
-                series_letters.add(letter)
 
-    # Fetch required movie & series index files concurrently
+    # Fallback if the letter index could not be parsed.
+    if not letters:
+        letters = sorted({item["letter"] for item in featured})
+
+    # Full movie catalog (every letter), keeping the whole ordered list.
     movie_urls: dict[tuple[str, str], tuple[str, str]] = {}
-    series_shards: dict[tuple[str, str], str] = {}
-    extra_movies: list[tuple[str, str, str]] = []
+    movie_urls_norm: dict[tuple[str, str], tuple[str, str]] = {}
+    movie_catalog: list[tuple[str, str, str]] = []  # (title, url, lang)
 
     def load_movie_letter(ltr: str):
         slug = letter_slug(ltr)
         txt = fetch_text(f"{FILMES_BASE}filmes-{slug}.txt", timeout=15)
         found: dict[str, tuple[str, str]] = {}
-        extras: list[tuple[str, str, str]] = []
+        order: list[str] = []
         for raw in txt.splitlines():
             cols = raw.rstrip("\r\n").split("\t")
             if len(cols) < 2:
                 continue
             t = cols[0].strip()
             u, lang = parse_movie_line_urls(cols[1:], bases)
-            if u:
+            if u and t.lower() not in found:
                 found[t.lower()] = (u, lang)
-                if len(extras) < 25:
-                    extras.append((t, u, lang))
-        return ("m", ltr, found, extras)
+                order.append(t)
+        return ("m", ltr, found, order)
+
+    # Full series catalog (every letter): title -> shard id.
+    series_shards: dict[tuple[str, str], str] = {}
+    series_order: list[tuple[str, str]] = []  # (letter, title)
 
     def load_series_letter(ltr: str):
         slug = letter_slug(ltr)
         txt = fetch_text(f"{FILMES_BASE}series-{slug}.txt", timeout=15)
         found: dict[str, str] = {}
+        order: list[str] = []
         for raw in txt.splitlines():
             cols = raw.rstrip("\r\n").split("\t")
             if len(cols) >= 3:
-                found[cols[0].strip().lower()] = cols[2].strip()
-        return ("s", ltr, found, None)
+                t = cols[0].strip()
+                if t.lower() not in found:
+                    found[t.lower()] = cols[2].strip()
+                    order.append(t)
+        return ("s", ltr, found, order)
 
     with ThreadPoolExecutor(max_workers=8) as ex:
-        futs = [ex.submit(load_movie_letter, ltr) for ltr in sorted(movie_letters)]
-        futs += [ex.submit(load_series_letter, ltr) for ltr in sorted(series_letters)]
+        futs = [ex.submit(load_movie_letter, ltr) for ltr in letters]
+        futs += [ex.submit(load_series_letter, ltr) for ltr in letters]
         for fut in as_completed(futs):
             try:
-                kind, ltr, data, extras = fut.result()
+                kind, ltr, data, order = fut.result()
                 if kind == "m":
                     for k, v in data.items():
                         movie_urls[(ltr, k)] = v
-                    if extras:
-                        extra_movies.extend(extras)
+                    for t in order:
+                        movie_catalog.append((t, *data[t.lower()]))
+                        movie_urls_norm.setdefault((ltr, norm_title(t)), data[t.lower()])
                 else:
                     for k, v in data.items():
                         series_shards[(ltr, k)] = v
+                    for t in order:
+                        series_order.append((ltr, t))
             except Exception:
                 pass
 
-    # Identify unique series shard files needed for featured series
-    needed_shards: set[tuple[str, str]] = set()
-    for item in featured:
-        if item["kind"] == "s":
-            shard = series_shards.get((item["letter"], item["title"].lower()))
-            if shard is not None:
-                needed_shards.add((item["letter"], shard))
+    movie_catalog.sort(key=lambda x: x[0].lower())
+    series_order.sort(key=lambda x: x[1].lower())
 
-    # Map (letter, lower_series_title) -> list of (season, ep, lang, url)
+    # Fetch every series shard needed by the full catalog.
     series_episodes: dict[tuple[str, str], list[tuple[str, str, str, str]]] = {}
 
     def load_shard(ltr: str, shard: str):
@@ -234,12 +248,16 @@ def fetch_filmes(out_path: Path) -> bool:
                 u = pick_best_url(urls_raw.split(","), bases)
                 if u:
                     eps = parsed[cur_title]
-                    if len(eps) < 6:  # keep up to 6 episodes per featured series for R36S list clarity
+                    if len(eps) < 6:  # up to 6 episodes per series for a manageable list
                         eps.append((sea, ep, lang, u))
         return (ltr, parsed)
 
+    needed_shards = sorted(
+        {(ltr, series_shards[(ltr, t.lower())]) for (ltr, t) in series_order
+         if (ltr, t.lower()) in series_shards}
+    )
     with ThreadPoolExecutor(max_workers=8) as ex:
-        futs = [ex.submit(load_shard, ltr, sh) for ltr, sh in sorted(needed_shards)]
+        futs = [ex.submit(load_shard, ltr, sh) for ltr, sh in needed_shards]
         for fut in as_completed(futs):
             try:
                 ltr, parsed = fut.result()
@@ -252,12 +270,15 @@ def fetch_filmes(out_path: Path) -> bool:
     seen_keys: set[str] = set()
     count = 0
 
+    # 1) Featured items keep their shelf categories and posters.
     for item in featured:
         if count >= MAX_ITEMS:
             break
         key_l = item["title"].lower()
         if item["kind"] == "f":
             hit = movie_urls.get((item["letter"], key_l))
+            if not hit:
+                hit = movie_urls_norm.get((item["letter"], norm_title(item["title"])))
             if not hit:
                 continue
             url, lang = hit
@@ -274,8 +295,6 @@ def fetch_filmes(out_path: Path) -> bool:
             count += 1
         else:
             eps = series_episodes.get((item["letter"], key_l), [])
-            if not eps:
-                continue
             for sea, ep, lang, url in eps:
                 if count >= MAX_ITEMS:
                     break
@@ -284,6 +303,7 @@ def fetch_filmes(out_path: Path) -> bool:
                 if dedup in seen_keys:
                     continue
                 seen_keys.add(dedup)
+                seen_keys.add(f"s:{key_l}")
                 tvg_id = f"Série • {ep_tag} • {lang}"
                 lines.append(
                     f'#EXTINF:-1 tvg-id="{sanitize_attr(tvg_id)}" tvg-logo="{sanitize_attr(item["logo"])}" '
@@ -292,9 +312,10 @@ def fetch_filmes(out_path: Path) -> bool:
                 lines.append(url)
                 count += 1
 
-    # Add additional catalog movies so the list is rich even if a shelf is sparse
-    for title, url, lang in extra_movies:
-        if count >= MAX_ITEMS:
+    # 2) Full movie catalog under the "Filmes" category.
+    movie_cap = 1000
+    for title, url, lang in movie_catalog:
+        if count >= MAX_ITEMS or movie_cap <= 0:
             break
         dedup = f"f:{title.lower()}"
         if dedup in seen_keys:
@@ -302,10 +323,33 @@ def fetch_filmes(out_path: Path) -> bool:
         seen_keys.add(dedup)
         lines.append(
             f'#EXTINF:-1 tvg-id="{sanitize_attr("Filme • " + lang)}" tvg-logo="" '
-            f'group-title="Catálogo de Filmes",{sanitize_title(title)}'
+            f'group-title="Filmes",{sanitize_title(title)}'
         )
         lines.append(url)
         count += 1
+        movie_cap -= 1
+
+    # 3) Full series catalog under the "Séries" category (first episode each).
+    series_cap = 1000
+    for ltr, title in series_order:
+        if count >= MAX_ITEMS or series_cap <= 0:
+            break
+        key_l = title.lower()
+        if f"s:{key_l}" in seen_keys:
+            continue
+        eps = series_episodes.get((ltr, key_l), [])
+        if not eps:
+            continue
+        sea, ep, lang, url = eps[0]
+        seen_keys.add(f"s:{key_l}")
+        ep_tag = f"T{sea}E{ep}"
+        lines.append(
+            f'#EXTINF:-1 tvg-id="{sanitize_attr("Série • " + ep_tag + " • " + lang)}" tvg-logo="" '
+            f'group-title="Séries",{sanitize_title(title)} ({ep_tag})'
+        )
+        lines.append(url)
+        count += 1
+        series_cap -= 1
 
     if count == 0:
         return False
