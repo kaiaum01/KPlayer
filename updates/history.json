@@ -5,15 +5,16 @@
     {
       "version": "2.0.7",
       "releaseTag": "v2.0.7",
-      "releasedAt": "2026-11-22T22:20:00Z",
+      "releasedAt": "2026-11-22T22:25:56Z",
       "r36s": "updates/v2.0.7/KPlayer-v2.0.7-R36S.zip",
-      "sha256": "",
+      "sha256": "c32bf5da4303d15be49bc19601c8f157f33f842db97d5184da7fda844c2f8e0d",
       "notes": [
-        "Tela de Changelog pós-atualização exibida automaticamente uma única vez a cada nova versão antes de abrir a tela inicial",
-        "Protetor de tela com visualizadores (30 segundos) ativado por padrão em Músicas e Rádio",
-        "Saudação climática na tela inicial (no lugar de 'Seu som. Sua tela.') + mensagens descontraídas aleatórias para cada momento do clima",
-        "Texto padrão ('Seu som. Sua tela.') preservado automaticamente quando o Clima estiver desativado",
-        "Barra de carregamento em tempo real (0%–100%) no atualizador do player e empacotamento automático de changelog.txt"
+        "Changelog Pós-Atualização (Exibido Apenas Uma Vez):",
+        "Toda vez que o KPlayer for atualizado para uma nova versão, uma tela dedicada \"Novidades da versão vX.Y.Z\" aparece automaticamente antes da tela inicial resumindo o que mudou.",
+        "Ao pressionar B para continuar, a versão vista é salva localmente (settings.cfg) para não aparecer novamente até o próximo update — e cada novo pacote já embute automaticamente o c",
+        "Visualizador / Protetor de Tela em 30 Segundos Ativado por Padrão:",
+        "O protetor de tela com os 5 visualizadores inspirados no Windows Media Player (Barras e Ondas, Alquimia, Bateria / Pulso, Plenitude e Ambience / Cosmos), relógio/data/clima e letra",
+        "Pode ser ajustado ou desativado a qualquer momento em SELECT → Protetor de tela (Desativado, 30 segundos, 60 segundos, 2 minutos, 5 minutos)."
       ]
     },
     {

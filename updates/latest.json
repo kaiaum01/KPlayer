@@ -5,9 +5,9 @@
   "channel": "stable",
   "platform": "r36s",
   "releaseTag": "v2.0.7",
-  "releasePageUrl": "",
-  "releasedAt": "2026-11-22T22:20:00Z",
-  "repository": "",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.0.7",
+  "releasedAt": "2026-11-22T22:25:56Z",
+  "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
   "preserveUserPaths": [
@@ -23,20 +23,21 @@
     "resume.cfg"
   ],
   "notes": [
-    "Changelog pós-atualização: toda vez que o KPlayer atualizar de versão, exibe uma tela com as novidades apenas uma vez antes de iniciar",
-    "Protetor de tela com visualizadores estilo Windows Media Player ativado por padrão em 30 segundos ao ouvir Músicas ou Rádio Online",
-    "Tela inicial inteligente com o Clima: substitui 'Seu som. Sua tela.' por uma saudação do clima atual + mensagem descontraída aleatória para cada momento do tempo",
-    "Quando o Clima estiver desativado, a tela inicial mantém exatamente o texto padrão ('Seu som. Sua tela.')",
-    "Barra de carregamento ao vivo (0%–100%) no atualizador do player durante verificação, download e instalação sem perda de dados"
+    "Changelog Pós-Atualização (Exibido Apenas Uma Vez):",
+    "Toda vez que o KPlayer for atualizado para uma nova versão, uma tela dedicada \"Novidades da versão vX.Y.Z\" aparece automaticamente antes da tela inicial resumindo o que mudou.",
+    "Ao pressionar B para continuar, a versão vista é salva localmente (settings.cfg) para não aparecer novamente até o próximo update — e cada novo pacote já embute automaticamente o c",
+    "Visualizador / Protetor de Tela em 30 Segundos Ativado por Padrão:",
+    "O protetor de tela com os 5 visualizadores inspirados no Windows Media Player (Barras e Ondas, Alquimia, Bateria / Pulso, Plenitude e Ambience / Cosmos), relógio/data/clima e letra",
+    "Pode ser ajustado ou desativado a qualquer momento em SELECT → Protetor de tela (Desativado, 30 segundos, 60 segundos, 2 minutos, 5 minutos)."
   ],
   "r36s": {
     "filename": "KPlayer-v2.0.7-R36S.zip",
     "path": "updates/v2.0.7/KPlayer-v2.0.7-R36S.zip",
-    "url": "",
-    "releaseUrl": "",
-    "sha256Url": "",
-    "sha256": "",
-    "sizeBytes": 0
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.7/KPlayer-v2.0.7-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.0.7/KPlayer-v2.0.7-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.7/KPlayer-v2.0.7-R36S.zip.sha256",
+    "sha256": "c32bf5da4303d15be49bc19601c8f157f33f842db97d5184da7fda844c2f8e0d",
+    "sizeBytes": 9183392
   },
   "web": {
     "version": "2.0.7",
