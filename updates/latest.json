@@ -5,13 +5,12 @@
   "channel": "stable",
   "platform": "r36s",
   "releaseTag": "v2.0.8",
-  "releasePageUrl": "",
-  "releasedAt": "2026-11-22T23:05:00Z",
-  "repository": "",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.0.8",
+  "releasedAt": "2026-11-22T23:16:05Z",
+  "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
   "preserveUserPaths": [
-    "gamelist.xml",
     "iptv_usuario/",
     "radios_usuario/",
     "midias/",
@@ -24,20 +23,21 @@
     "resume.cfg"
   ],
   "notes": [
-    "Pacote completo de artes de scraper (Capa 4:3, Boxart 3:4, Marquee 16:9 e Fanart 16:9) salvo dentro da pasta kplayer/scraper/",
-    "Inserção automática e não destrutiva de metadados completos no gamelist.xml de /roms/ports e /roms2/ports sem apagar outros jogos/ports",
-    "Criação automática de gamelist.xml caso ainda não exista na pasta ports, mantendo também cópia interna em kplayer/",
-    "Nome da versão atualizado automaticamente no arquivo lançador .sh (KPlayer v2.0.8.sh) a cada atualização, removendo atalhos duplicados antigos",
-    "Changelog pós-atualização exibido uma vez, visualizador de 30s ativado por padrão e saudação climática inteligente na tela inicial"
+    "Pacote Completo de Imagens de Scraper dentro de kplayer/scraper/:",
+    "Capa Principal (<image>): kplayer/scraper/kplayer-image.png (640×480)",
+    "Boxart / Miniatura (<thumbnail>): kplayer/scraper/kplayer-thumb.png (480×640)",
+    "Marquee / Logo (<marquee>): kplayer/scraper/kplayer-marquee.png (640×360)",
+    "Fanart / Papel de Parede (<fanart>): kplayer/scraper/kplayer-fanart.png (854×480)",
+    "Todas as artes e metadados (KPlayer-metadata.xml e gamelist.xml interno) ficam organizados dentro da pasta kplayer/."
   ],
   "r36s": {
     "filename": "KPlayer-v2.0.8-R36S.zip",
     "path": "updates/v2.0.8/KPlayer-v2.0.8-R36S.zip",
-    "url": "",
-    "releaseUrl": "",
-    "sha256Url": "",
-    "sha256": "",
-    "sizeBytes": 0
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.8/KPlayer-v2.0.8-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.0.8/KPlayer-v2.0.8-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.8/KPlayer-v2.0.8-R36S.zip.sha256",
+    "sha256": "c6ed598189af18975af3111fe6321733ee386d0463e16613f7a882574bfb8223",
+    "sizeBytes": 10415944
   },
   "web": {
     "version": "2.0.8",
