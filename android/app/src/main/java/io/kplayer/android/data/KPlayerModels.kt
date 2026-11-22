@@ -73,6 +73,17 @@ data class IptvCategory(
     val count: Int,
 )
 
+data class EpgProgram(
+    val title: String,
+    val desc: String = "",
+    val category: String = "",
+    val startMs: Long = 0L,
+    val stopMs: Long = 0L,
+    val startLabel: String = "",
+    val stopLabel: String = "",
+    val progressPct: Int = 0,
+)
+
 data class IptvChannel(
     val id: String,
     val name: String,
@@ -87,6 +98,8 @@ data class IptvChannel(
     val seriesShard: String = "",
     val season: Int = 0,
     val episode: Int = 0,
+    val epgNow: EpgProgram? = null,
+    val epgNext: EpgProgram? = null,
 )
 
 data class FootballMatch(
@@ -126,6 +139,15 @@ data class MatchDetail(
 data class TermsPage(
     val title: String,
     val body: String,
+)
+
+data class AppUpdateInfo(
+    val currentVersion: String,
+    val latestVersion: String,
+    val updateAvailable: Boolean,
+    val apkUrl: String = "",
+    val sha256: String = "",
+    val notes: List<String> = emptyList(),
 )
 
 val KPLAYER_TERMS_PAGES = listOf(

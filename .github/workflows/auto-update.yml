@@ -1,0 +1,125 @@
+name: KPlayer - Publicar Auto-Update (pasta updates/)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'source/**'
+      - 'android/**'
+      - 'ports/**'
+      - 'src/**'
+      - 'server.ts'
+      - 'package.json'
+      - 'releases/RELEASE_NOTES.md'
+    paths-ignore:
+      - 'updates/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build-r36s-update:
+    name: Compilar R36S para canal updates/
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Compilar Golazo para R36S
+        env:
+          GOPATH: ${{ runner.temp }}/golazo-gopath
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go install github.com/0xjuanma/golazo@latest
+          cp "$GOPATH/bin/linux_arm64/golazo" ports/kplayer/golazo
+      - name: Instalar compilador ARM64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config patch xz-utils make flex bison file
+      - name: Cachear núcleo libVLC ARM64
+        uses: actions/cache@v4
+        with:
+          path: ports/kplayer/lib
+          key: libvlc-3.0.23-arm64-${{ hashFiles('patches/kplayer-vlc.patch', 'tools/build_libvlc_arm64.sh') }}
+      - name: Compilar núcleo libVLC ARM64
+        run: bash tools/build_libvlc_arm64.sh
+      - name: Compilar KPlayer ARM64
+        run: |
+          aarch64-linux-gnu-gcc -O2 -std=gnu11 -Wall -Wextra -Werror \
+            -I source/include source/kplayer.c -o ports/kplayer/kplayer \
+            -ldl -lpthread -lm
+      - name: Gravar repositório do canal de auto-update
+        run: echo "${{ github.repository }}" > ports/kplayer/update-repo.txt
+      - name: Empacotar R36S
+        run: python3 tools/package_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KPlayer-Update-R36S
+          path: |
+            releases/KPlayer-v*-R36S.zip
+            releases/KPlayer-v*-R36S.zip.sha256
+
+  build-android-update:
+    name: Compilar Android APK para canal updates/
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Compilar APK Release
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --stacktrace
+      - name: Empacotar APK e SHA-256
+        run: |
+          mkdir -p releases
+          VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
+          cp android/app/build/outputs/apk/release/app-release.apk "releases/KPlayer-v${VERSION}-Android.apk"
+          (cd releases && sha256sum "KPlayer-v${VERSION}-Android.apk" > "KPlayer-v${VERSION}-Android.apk.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KPlayer-Update-Android
+          path: |
+            releases/KPlayer-v*-Android.apk
+            releases/KPlayer-v*-Android.apk.sha256
+
+  publish-updates-folder:
+    name: Atualizar pasta updates/ no GitHub
+    needs: [build-r36s-update, build-android-update]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: KPlayer-Update-R36S
+          path: releases
+      - uses: actions/download-artifact@v4
+        with:
+          name: KPlayer-Update-Android
+          path: releases
+      - name: Publicar manifesto e pacotes na pasta updates/
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          KPLAYER_UPDATE_BRANCH: main
+        run: python3 tools/publish_update_manifest.py
+      - name: Commitar pasta updates/ automaticamente
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/
+          if git diff --cached --quiet; then
+            echo "Sem alterações na pasta updates/."
+            exit 0
+          fi
+          VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
+          git commit -m "chore(updates): publicar auto-update v${VERSION} [skip ci]"
+          git push origin HEAD:main

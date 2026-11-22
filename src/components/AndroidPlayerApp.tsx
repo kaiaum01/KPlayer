@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Hls from 'hls.js';
 import {
   ArrowLeft,
+  CalendarClock,
   ChevronRight,
   Disc3,
+  Download,
   Film,
   FolderOpen,
   Heart,
@@ -36,6 +38,8 @@ import {
 import { KP_THEMES, type KpTheme } from '../themes';
 import { LANGUAGE_NAMES, TERMS_PAGES, tr } from '../i18n';
 import type {
+  AppUpdateStatus,
+  EpgChannelGuide,
   EqPresetName,
   FootballMatch,
   FootballMatchDetail,
@@ -91,6 +95,14 @@ export interface AndroidPlayerAppProps {
   onMatchesLoaded: (matches: FootballMatch[]) => void;
   compactFrame?: boolean;
   fluidAdaptive?: boolean;
+  updateStatus?: AppUpdateStatus | null;
+  updateChecking?: boolean;
+  updateApplying?: boolean;
+  updateMessage?: string | null;
+  historyCount?: number;
+  onCheckUpdate?: (force?: boolean) => Promise<void>;
+  onApplyUpdate?: () => Promise<void>;
+  onSaveUpdateRepo?: (repo: string) => Promise<boolean>;
 }
 
 type AndroidTab = 'home' | 'music' | 'iptv' | 'radio' | 'football';
@@ -147,6 +159,14 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
   onMatchesLoaded,
   compactFrame = true,
   fluidAdaptive = false,
+  updateStatus = null,
+  updateChecking = false,
+  updateApplying = false,
+  updateMessage = null,
+  historyCount = 0,
+  onCheckUpdate,
+  onApplyUpdate,
+  onSaveUpdateRepo,
 }) => {
   const [tab, setTab] = useState<AndroidTab>('home');
   const [showNowPlaying, setShowNowPlaying] = useState(false);
@@ -156,6 +176,13 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
   const [showSettingsSheet, setShowSettingsSheet] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [pendingNoticeTab, setPendingNoticeTab] = useState<AndroidTab | null>(null);
+  const [androidRepoInput, setAndroidRepoInput] = useState<string>(updateStatus?.repository ?? '');
+
+  useEffect(() => {
+    if (updateStatus?.repository) {
+      setAndroidRepoInput((prev) => prev || updateStatus.repository);
+    }
+  }, [updateStatus?.repository]);
 
   // Music library state
   const [musicQuery, setMusicQuery] = useState('');
@@ -169,6 +196,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
     url: string;
     fallbackUrls?: string[];
     isLive?: boolean;
+    channel?: IptvChannel;
   } | null>(null);
   const [videoFit, setVideoFit] = useState<VideoFit>(0);
   const [videoSpeed, setVideoSpeed] = useState(1);
@@ -197,6 +225,11 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
   const [showAddIptvForm, setShowAddIptvForm] = useState(false);
   const [iptvStatusMsg, setIptvStatusMsg] = useState<string | null>(null);
   const m3uUploadRef = useRef<HTMLInputElement | null>(null);
+
+  // Live EPG schedule sheet state
+  const [epgChannel, setEpgChannel] = useState<IptvChannel | null>(null);
+  const [epgGuide, setEpgGuide] = useState<EpgChannelGuide | null>(null);
+  const [epgLoading, setEpgLoading] = useState(false);
 
   // Football (Placar da Bola) state
   const [matches, setMatches] = useState<FootballMatch[]>(preloadedMatches);
@@ -389,6 +422,28 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
       setMatchDetail(null);
     } finally {
       setDetailLoading(false);
+    }
+  }, []);
+
+  const openEpgSheet = useCallback(async (ch: IptvChannel) => {
+    setEpgChannel(ch);
+    setEpgGuide(null);
+    setEpgLoading(true);
+    try {
+      const qs = new URLSearchParams({ channel: ch.name });
+      if (ch.id) qs.set('tvgId', ch.id);
+      const r = await fetch(`/api/iptv/epg?${qs.toString()}`);
+      const d = (await r.json()) as EpgChannelGuide;
+      setEpgGuide(d);
+    } catch {
+      setEpgGuide({
+        matchedChannel: null,
+        now: ch.epgNow ?? null,
+        next: ch.epgNext ?? null,
+        schedule: [],
+      });
+    } finally {
+      setEpgLoading(false);
     }
   }, []);
 
@@ -639,6 +694,30 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
 
         {/* ==================== MAIN SCROLLABLE CONTENT COLUMN ==================== */}
         <div className="relative flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
+        {/* Top-bar Update Notice Banner when a newer commit version is available in GitHub updates/ */}
+        {updateStatus?.updateAvailable && !showSettingsSheet && !pendingNoticeTab && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowVideosSheet(false);
+              setShowSettingsSheet(true);
+            }}
+            style={{
+              backgroundColor: rgbToRgba(theme.accent, 0.16),
+              borderBottom: `1px solid ${rgbToRgba(theme.accent, 0.4)}`,
+              color: theme.accent,
+            }}
+            className="w-full px-4 py-2 flex items-center justify-between gap-2 text-left shrink-0 cursor-pointer hover:brightness-110 transition-all"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-[11.5px] font-extrabold truncate">
+                Nova versão v{updateStatus.latestVersion} disponível · Toque para atualizar
+              </span>
+            </div>
+            <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+          </button>
+        )}
         {/* 1. TRANSPARENCY NOTICE GATE (IPTV / RÁDIO) */}
         {pendingNoticeTab && (
           <div className="flex-1 overflow-y-auto kp-scroll px-5 py-6 flex flex-col justify-center">
@@ -1333,59 +1412,141 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                 <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
                 {iptvItems
                   .filter((it) => !iptvQuery.trim() || it.name.toLowerCase().includes(iptvQuery.toLowerCase()))
-                  .map((it, idx) => (
-                    <button
-                      key={`${it.id}-${idx}`}
-                      type="button"
-                      onClick={() => {
-                        if (it.mediaType === 'series-show') {
-                          fetchSeriesEpisodes(it);
-                        } else {
-                          setActiveVideoOverlay({
-                            title: it.name,
-                            subtitle: it.group || iptvSelectedCat.name,
-                            url: it.url,
-                            fallbackUrls: it.fallbackUrls,
-                            isLive: it.mediaType === 'live',
-                          });
-                        }
-                      }}
-                      style={{ backgroundColor: theme.panel, border: `1px solid ${subtleBorder}` }}
-                      className="w-full min-h-[58px] px-3 py-2 rounded-2xl flex items-center gap-3 text-left cursor-pointer"
-                    >
+                  .map((it, idx) => {
+                    const isLiveChannel =
+                      it.mediaType === 'live' || iptvSource === 'canais' || iptvSource === 'usuario';
+                    return (
                       <div
-                        className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: theme.elevated }}
+                        key={`${it.id}-${idx}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          if (it.mediaType === 'series-show') {
+                            fetchSeriesEpisodes(it);
+                          } else {
+                            setActiveVideoOverlay({
+                              title: it.name,
+                              subtitle: it.epgNow
+                                ? `${it.epgNow.title} · ${it.epgNow.startLabel}–${it.epgNow.stopLabel}`
+                                : it.group || iptvSelectedCat.name,
+                              url: it.url,
+                              fallbackUrls: it.fallbackUrls,
+                              isLive: isLiveChannel,
+                              channel: it,
+                            });
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            if (it.mediaType === 'series-show') {
+                              fetchSeriesEpisodes(it);
+                            } else {
+                              setActiveVideoOverlay({
+                                title: it.name,
+                                subtitle: it.epgNow
+                                  ? `${it.epgNow.title} · ${it.epgNow.startLabel}–${it.epgNow.stopLabel}`
+                                  : it.group || iptvSelectedCat.name,
+                                url: it.url,
+                                fallbackUrls: it.fallbackUrls,
+                                isLive: isLiveChannel,
+                                channel: it,
+                              });
+                            }
+                          }
+                        }}
+                        style={{ backgroundColor: theme.panel, border: `1px solid ${subtleBorder}` }}
+                        className="w-full min-h-[62px] px-3 py-2.5 rounded-2xl flex items-center gap-3 text-left cursor-pointer"
                       >
-                        {it.logo ? (
-                          <img
-                            src={it.logo}
-                            alt={it.name}
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <Tv className="w-4 h-4" style={{ color: theme.accent }} />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13.5px] font-bold truncate">{it.name}</div>
-                        <div className="text-[11.5px] truncate" style={{ color: theme.muted }}>
-                          {[it.group, it.year, it.episodeCount ? `${it.episodeCount} eps` : '']
-                            .filter(Boolean)
-                            .join(' · ') || 'Reproduzir'}
+                        <div
+                          className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: theme.elevated }}
+                        >
+                          {it.logo ? (
+                            <img
+                              src={it.logo}
+                              alt={it.name}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <Tv className="w-4 h-4" style={{ color: theme.accent }} />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-[13.5px] font-bold truncate">{it.name}</div>
+                            {it.epgNow && (
+                              <span
+                                className="text-[10px] font-bold tabular-nums shrink-0"
+                                style={{ color: theme.accent }}
+                              >
+                                {it.epgNow.startLabel}–{it.epgNow.stopLabel}
+                              </span>
+                            )}
+                          </div>
+                          {it.epgNow ? (
+                            <div className="mt-0.5 space-y-1">
+                              <div className="text-[11.5px] truncate" style={{ color: theme.muted }}>
+                                Agora: {it.epgNow.title}
+                              </div>
+                              <div
+                                className="h-1 rounded-full overflow-hidden"
+                                style={{ backgroundColor: subtleBorder }}
+                              >
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{
+                                    width: `${Math.max(4, Math.min(100, it.epgNow.progressPct ?? 0))}%`,
+                                    backgroundColor: theme.accent,
+                                  }}
+                                />
+                              </div>
+                              {it.epgNext && (
+                                <div className="text-[10.5px] truncate tabular-nums" style={{ color: theme.dim }}>
+                                  A seguir {it.epgNext.startLabel}: {it.epgNext.title}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-[11.5px] truncate" style={{ color: theme.muted }}>
+                              {[it.group, it.year, it.episodeCount ? `${it.episodeCount} eps` : '']
+                                .filter(Boolean)
+                                .join(' · ') || 'Reproduzir'}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isLiveChannel && (
+                            <button
+                              type="button"
+                              aria-label={`Guia EPG de ${it.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEpgSheet(it);
+                              }}
+                              style={{
+                                backgroundColor: rgbToRgba(theme.accent, 0.14),
+                                color: theme.accent,
+                              }}
+                              className="min-h-[34px] px-2.5 rounded-xl flex items-center gap-1 text-[10.5px] font-bold cursor-pointer"
+                            >
+                              <CalendarClock className="w-3.5 h-3.5" />
+                              <span>EPG</span>
+                            </button>
+                          )}
+                          {it.mediaType === 'series-show' ? (
+                            <ChevronRight className="w-4 h-4 shrink-0" style={{ color: theme.muted }} />
+                          ) : (
+                            <Play className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />
+                          )}
                         </div>
                       </div>
-                      {it.mediaType === 'series-show' ? (
-                        <ChevronRight className="w-4 h-4 shrink-0" style={{ color: theme.muted }} />
-                      ) : (
-                        <Play className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />
-                      )}
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 @min-[580px]:grid-cols-2 @min-[960px]:grid-cols-3 gap-2">
@@ -1763,6 +1924,117 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
 
             <div className="flex-1 overflow-y-auto kp-scroll mt-3 pb-36 @min-[680px]:pb-24">
               <div className="max-w-3xl mx-auto w-full space-y-5">
+              {/* Auto-Update Section (GitHub updates/ channel) */}
+              <section
+                className="p-3.5 rounded-2xl space-y-2.5"
+                style={{
+                  backgroundColor: theme.panel,
+                  border: `1px solid ${
+                    updateStatus?.updateAvailable ? rgbToRgba(theme.accent, 0.55) : subtleBorder
+                  }`,
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Download className="w-4 h-4" style={{ color: theme.accent }} />
+                      <span className="text-[13.5px] font-extrabold">Atualizar KPlayer (Auto-Update)</span>
+                    </div>
+                    <p className="text-[11.5px] mt-0.5" style={{ color: theme.muted }}>
+                      {updateStatus?.updateAvailable
+                        ? `Nova versão v${updateStatus.latestVersion} pronta na pasta updates/ do GitHub.`
+                        : `Versão v${updateStatus?.currentVersion ?? '2.0.3'} instalada · Monitorando v${updateStatus?.nextExpectedVersion ?? '2.0.4'}+ ao iniciar.`}
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      backgroundColor: updateStatus?.updateAvailable
+                        ? rgbToRgba(theme.accent, 0.2)
+                        : theme.elevated,
+                      color: updateStatus?.updateAvailable ? theme.accent : theme.muted,
+                    }}
+                    className="px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0"
+                  >
+                    {updateStatus?.updateAvailable ? `v${updateStatus.latestVersion}` : 'Em dia'}
+                  </span>
+                </div>
+
+                <div className="text-[11px]" style={{ color: theme.muted }}>
+                  Preserva favoritos ({favoriteIds.size}), histórico ({historyCount}), listas IPTV/Rádio, idioma e tema, e reinicia após atualizar.
+                </div>
+
+                {updateMessage && (
+                  <div
+                    className="px-2.5 py-1.5 rounded-xl text-[11.5px] font-semibold"
+                    style={{
+                      backgroundColor: rgbToRgba(theme.accent, 0.14),
+                      color: theme.accent,
+                    }}
+                  >
+                    {updateMessage}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={updateChecking || updateApplying}
+                    onClick={() => onCheckUpdate && void onCheckUpdate(true)}
+                    style={{
+                      backgroundColor: theme.elevated,
+                      color: theme.text,
+                      border: `1px solid ${subtleBorder}`,
+                    }}
+                    className="min-h-[38px] rounded-xl text-[12px] font-bold cursor-pointer disabled:opacity-60"
+                  >
+                    {updateChecking ? 'Verificando...' : 'Verificar agora'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updateApplying}
+                    onClick={() => onApplyUpdate && void onApplyUpdate()}
+                    style={{ backgroundColor: theme.accent, color: theme.bg }}
+                    className="min-h-[38px] rounded-xl text-[12px] font-extrabold cursor-pointer disabled:opacity-60"
+                  >
+                    {updateApplying
+                      ? 'Atualizando...'
+                      : updateStatus?.updateAvailable
+                      ? `Atualizar v${updateStatus.latestVersion}`
+                      : 'Sincronizar e reiniciar'}
+                  </button>
+                </div>
+
+                {onSaveUpdateRepo && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (androidRepoInput.trim()) void onSaveUpdateRepo(androidRepoInput.trim());
+                    }}
+                    className="flex items-center gap-1.5 pt-0.5"
+                  >
+                    <input
+                      type="text"
+                      value={androidRepoInput}
+                      onChange={(e) => setAndroidRepoInput(e.target.value)}
+                      placeholder="GitHub: usuario/KPlayer (pasta updates/)"
+                      style={{
+                        backgroundColor: theme.elevated,
+                        color: theme.text,
+                        border: `1px solid ${subtleBorder}`,
+                      }}
+                      className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl text-[11.5px] outline-none"
+                    />
+                    <button
+                      type="submit"
+                      style={{ backgroundColor: theme.elevated, color: theme.accent }}
+                      className="px-3 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer shrink-0"
+                    >
+                      Salvar
+                    </button>
+                  </form>
+                )}
+              </section>
+
               {/* 7 Theme Swatches */}
               <section>
                 <div className="flex items-center justify-between mb-2">
@@ -2664,6 +2936,20 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                 {activeVideoOverlay.subtitle}
               </div>
             </div>
+            {activeVideoOverlay.isLive && activeVideoOverlay.channel && (
+              <button
+                type="button"
+                onClick={() => openEpgSheet(activeVideoOverlay.channel!)}
+                style={{
+                  backgroundColor: rgbToRgba(theme.accent, 0.16),
+                  color: theme.accent,
+                }}
+                className="min-h-[36px] px-3 rounded-xl flex items-center gap-1.5 text-[11.5px] font-bold shrink-0 cursor-pointer"
+              >
+                <CalendarClock className="w-3.5 h-3.5" />
+                <span>Guia</span>
+              </button>
+            )}
           </div>
 
           <div className="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
@@ -2725,6 +3011,176 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
             >
               10s <RotateCw className="w-3.5 h-3.5" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== LIVE IPTV EPG SCHEDULE ADAPTIVE SHEET ==================== */}
+      {epgChannel && (
+        <div
+          className="absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex flex-col justify-end @min-[680px]:justify-center @min-[680px]:p-6"
+          onClick={() => setEpgChannel(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ backgroundColor: theme.bg, border: `1px solid ${subtleBorder}` }}
+            className="h-[80%] @min-[680px]:h-[84%] max-w-2xl mx-auto w-full rounded-t-3xl @min-[680px]:rounded-3xl flex flex-col overflow-hidden"
+          >
+            <div className="w-10 h-1 rounded-full mx-auto my-2.5 bg-white/20" />
+            <div className="px-4 pb-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: theme.accent }}>
+                  Guia de Programação (EPG) · Brasília
+                </div>
+                <div className="text-[16px] font-extrabold truncate mt-0.5">
+                  {epgChannel.name}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {epgChannel.url && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ch = epgChannel;
+                      setEpgChannel(null);
+                      setActiveVideoOverlay({
+                        title: ch.name,
+                        subtitle: epgGuide?.now
+                          ? `${epgGuide.now.title} · ${epgGuide.now.startLabel}–${epgGuide.now.stopLabel}`
+                          : ch.group || 'TV ao Vivo',
+                        url: ch.url,
+                        fallbackUrls: ch.fallbackUrls,
+                        isLive: true,
+                        channel: ch,
+                      });
+                    }}
+                    style={{ backgroundColor: theme.accent, color: theme.bg }}
+                    className="min-h-[36px] px-3.5 rounded-xl text-[12px] font-extrabold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Assistir</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setEpgChannel(null)}
+                  style={{ backgroundColor: theme.panel }}
+                  className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto kp-scroll px-4 pb-5 space-y-3">
+              {epgLoading ? (
+                <div className="py-12 text-center text-[13px]" style={{ color: theme.muted }}>
+                  Carregando grade ao vivo...
+                </div>
+              ) : !epgGuide || (!epgGuide.now && epgGuide.schedule.length === 0) ? (
+                <div className="py-12 text-center space-y-1.5">
+                  <div className="text-[14px] font-bold">Grade EPG indisponível para este canal</div>
+                  <p className="text-[12px] max-w-sm mx-auto" style={{ color: theme.muted }}>
+                    Este canal não possui correspondência no guia XMLTV aberto brasileiro no momento.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {epgGuide.now && (
+                    <div
+                      style={{
+                        backgroundColor: rgbToRgba(theme.accent, 0.12),
+                        border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
+                      }}
+                      className="p-3.5 rounded-2xl space-y-2"
+                    >
+                      <div className="flex items-center justify-between text-[11px] font-bold">
+                        <span style={{ color: theme.accent }}>NO AR AGORA</span>
+                        <span className="tabular-nums">
+                          {epgGuide.now.startLabel} – {epgGuide.now.stopLabel}
+                        </span>
+                      </div>
+                      <div className="text-[15.5px] font-extrabold leading-snug">
+                        {epgGuide.now.title}
+                      </div>
+                      {epgGuide.now.category && (
+                        <div className="text-[11px] font-semibold" style={{ color: theme.accent }}>
+                          {epgGuide.now.category}
+                        </div>
+                      )}
+                      {epgGuide.now.desc && (
+                        <p className="text-[12px] leading-relaxed" style={{ color: theme.muted }}>
+                          {epgGuide.now.desc}
+                        </p>
+                      )}
+                      <div
+                        className="h-1.5 rounded-full overflow-hidden"
+                        style={{ backgroundColor: subtleBorder }}
+                      >
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(4, Math.min(100, epgGuide.now.progressPct ?? 0))}%`,
+                            backgroundColor: theme.accent,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {epgGuide.next && (
+                    <div
+                      style={{ backgroundColor: theme.panel, border: `1px solid ${subtleBorder}` }}
+                      className="p-3 rounded-2xl"
+                    >
+                      <div className="flex items-center justify-between text-[11px] font-bold">
+                        <span style={{ color: theme.muted }}>A SEGUIR</span>
+                        <span className="tabular-nums" style={{ color: theme.accent }}>
+                          {epgGuide.next.startLabel} – {epgGuide.next.stopLabel}
+                        </span>
+                      </div>
+                      <div className="text-[13.5px] font-bold mt-0.5">{epgGuide.next.title}</div>
+                    </div>
+                  )}
+
+                  {epgGuide.schedule.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[11.5px] font-bold uppercase tracking-wide" style={{ color: theme.muted }}>
+                        Programação completa ({epgGuide.schedule.length})
+                      </div>
+                      {epgGuide.schedule.map((prog, i) => {
+                        const isCurrent = epgGuide.now && prog.startMs === epgGuide.now.startMs;
+                        return (
+                          <div
+                            key={`${prog.startMs}-${i}`}
+                            style={{
+                              backgroundColor: isCurrent ? rgbToRgba(theme.accent, 0.12) : theme.panel,
+                              border: `1px solid ${isCurrent ? rgbToRgba(theme.accent, 0.35) : subtleBorder}`,
+                            }}
+                            className="px-3.5 py-2.5 rounded-2xl flex items-start gap-3"
+                          >
+                            <span
+                              className="text-[11.5px] font-bold tabular-nums shrink-0 pt-0.5"
+                              style={{ color: isCurrent ? theme.accent : theme.muted }}
+                            >
+                              {prog.startLabel}–{prog.stopLabel}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[13px] font-bold leading-snug">{prog.title}</div>
+                              {prog.desc && (
+                                <p className="text-[11.5px] line-clamp-2 mt-0.5" style={{ color: theme.muted }}>
+                                  {prog.desc}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

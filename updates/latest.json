@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "version": "2.0.3",
+  "nextVersion": "2.0.4",
+  "channel": "stable",
+  "releasedAt": "2026-11-21T00:00:00Z",
+  "repository": "",
+  "branch": "main",
+  "updatesDir": "updates",
+  "preserveUserPaths": [
+    "iptv_usuario/",
+    "radios_usuario/",
+    "midias/",
+    "settings.cfg",
+    "preferences.cfg",
+    "history.txt",
+    "favorites.txt"
+  ],
+  "notes": [
+    "Auto-Update integrado via pasta updates/ do GitHub com preservação total de dados e histórico",
+    "Novo menu de Opções (SELECT) com seleção direta sem barras laterais",
+    "Guia de Programação ao vivo (EPG) para canais brasileiros de IPTV",
+    "Lista IPTV Brasil 2026 (Ramys) verificada e integrada junto aos canais existentes",
+    "R36S e Android 100% adaptativos ao tamanho de tela do dispositivo"
+  ],
+  "r36s": {
+    "filename": "KPlayer-v2.0.3-R36S.zip",
+    "path": "updates/v2.0.3/KPlayer-v2.0.3-R36S.zip",
+    "url": "",
+    "sha256": "",
+    "sizeBytes": 0
+  },
+  "android": {
+    "filename": "KPlayer-v2.0.3-Android.apk",
+    "path": "updates/v2.0.3/KPlayer-v2.0.3-Android.apk",
+    "url": "",
+    "sha256": "",
+    "sizeBytes": 0
+  },
+  "web": {
+    "version": "2.0.3",
+    "reloadRequired": true
+  }
+}

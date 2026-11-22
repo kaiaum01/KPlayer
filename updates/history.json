@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "latest": "2.0.3",
+  "releases": [
+    {
+      "version": "2.0.3",
+      "releasedAt": "2026-11-21T00:00:00Z",
+      "r36s": "updates/v2.0.3/KPlayer-v2.0.3-R36S.zip",
+      "android": "updates/v2.0.3/KPlayer-v2.0.3-Android.apk",
+      "notes": [
+        "Auto-Update via pasta updates/ do GitHub sem perda de dados/histórico",
+        "Novo menu de Opções (SELECT) por seleção direta",
+        "EPG ao vivo + IPTV Brasil 2026 integrado",
+        "Edições R36S e Android totalmente adaptativas"
+      ]
+    }
+  ]
+}

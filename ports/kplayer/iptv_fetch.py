@@ -28,6 +28,7 @@ import urllib.parse
 import urllib.request
 
 CANAIS_BASE = "https://canais-saimo.pages.dev/"
+RAMYS_CANAIS_URL = "https://raw.githubusercontent.com/Ramys/Iptv-Brasil-2026/master/Canais.m3u8"
 FILMES_BASE = "https://filmes-saimo.pages.dev/"
 UA = "KPlayer-R36S/2.0.3"
 
@@ -339,9 +340,40 @@ def parse_saimo_catalogo(text: str) -> list[dict[str, str]]:
     return entries
 
 
+def _clean_ramys_group(raw: str) -> str:
+    s = re.sub(r"^CANAIS\s*:\s*", "", raw.strip(), flags=re.I)
+    s = re.sub(r"[^\w\sÀ-ÿ+&-]", "", s).strip()
+    if not s:
+        return "IPTV Brasil 2026"
+    low = s.lower()
+    mapping = {
+        "filmes e series": "Filmes e Séries",
+        "filmes e séries": "Filmes e Séries",
+        "documentarios": "Documentários",
+        "documentários": "Documentários",
+        "esportes": "Esportes",
+        "noticias": "Notícias",
+        "notícias": "Notícias",
+        "infantis": "Infantil",
+        "variedades": "Variedades",
+        "abertos": "TV Aberta",
+        "musica": "Música",
+        "música": "Música",
+        "religiosos": "Religiosos",
+    }
+    return mapping.get(low, s.title())
+
+
+def _clean_ramys_name(raw: str) -> str:
+    s = re.sub(r"[¹²³⁴⁵⁶⁷⁸⁹⁰]+", "", raw)
+    s = re.sub(r"\b(FHD|UHD|4K|HD|SD|H\.?265|HEVC)\b", "", s, flags=re.I)
+    return re.sub(r"\s+", " ", s).strip() or raw.strip()
+
+
 def load_canais_entries(refresh: bool = False) -> list[dict[str, str]]:
     catalogo_txt = ""
     reserve_txt = ""
+    ramys_txt = ""
     try:
         catalogo_txt = fetch_text_cached(
             CANAIS_BASE + "catalogo.txt",
@@ -360,6 +392,15 @@ def load_canais_entries(refresh: bool = False) -> list[dict[str, str]]:
         )
     except Exception:
         pass
+    try:
+        ramys_txt = fetch_text_cached(
+            RAMYS_CANAIS_URL,
+            "ramys_iptv_br_2026.m3u8",
+            ttl_seconds=900,
+            refresh=refresh,
+        )
+    except Exception:
+        pass
 
     entries = parse_saimo_catalogo(catalogo_txt) if catalogo_txt else []
     seen_norm = {_norm_canais_key(e["name"]): e for e in entries}
@@ -372,6 +413,25 @@ def load_canais_entries(refresh: bool = False) -> list[dict[str, str]]:
                     seen_norm[nk]["logo"] = r["logo"]
             else:
                 r["group"] = _norm_reserve_group(r.get("group", ""))
+                entries.append(r)
+                seen_norm[nk] = r
+
+    if ramys_txt:
+        ramys_entries = parse_m3u_entries(ramys_txt, default_group="IPTV Brasil 2026")
+        # Prefer standard H.264 streams over H.265 for widest device compatibility
+        ramys_entries.sort(key=lambda x: (1 if "265" in x["name"].lower() else 0))
+        for r in ramys_entries:
+            clean_name = _clean_ramys_name(r["name"])
+            nk = _norm_canais_key(clean_name)
+            if not nk:
+                continue
+            if nk in seen_norm:
+                if not seen_norm[nk].get("logo") and r.get("logo"):
+                    seen_norm[nk]["logo"] = r["logo"]
+            else:
+                r["name"] = clean_name
+                r["group"] = _clean_ramys_group(r.get("group", ""))
+                r["id"] = r.get("id") or "IPTV Brasil 2026"
                 entries.append(r)
                 seen_norm[nk] = r
 

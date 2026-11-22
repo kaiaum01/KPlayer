@@ -1420,14 +1420,72 @@ fun IptvPortraitScreen(
                         VinylEmblem(palette = palette, sizeDp = 42, artUri = ch.logo.takeIf { it.isNotBlank() })
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(ch.name, color = palette.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                text = listOfNotNull(ch.group.takeIf { it.isNotBlank() }, ch.year.takeIf { it.isNotBlank() }).joinToString(" · "),
-                                color = palette.muted,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = ch.name,
+                                    color = palette.text,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                ch.epgNow?.let { epg ->
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "${epg.startLabel}–${epg.stopLabel}",
+                                        color = palette.accent,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                            if (ch.epgNow != null) {
+                                Text(
+                                    text = "Agora: ${ch.epgNow.title}",
+                                    color = palette.muted,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(palette.elevated),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth((ch.epgNow.progressPct / 100f).coerceIn(0.04f, 1f))
+                                            .height(3.dp)
+                                            .background(palette.accent),
+                                    )
+                                }
+                                ch.epgNext?.let { next ->
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = "A seguir ${next.startLabel}: ${next.title}",
+                                        color = palette.dim,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = listOfNotNull(ch.group.takeIf { it.isNotBlank() }, ch.year.takeIf { it.isNotBlank() }).joinToString(" · "),
+                                    color = palette.muted,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                )
+                            }
                         }
+                        Spacer(Modifier.width(8.dp))
                         Icon(Icons.Rounded.PlayArrow, contentDescription = "Assistir", tint = palette.accent)
                     }
                 }

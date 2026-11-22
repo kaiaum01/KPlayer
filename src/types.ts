@@ -67,6 +67,24 @@ export interface UserPlaylistSource {
   target: string;
 }
 
+export interface EpgProgram {
+  title: string;
+  desc?: string;
+  category?: string;
+  startMs: number;
+  stopMs: number;
+  startLabel: string;
+  stopLabel: string;
+  progressPct?: number;
+}
+
+export interface EpgChannelGuide {
+  matchedChannel: string | null;
+  now: EpgProgram | null;
+  next: EpgProgram | null;
+  schedule: EpgProgram[];
+}
+
 export interface IptvChannel {
   name: string;
   url: string;
@@ -81,6 +99,8 @@ export interface IptvChannel {
   episodeCount?: number;
   season?: number;
   episode?: number;
+  epgNow?: EpgProgram | null;
+  epgNext?: EpgProgram | null;
 }
 
 export interface FootballMatch {
@@ -146,3 +166,36 @@ export type EqPresetName =
   | 'Jazz'
   | 'Classical'
   | 'Electronic';
+
+export interface AppUpdateArtifact {
+  filename: string;
+  path: string;
+  url: string;
+  sha256: string;
+  sizeBytes: number;
+}
+
+export interface AppUpdateStatus {
+  currentVersion: string;
+  latestVersion: string;
+  nextExpectedVersion: string;
+  updateAvailable: boolean;
+  repository: string;
+  branch: string;
+  updatesFolderUrl: string;
+  releasedAt: string;
+  notes: string[];
+  preserveUserPaths: string[];
+  source: 'github' | 'local';
+  checkedAt: number;
+  r36s?: AppUpdateArtifact;
+  android?: AppUpdateArtifact;
+}
+
+export interface PlaybackHistoryEntry {
+  kind: 'audio' | 'video' | 'radio' | 'iptv';
+  title: string;
+  subtitle?: string;
+  playedAt: number;
+}
+

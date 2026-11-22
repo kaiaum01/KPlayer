@@ -40,7 +40,16 @@ chmod +x ./kplayer
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
-./kplayer
-result=$?
+while true; do
+    chmod +x ./kplayer 2>/dev/null || true
+    ./kplayer
+    result=$?
+    if [ "$result" -eq 42 ]; then
+        printf 'K PLAYER atualizado com sucesso — reiniciando automaticamente...\n'
+        sleep 1
+        continue
+    fi
+    break
+done
 printf 'K PLAYER finalizado: codigo %s\n' "$result"
 exit "$result"

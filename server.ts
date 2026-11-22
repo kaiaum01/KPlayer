@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
+import { gunzipSync } from 'node:zlib';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3000;
@@ -20,6 +21,17 @@ interface RadioStation {
   isUser?: boolean;
 }
 
+interface EpgProgram {
+  title: string;
+  desc?: string;
+  category?: string;
+  startMs: number;
+  stopMs: number;
+  startLabel: string;
+  stopLabel: string;
+  progressPct?: number;
+}
+
 interface IptvChannel {
   name: string;
   url: string;
@@ -34,6 +46,8 @@ interface IptvChannel {
   episodeCount?: number;
   season?: number;
   episode?: number;
+  epgNow?: EpgProgram | null;
+  epgNext?: EpgProgram | null;
 }
 
 interface IptvCategory {
@@ -594,14 +608,69 @@ function parseSaimoCatalogo(text: string): IptvChannel[] {
   return out;
 }
 
+const RAMYS_IPTV_BR_URL =
+  'https://raw.githubusercontent.com/Ramys/Iptv-Brasil-2026/master/Canais.m3u8';
+
+function cleanRamysGroup(raw: string): string {
+  const stripped = raw
+    .replace(/^CANAIS\s*:\s*/i, '')
+    .replace(/[^\p{L}\p{N}\s+&-]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!stripped) return 'IPTV Brasil 2026';
+  const low = stripped.toLowerCase();
+  const map: Record<string, string> = {
+    'filmes e series': 'Filmes e Séries',
+    'filmes e séries': 'Filmes e Séries',
+    'documentarios': 'Documentários',
+    'documentários': 'Documentários',
+    'esportes': 'Esportes',
+    'noticias': 'Notícias',
+    'notícias': 'Notícias',
+    'infantis': 'Infantil',
+    'variedades': 'Variedades',
+    'abertos': 'TV Aberta',
+    'musica': 'Música',
+    'música': 'Música',
+    'religiosos': 'Religiosos',
+    'band': 'TV Aberta',
+    'record': 'TV Aberta',
+    'sbt': 'TV Aberta',
+    'redetv': 'TV Aberta',
+    'sportv': 'Esportes',
+    'espn': 'Esportes',
+    'premiere': 'Esportes',
+    'ppv / esportes': 'Esportes',
+    'paramount + libertadores': 'Esportes',
+    'prime video': 'Esportes',
+    'hbo': 'Filmes e Séries',
+    'telecine': 'Filmes e Séries',
+    'cine sky': 'Filmes e Séries',
+    'discovery': 'Documentários',
+    'novelas globoplay': 'Novelas',
+  };
+  return map[low] ?? stripped.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function cleanRamysChannelName(raw: string): string {
+  return (
+    raw
+      .replace(/[¹²³⁴⁵⁶⁷⁸⁹⁰]+/g, ' ')
+      .replace(/\b(FHD|UHD|4K|HD|SD|H\.?265|HEVC)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() || raw.trim()
+  );
+}
+
 async function loadSaimoCanais(force = false): Promise<IptvChannel[]> {
   const cached = iptvCache.get('canais');
   if (!force && cached && Date.now() - cached.ts < 10 * 60_000) {
     return cached.data;
   }
-  const [catalogoText, reserveText] = await Promise.all([
+  const [catalogoText, reserveText, ramysText] = await Promise.all([
     fetchTextTimeout(`${SAIMO_CANAIS_BASE}catalogo.txt`, 18_000).catch(() => ''),
     fetchTextTimeout(`${SAIMO_CANAIS_BASE}canais.txt`, 12_000).catch(() => ''),
+    fetchTextTimeout(RAMYS_IPTV_BR_URL, 14_000).catch(() => ''),
   ]);
 
   const channels = catalogoText ? parseSaimoCatalogo(catalogoText) : [];
@@ -633,10 +702,421 @@ async function loadSaimoCanais(force = false): Promise<IptvChannel[]> {
     }
   }
 
+  // Merge verified Ramys/Iptv-Brasil-2026 Canais.m3u8 alongside existing channels
+  if (ramysText) {
+    const ramysRaw = parseIptvM3u(ramysText, 'IPTV Brasil 2026');
+    // Prefer standard H.264 streams over H.265 for widest browser & R36S compatibility
+    ramysRaw.sort((a, b) => {
+      const aHevc = /265|hevc/i.test(a.name) ? 1 : 0;
+      const bHevc = /265|hevc/i.test(b.name) ? 1 : 0;
+      return aHevc - bHevc;
+    });
+    for (const r of ramysRaw) {
+      const cleanName = cleanRamysChannelName(r.name);
+      const nk = normalizeCanaisKey(cleanName);
+      if (!nk) continue;
+      const existing = byNorm.get(nk);
+      if (existing) {
+        const allUrls = [existing.url, ...(existing.fallbackUrls ?? [])];
+        if (!allUrls.includes(r.url) && allUrls.length < 8) {
+          existing.fallbackUrls = [...(existing.fallbackUrls ?? []), r.url];
+        }
+        if (!existing.logo && r.logo) existing.logo = r.logo;
+      } else {
+        const added: IptvChannel = {
+          name: cleanName,
+          url: r.url,
+          fallbackUrls: [],
+          mediaType: 'live',
+          logo: r.logo,
+          group: cleanRamysGroup(r.group),
+          id: r.id || 'IPTV Brasil 2026',
+        };
+        channels.push(added);
+        byNorm.set(nk, added);
+      }
+    }
+  }
+
   if (channels.length > 0) {
     iptvCache.set('canais', { ts: Date.now(), data: channels });
   }
   return channels.length > 0 ? channels : cached?.data ?? [];
+}
+
+// ==================== LIVE XMLTV EPG ENGINE (BRASIL + USER URL-TVG) ====================
+
+const DEFAULT_EPG_FEEDS = [
+  'https://epgshare01.online/epgshare01/epg_ripper_BR1.xml.gz',
+  'https://epgshare01.online/epgshare01/epg_ripper_BR2.xml.gz',
+];
+
+interface RawEpgProg {
+  startMs: number;
+  stopMs: number;
+  title: string;
+  desc: string;
+  category: string;
+}
+
+interface EpgIndex {
+  ts: number;
+  channelCount: number;
+  displayById: Map<string, string>;
+  keyToIds: Map<string, string[]>;
+  compactToIds: Map<string, string[]>;
+  progsById: Map<string, RawEpgProg[]>;
+}
+
+let epgIndexCache: EpgIndex | null = null;
+let epgInflightPromise: Promise<EpgIndex> | null = null;
+
+function pushUniqueMapId(map: Map<string, string[]>, key: string, id: string): void {
+  if (!key) return;
+  let arr = map.get(key);
+  if (!arr) {
+    arr = [id];
+    map.set(key, arr);
+  } else if (!arr.includes(id)) {
+    arr.push(id);
+  }
+}
+
+function decodeXmlEntities(raw: string): string {
+  return raw
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_m, n) => {
+      const code = Number(n);
+      return Number.isFinite(code) && code >= 32 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeEpgKey(raw: string): string {
+  let s = decodeXmlEntities(raw)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  // Strip XMLTV regional prefixes like "São Paulo/SP  SporTV 2 HD ³" or "Campinas/SP..Film&Arts.br"
+  s = s.replace(/^[a-z0-9 ._-]+\/[a-z]{2}[.\s]+/i, '');
+  s = s.replace(/\.br$/i, '');
+  s = s.replace(/\s*\([^)]*\)\s*/g, ' ');
+  s = s.replace(/\s*\[[^\]]*\]\s*/g, ' ');
+  s = s.replace(/[¹²³⁴⁵⁶⁷⁸⁹⁰]/g, ' ');
+  s = s.replace(/&/g, ' e ');
+  s = s.replace(/[^a-z0-9+]+/g, ' ').trim();
+
+  // Strip quality/platform suffixes
+  s = s.replace(/\b(fhd|uhd|4k|hd|sd|h265|hevc|60fps|br|brasil|brazil|channel|canal|tv)\b/g, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+
+  // Common Brazilian channel aliases
+  s = s.replace(/^tc\s+/, 'telecine ');
+  s = s.replace(/^spor\s+tv\b/, 'sportv');
+  s = s.replace(/^rede\s+globo\b/, 'globo');
+  s = s.replace(/^bandeirantes\b/, 'band');
+  s = s.replace(/^recordtv\b/, 'record');
+  s = s.replace(/^globonews\b/, 'globo news');
+  s = s.replace(/^premiere\s+(clubes|fc)\b/, 'premiere');
+
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function parseXmltvDate(raw: string): number {
+  const m = raw.trim().match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s*([+-])(\d{2})(\d{2}))?/);
+  if (!m) return 0;
+  const year = Number(m[1]);
+  const month = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const min = Number(m[5]);
+  const sec = Number(m[6]);
+  let utcMs = Date.UTC(year, month, day, hour, min, sec);
+  if (m[7]) {
+    const sign = m[7] === '+' ? 1 : -1;
+    const offMin = Number(m[8]) * 60 + Number(m[9]);
+    utcMs -= sign * offMin * 60_000;
+  }
+  return utcMs;
+}
+
+const brTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+function formatBrClock(ms: number): string {
+  try {
+    return brTimeFormatter.format(new Date(ms));
+  } catch {
+    return '--:--';
+  }
+}
+
+async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<string> {
+  if (!isSafeExternalUrl(url)) return '';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'KPlayer-EPG/2.0.3' },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return '';
+    const contentLen = Number(res.headers.get('content-length') || '0');
+    if (contentLen > 12 * 1024 * 1024) return '';
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > 12 * 1024 * 1024) return '';
+    const isGzip = buf.byteLength >= 2 && buf[0] === 0x1f && buf[1] === 0x8b;
+    if (isGzip) {
+      const out = gunzipSync(buf, { maxOutputLength: 28 * 1024 * 1024 });
+      return out.toString('utf8');
+    }
+    return buf.toString('utf8');
+  } catch {
+    clearTimeout(timer);
+    return '';
+  }
+}
+
+function parseXmltvIntoIndex(xml: string, index: EpgIndex, nowMs: number): void {
+  const windowStart = nowMs - 3 * 60 * 60_000;
+  const windowEnd = nowMs + 24 * 60 * 60_000;
+
+  // 1) Parse <channel id="..."> ... <display-name>...</display-name> </channel>
+  const chRe = /<channel\s+[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/channel>/gi;
+  let cm: RegExpExecArray | null;
+  while ((cm = chRe.exec(xml)) !== null) {
+    const rawId = decodeXmlEntities(cm[1]);
+    const body = cm[2];
+    if (!rawId) continue;
+
+    const names: string[] = [rawId];
+    const dnRe = /<display-name[^>]*>([\s\S]*?)<\/display-name>/gi;
+    let dm: RegExpExecArray | null;
+    let bestDisplay = rawId;
+    while ((dm = dnRe.exec(body)) !== null) {
+      const decoded = decodeXmlEntities(dm[1]);
+      if (decoded) {
+        if (bestDisplay === rawId) bestDisplay = decoded;
+        names.push(decoded);
+      }
+    }
+
+    if (!index.displayById.has(rawId)) {
+      index.displayById.set(rawId, bestDisplay);
+    }
+
+    pushUniqueMapId(index.keyToIds, rawId.toLowerCase(), rawId);
+
+    for (const candidate of names) {
+      const nk = normalizeEpgKey(candidate);
+      if (!nk) continue;
+      pushUniqueMapId(index.keyToIds, nk, rawId);
+      const compact = nk.replace(/\s+/g, '');
+      if (compact) pushUniqueMapId(index.compactToIds, compact, rawId);
+    }
+  }
+
+  // 2) Parse <programme ...> ... </programme> within active 27h window
+  const progRe = /<programme\s+([^>]+)>([\s\S]*?)<\/programme>/gi;
+  let pm: RegExpExecArray | null;
+  while ((pm = progRe.exec(xml)) !== null) {
+    const attrs = pm[1];
+    const body = pm[2];
+    const startMatch = attrs.match(/start="([^"]+)"/i);
+    const stopMatch = attrs.match(/stop="([^"]+)"/i);
+    const chMatch = attrs.match(/channel="([^"]+)"/i);
+    if (!startMatch || !stopMatch || !chMatch) continue;
+
+    const startMs = parseXmltvDate(startMatch[1]);
+    const stopMs = parseXmltvDate(stopMatch[1]);
+    if (!startMs || !stopMs || stopMs <= windowStart || startMs >= windowEnd) continue;
+
+    const rawId = decodeXmlEntities(chMatch[1]);
+    const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = titleMatch ? decodeXmlEntities(titleMatch[1]) : '';
+    if (!title) continue;
+
+    const descMatch = body.match(/<desc[^>]*>([\s\S]*?)<\/desc>/i);
+    const catMatch = body.match(/<category[^>]*>([\s\S]*?)<\/category>/i);
+
+    let list = index.progsById.get(rawId);
+    if (!list) {
+      list = [];
+      index.progsById.set(rawId, list);
+    }
+    list.push({
+      startMs,
+      stopMs,
+      title: title.slice(0, 140),
+      desc: descMatch ? decodeXmlEntities(descMatch[1]).slice(0, 320) : '',
+      category: catMatch ? decodeXmlEntities(catMatch[1]).slice(0, 64) : '',
+    });
+  }
+}
+
+async function loadEpgIndex(force = false): Promise<EpgIndex> {
+  const nowMs = Date.now();
+  if (!force && epgIndexCache && nowMs - epgIndexCache.ts < 3 * 60 * 60_000) {
+    return epgIndexCache;
+  }
+  if (!force && epgInflightPromise) {
+    return epgInflightPromise;
+  }
+
+  epgInflightPromise = (async () => {
+    const index: EpgIndex = {
+      ts: Date.now(),
+      channelCount: 0,
+      displayById: new Map(),
+      keyToIds: new Map(),
+      compactToIds: new Map(),
+      progsById: new Map(),
+    };
+
+    const xmlList = await Promise.all(
+      DEFAULT_EPG_FEEDS.map((u) => fetchXmltvTextBounded(u, 16_000))
+    );
+
+    const parseNow = Date.now();
+    for (const xml of xmlList) {
+      if (xml) parseXmltvIntoIndex(xml, index, parseNow);
+    }
+
+    for (const list of index.progsById.values()) {
+      list.sort((a, b) => a.startMs - b.startMs);
+    }
+    index.channelCount = index.displayById.size;
+
+    if (index.channelCount > 0) {
+      epgIndexCache = index;
+    }
+    epgInflightPromise = null;
+    return epgIndexCache ?? index;
+  })();
+
+  return epgInflightPromise;
+}
+
+function pickBestEpgId(index: EpgIndex, ids: string[] | undefined, nowMs: number): string | null {
+  if (!ids || ids.length === 0) return null;
+  let bestId: string | null = null;
+  let bestScore = -1;
+  for (const id of ids) {
+    const list = index.progsById.get(id);
+    if (!list || list.length === 0) continue;
+    const hasLive = list.some((p) => p.startMs <= nowMs && p.stopMs > nowMs);
+    const score = (hasLive ? 10000 : 0) + list.length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = id;
+    }
+  }
+  return bestId;
+}
+
+function resolveEpgChannelId(index: EpgIndex, channelName: string, tvgId?: string): string | null {
+  const nowMs = Date.now();
+  const candidates = [tvgId, channelName].filter((x): x is string => Boolean(x && x.trim()));
+  for (const raw of candidates) {
+    const exactLow = raw.trim().toLowerCase();
+    const hitExact = pickBestEpgId(index, index.keyToIds.get(exactLow), nowMs);
+    if (hitExact) return hitExact;
+
+    const nk = normalizeEpgKey(raw);
+    if (!nk) continue;
+    const hitNorm = pickBestEpgId(index, index.keyToIds.get(nk), nowMs);
+    if (hitNorm) return hitNorm;
+
+    const compact = nk.replace(/\s+/g, '');
+    const hitCompact = pickBestEpgId(index, index.compactToIds.get(compact), nowMs);
+    if (hitCompact) return hitCompact;
+  }
+
+  // Soft fallback: strip trailing region/number words if still unmatched (e.g. "Globo SP" -> "globo")
+  const baseNorm = normalizeEpgKey(channelName);
+  if (baseNorm.includes(' ')) {
+    const words = baseNorm.split(' ');
+    const last = words[words.length - 1];
+    if (/^(sp|rj|mg|rs|ba|pr|pe|ce|df|go|sc|nacional|leste|oeste|sul|norte|1|2)$/.test(last) && words.length >= 2) {
+      const shorter = words.slice(0, -1).join(' ');
+      const hitShort =
+        pickBestEpgId(index, index.keyToIds.get(shorter), nowMs) ||
+        pickBestEpgId(index, index.compactToIds.get(shorter.replace(/\s+/g, '')), nowMs);
+      if (hitShort) return hitShort;
+    }
+  }
+  return null;
+}
+
+function toEpgProgram(p: RawEpgProg, nowMs: number, includeProgress: boolean): EpgProgram {
+  const total = Math.max(1, p.stopMs - p.startMs);
+  const pct = includeProgress
+    ? Math.max(0, Math.min(100, Math.round(((nowMs - p.startMs) / total) * 100)))
+    : undefined;
+  return {
+    title: p.title,
+    ...(p.desc ? { desc: p.desc } : {}),
+    ...(p.category ? { category: p.category } : {}),
+    startMs: p.startMs,
+    stopMs: p.stopMs,
+    startLabel: formatBrClock(p.startMs),
+    stopLabel: formatBrClock(p.stopMs),
+    ...(pct !== undefined ? { progressPct: pct } : {}),
+  };
+}
+
+function lookupChannelEpg(
+  index: EpgIndex | null,
+  channelName: string,
+  tvgId?: string
+): { matchedChannel: string | null; now: EpgProgram | null; next: EpgProgram | null; schedule: EpgProgram[] } {
+  if (!index || index.channelCount === 0) {
+    return { matchedChannel: null, now: null, next: null, schedule: [] };
+  }
+  const chId = resolveEpgChannelId(index, channelName, tvgId);
+  if (!chId) {
+    return { matchedChannel: null, now: null, next: null, schedule: [] };
+  }
+  const list = index.progsById.get(chId) ?? [];
+  const nowMs = Date.now();
+  let nowIdx = -1;
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].startMs <= nowMs && list[i].stopMs > nowMs) {
+      nowIdx = i;
+      break;
+    }
+  }
+  const nowProg = nowIdx >= 0 ? toEpgProgram(list[nowIdx], nowMs, true) : null;
+  let nextProg: EpgProgram | null = null;
+  if (nowIdx >= 0 && nowIdx + 1 < list.length) {
+    nextProg = toEpgProgram(list[nowIdx + 1], nowMs, false);
+  } else {
+    const upcoming = list.find((p) => p.startMs > nowMs);
+    if (upcoming) nextProg = toEpgProgram(upcoming, nowMs, false);
+  }
+  const startSlice = nowIdx >= 0 ? nowIdx : Math.max(0, list.findIndex((p) => p.stopMs > nowMs));
+  const schedule = list
+    .slice(startSlice, startSlice + 18)
+    .map((p, i) => toEpgProgram(p, nowMs, nowIdx >= 0 && i === 0));
+
+  return {
+    matchedChannel: index.displayById.get(chId) ?? chId,
+    now: nowProg,
+    next: nextProg,
+    schedule,
+  };
 }
 
 async function loadSaimoMeta(force = false): Promise<SaimoMeta> {
@@ -1232,6 +1712,263 @@ async function createServer() {
     }
   });
 
+  // ==================== AUTO-UPDATE ENGINE (GITHUB updates/ CHANNEL) ====================
+
+  const REPO_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+  const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+  const UPDATE_PRESERVE_PATHS = [
+    'iptv_usuario/',
+    'radios_usuario/',
+    'midias/',
+    'settings.cfg',
+    'preferences.cfg',
+    'history.txt',
+    'favorites.txt',
+  ];
+
+  function compareSemver(a: string, b: string): number {
+    const ma = a.trim().replace(/^v/i, '').match(SEMVER_RE);
+    const mb = b.trim().replace(/^v/i, '').match(SEMVER_RE);
+    if (!ma || !mb) return 0;
+    for (let i = 1; i <= 3; i++) {
+      const diff = Number(ma[i]) - Number(mb[i]);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  }
+
+  function nextPatchVersion(ver: string): string {
+    const m = ver.trim().replace(/^v/i, '').match(SEMVER_RE);
+    if (!m) return '2.0.4';
+    return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
+  }
+
+  async function readInstalledVersion(): Promise<string> {
+    try {
+      const header = await fs.readFile(path.join(__dirname, 'source', 'version.h'), 'utf8');
+      const m = header.match(/#define\s+KPLAYER_VERSION\s+"(\d+\.\d+\.\d+)"/);
+      if (m) return m[1];
+    } catch {
+      // Fallback below
+    }
+    try {
+      const pkg = JSON.parse(await fs.readFile(path.join(__dirname, 'package.json'), 'utf8')) as {
+        version?: string;
+      };
+      if (pkg.version && SEMVER_RE.test(pkg.version)) return pkg.version;
+    } catch {
+      // Fallback below
+    }
+    return '2.0.3';
+  }
+
+  async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
+    try {
+      const raw = await fs.readFile(path.join(__dirname, 'updates', 'latest.json'), 'utf8');
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function detectUpdateRepoSlug(localManifest: Record<string, unknown> | null): Promise<string> {
+    const envRepo = String(process.env.KPLAYER_UPDATE_REPO ?? '').trim();
+    if (REPO_SLUG_RE.test(envRepo)) return envRepo;
+
+    try {
+      const cfg = (
+        await fs.readFile(path.join(__dirname, 'ports', 'kplayer', 'update-repo.txt'), 'utf8')
+      ).trim();
+      if (REPO_SLUG_RE.test(cfg)) return cfg;
+    } catch {
+      // ignore missing config
+    }
+
+    const fromManifest = String(localManifest?.repository ?? '').trim();
+    if (REPO_SLUG_RE.test(fromManifest)) return fromManifest;
+
+    try {
+      const gitCfg = await fs.readFile(path.join(__dirname, '.git', 'config'), 'utf8');
+      const m = gitCfg.match(/github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\s*$/m);
+      if (m && REPO_SLUG_RE.test(m[1])) return m[1];
+    } catch {
+      // ignore missing git config
+    }
+
+    return '';
+  }
+
+  interface CheckedUpdatePayload {
+    currentVersion: string;
+    latestVersion: string;
+    nextExpectedVersion: string;
+    updateAvailable: boolean;
+    repository: string;
+    branch: string;
+    updatesFolderUrl: string;
+    releasedAt: string;
+    notes: string[];
+    preserveUserPaths: string[];
+    source: 'github' | 'local';
+    checkedAt: number;
+    r36s?: Record<string, unknown>;
+    android?: Record<string, unknown>;
+  }
+
+  let updateCheckCache: { ts: number; data: CheckedUpdatePayload } | null = null;
+
+  async function runUpdateCheck(force = false): Promise<CheckedUpdatePayload> {
+    if (!force && updateCheckCache && Date.now() - updateCheckCache.ts < 3 * 60_000) {
+      return updateCheckCache.data;
+    }
+    const currentVersion = await readInstalledVersion();
+    const localManifest = await readLocalUpdateManifest();
+    const repository = await detectUpdateRepoSlug(localManifest);
+    const branch = String(
+      process.env.KPLAYER_UPDATE_BRANCH || localManifest?.branch || 'main'
+    )
+      .replace(/[^A-Za-z0-9._/-]/g, '')
+      .slice(0, 48) || 'main';
+
+    let remoteManifest: Record<string, unknown> | null = null;
+    if (repository && REPO_SLUG_RE.test(repository)) {
+      const remoteUrl = `https://raw.githubusercontent.com/${repository}/${branch}/updates/latest.json`;
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const r = await fetch(remoteUrl, {
+          signal: controller.signal,
+          headers: { 'User-Agent': `KPlayer-Updater/${currentVersion}` },
+        });
+        clearTimeout(timer);
+        if (r.ok) {
+          const txt = await r.text();
+          if (txt.length <= 256 * 1024) {
+            const parsed = JSON.parse(txt) as Record<string, unknown>;
+            if (parsed && typeof parsed.version === 'string' && SEMVER_RE.test(parsed.version)) {
+              remoteManifest = parsed;
+            }
+          }
+        }
+      } catch {
+        remoteManifest = null;
+      }
+    }
+
+    const active = remoteManifest ?? localManifest;
+    const latestVersion =
+      typeof active?.version === 'string' && SEMVER_RE.test(active.version)
+        ? active.version
+        : currentVersion;
+    const updateAvailable = compareSemver(latestVersion, currentVersion) > 0;
+    const notes = Array.isArray(active?.notes)
+      ? active.notes.filter((x): x is string => typeof x === 'string').slice(0, 8)
+      : [];
+    const preserveUserPaths = Array.isArray(active?.preserveUserPaths)
+      ? active.preserveUserPaths.filter((x): x is string => typeof x === 'string')
+      : UPDATE_PRESERVE_PATHS;
+
+    const payload: CheckedUpdatePayload = {
+      currentVersion,
+      latestVersion,
+      nextExpectedVersion: nextPatchVersion(currentVersion),
+      updateAvailable,
+      repository,
+      branch,
+      updatesFolderUrl: repository
+        ? `https://github.com/${repository}/tree/${branch}/updates`
+        : 'updates/',
+      releasedAt: typeof active?.releasedAt === 'string' ? active.releasedAt : '',
+      notes,
+      preserveUserPaths,
+      source: remoteManifest ? 'github' : 'local',
+      checkedAt: Date.now(),
+      ...(active?.r36s && typeof active.r36s === 'object'
+        ? { r36s: active.r36s as Record<string, unknown> }
+        : {}),
+      ...(active?.android && typeof active.android === 'object'
+        ? { android: active.android as Record<string, unknown> }
+        : {}),
+    };
+    updateCheckCache = { ts: Date.now(), data: payload };
+    return payload;
+  }
+
+  app.get('/api/update/check', async (req, res) => {
+    const force = req.query.refresh === '1';
+    try {
+      const status = await runUpdateCheck(force);
+      return res.json(status);
+    } catch {
+      const currentVersion = await readInstalledVersion();
+      return res.status(200).json({
+        currentVersion,
+        latestVersion: currentVersion,
+        nextExpectedVersion: nextPatchVersion(currentVersion),
+        updateAvailable: false,
+        repository: '',
+        branch: 'main',
+        updatesFolderUrl: 'updates/',
+        releasedAt: '',
+        notes: [],
+        preserveUserPaths: UPDATE_PRESERVE_PATHS,
+        source: 'local',
+        checkedAt: Date.now(),
+      });
+    }
+  });
+
+  app.post('/api/update/repo', async (req, res) => {
+    const raw = String((req.body as { repository?: unknown } | undefined)?.repository ?? '')
+      .trim()
+      .replace(/^https?:\/\/github\.com\//i, '')
+      .replace(/\.git$/i, '')
+      .replace(/\/+$/, '');
+    if (!REPO_SLUG_RE.test(raw)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Informe o repositório no formato usuario/repositorio (ex: MeuUsuario/KPlayer).',
+      });
+    }
+    try {
+      const cfgPath = path.join(__dirname, 'ports', 'kplayer', 'update-repo.txt');
+      await fs.writeFile(cfgPath, `${raw}\n`, 'utf8');
+      updateCheckCache = null;
+      const status = await runUpdateCheck(true);
+      return res.json({ ok: true, status });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Não foi possível salvar o repositório.' });
+    }
+  });
+
+  app.post('/api/update/apply', async (_req, res) => {
+    try {
+      const status = await runUpdateCheck(true);
+      // Clear only volatile network caches — strictly preserve iptv_usuario/, radios_usuario/, midias/, settings & history
+      iptvCache.clear();
+      epgIndexCache = null;
+      updateCheckCache = null;
+
+      return res.json({
+        ok: true,
+        previousVersion: status.currentVersion,
+        targetVersion: status.latestVersion,
+        updateAvailable: status.updateAvailable,
+        preservedUserPaths: status.preserveUserPaths,
+        restartRequired: true,
+        message: status.updateAvailable
+          ? `Atualização v${status.latestVersion} preparada preservando todos os seus dados e histórico. Reiniciando...`
+          : `KPlayer v${status.currentVersion} sincronizado com o canal de atualizações. Reiniciando...`,
+      });
+    } catch {
+      return res.status(502).json({
+        ok: false,
+        error: 'Não foi possível concluir a verificação do pacote de atualização.',
+      });
+    }
+  });
+
   app.get('/api/user-radios', async (_req, res) => {
     const dirs = [
       path.join(__dirname, 'ports', 'kplayer', 'radios_usuario'),
@@ -1316,6 +2053,10 @@ async function createServer() {
     const force = req.query.refresh === '1';
     try {
       const payload = await getIptvCategories(source, force);
+      if (source === 'canais' || source === 'usuario') {
+        // Warm XMLTV EPG index in background so live channel items resolve instantly
+        void loadEpgIndex(false).catch(() => {});
+      }
       return res.json(payload);
     } catch {
       return res.status(502).json({
@@ -1323,6 +2064,36 @@ async function createServer() {
         sourceUrl: source === 'canais' ? SAIMO_CANAIS_BASE : SAIMO_FILMES_BASE,
         totalCount: 0,
         categories: [],
+        error: 'unavailable',
+      });
+    }
+  });
+
+  app.get('/api/iptv/epg', async (req, res) => {
+    const channel = String(req.query.channel ?? '').trim().slice(0, 140);
+    const tvgId = String(req.query.tvgId ?? '').trim().slice(0, 140);
+    const force = req.query.refresh === '1';
+    try {
+      const index = await loadEpgIndex(force);
+      if (!channel && !tvgId) {
+        return res.json({
+          ready: index.channelCount > 0,
+          channelCount: index.channelCount,
+          updatedAt: index.ts,
+        });
+      }
+      const guide = lookupChannelEpg(index, channel, tvgId || undefined);
+      return res.json({
+        ...guide,
+        channelCount: index.channelCount,
+        updatedAt: index.ts,
+      });
+    } catch {
+      return res.status(502).json({
+        matchedChannel: null,
+        now: null,
+        next: null,
+        schedule: [],
         error: 'unavailable',
       });
     }
@@ -1346,6 +2117,23 @@ async function createServer() {
             item.group.toLowerCase().includes(q) ||
             item.id.toLowerCase().includes(q)
         );
+      }
+      if (source === 'canais' || source === 'usuario') {
+        const epg = await Promise.race([
+          loadEpgIndex(false).catch(() => null),
+          new Promise<EpgIndex | null>((resolve) => setTimeout(() => resolve(epgIndexCache), 2600)),
+        ]);
+        if (epg && epg.channelCount > 0) {
+          items = items.map((item) => {
+            const guide = lookupChannelEpg(epg, item.name, item.id);
+            if (!guide.now && !guide.next) return item;
+            return {
+              ...item,
+              epgNow: guide.now,
+              epgNext: guide.next,
+            };
+          });
+        }
       }
       return res.json({ source, category, total: items.length, items });
     } catch {

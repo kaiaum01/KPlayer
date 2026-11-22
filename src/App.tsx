@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { KP_THEMES } from './themes';
 import { LANGUAGE_NAMES, TERMS_PAGES, tr } from './i18n';
 import type {
+  AppUpdateStatus,
   EqPresetName,
   FootballMatch,
   IptvChannel,
   LanguageCode,
   MediaTrack,
+  PlaybackHistoryEntry,
   RadioStation,
   RepeatMode,
   ScreenMode,
@@ -20,7 +22,8 @@ import {
   formatTime,
   parseLrc,
 } from './utils/media';
-import { HeaderBar } from './components/HeaderBar';
+import { HeaderBar, UpdateBannerContext } from './components/HeaderBar';
+import { OptionsMenu, type OptionsMenuHandle, type OptionSectionId } from './components/OptionsMenu';
 import {
   AudioVisualizer,
   FooterBar,
@@ -99,11 +102,6 @@ const ANDROID_DISPLAY_MODES: Array<{
   { id: 'tablet', short: 'Tablet', label: 'Tablet / Dobrável (960×640)', width: 960, height: 640 },
 ];
 
-const OPTION_GROUPS = [
-  { name: 'Reprodução', items: ['rate', 'fit', 'audioTrack', 'subtitles', 'repeat', 'shuffle', 'eq'] as const },
-  { name: 'Biblioteca', items: ['favTrack', 'myFavs', 'resume', 'iptv', 'football'] as const },
-  { name: 'Geral', items: ['language', 'theme', 'displayMode', 'ipLocation', 'sleep', 'terms', 'exit'] as const },
-];
 
 function loadStorage<T>(key: string, fallback: T): T {
   try {
@@ -131,6 +129,14 @@ export default function App() {
   const [favoriteRadios, setFavoriteRadios] = useState<RadioStation[]>(() =>
     loadStorage('kp_fav_radios', [])
   );
+  const [playbackHistory, setPlaybackHistory] = useState<PlaybackHistoryEntry[]>(() =>
+    loadStorage('kp_history', [])
+  );
+  const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null);
+  const [updateChecking, setUpdateChecking] = useState<boolean>(false);
+  const [updateApplying, setUpdateApplying] = useState<boolean>(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [optionsInitialSection, setOptionsInitialSection] = useState<OptionSectionId>('root');
   const [showDeck, setShowDeck] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 820 : true
   );
@@ -224,6 +230,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const placarRef = useRef<PlacarDaBolaHandle | null>(null);
   const iptvRef = useRef<IptvScreenHandle | null>(null);
+  const optionsRef = useRef<OptionsMenuHandle | null>(null);
 
   const [activeTrack, setActiveTrack] = useState<MediaTrack | null>(() => tracks[0] ?? null);
   const [activeRadio, setActiveRadio] = useState<RadioStation | null>(null);
@@ -253,10 +260,6 @@ export default function App() {
   const [radioSelected, setRadioSelected] = useState(0);
   const [radioLoading, setRadioLoading] = useState(false);
   const [radioError, setRadioError] = useState<string | null>(null);
-
-  // Options State
-  const [optionGroupIdx, setOptionGroupIdx] = useState(0);
-  const [optionRowIdx, setOptionRowIdx] = useState(0);
 
   // Adaptive viewport measurement for R36S & Android (Auto fills device viewport; fixed presets scale cleanly)
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -316,6 +319,7 @@ export default function App() {
       localStorage.setItem('kp_ip_loc', JSON.stringify(ipLocationEnabled));
       localStorage.setItem('kp_fav_tracks', JSON.stringify(favoriteTrackIds));
       localStorage.setItem('kp_fav_radios', JSON.stringify(favoriteRadios));
+      localStorage.setItem('kp_history', JSON.stringify(playbackHistory));
       localStorage.setItem('kp_r36s_display', JSON.stringify(r36sDisplayMode));
       localStorage.setItem('kp_android_display', JSON.stringify(androidDisplayMode));
     } catch {
@@ -330,9 +334,114 @@ export default function App() {
     ipLocationEnabled,
     favoriteTrackIds,
     favoriteRadios,
+    playbackHistory,
     r36sDisplayMode,
     androidDisplayMode,
   ]);
+
+  const recordHistory = useCallback(
+    (kind: PlaybackHistoryEntry['kind'], title: string, subtitle?: string) => {
+      if (!title.trim()) return;
+      setPlaybackHistory((prev) => {
+        const filtered = prev.filter((item) => !(item.kind === kind && item.title === title));
+        return [{ kind, title, subtitle, playedAt: Date.now() }, ...filtered].slice(0, 40);
+      });
+    },
+    []
+  );
+
+  const checkForUpdates = useCallback(
+    async (force = false) => {
+      setUpdateChecking(true);
+      try {
+        const r = await fetch(`/api/update/check${force ? '?refresh=1' : ''}`);
+        if (!r.ok) return;
+        const data = (await r.json()) as AppUpdateStatus;
+        setUpdateStatus(data);
+        if (force) {
+          if (data.updateAvailable) {
+            setUpdateMessage(`Nova versão v${data.latestVersion} disponível na pasta updates/!`);
+            notify(`Nova versão v${data.latestVersion} disponível`);
+          } else {
+            setUpdateMessage(
+              `KPlayer v${data.currentVersion} atualizado. Monitorando v${data.nextExpectedVersion}+.`
+            );
+            notify(`KPlayer v${data.currentVersion} está em dia`);
+          }
+        }
+      } catch {
+        if (force) {
+          setUpdateMessage('Não foi possível consultar a pasta updates/ agora.');
+        }
+      } finally {
+        setUpdateChecking(false);
+      }
+    },
+    [notify]
+  );
+
+  const saveUpdateRepo = useCallback(
+    async (repo: string): Promise<boolean> => {
+      try {
+        const r = await fetch('/api/update/repo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repository: repo }),
+        });
+        const d = (await r.json()) as { ok?: boolean; status?: AppUpdateStatus; error?: string };
+        if (d.ok && d.status) {
+          setUpdateStatus(d.status);
+          setUpdateMessage(`Canal updates/ configurado para ${d.status.repository}`);
+          notify('Canal de atualização salvo');
+          return true;
+        }
+        setUpdateMessage(d.error || 'Formato inválido. Use usuario/repositorio');
+        return false;
+      } catch {
+        setUpdateMessage('Falha ao salvar o repositório do GitHub.');
+        return false;
+      }
+    },
+    [notify]
+  );
+
+  const applyAppUpdate = useCallback(async () => {
+    if (updateApplying) return;
+    setUpdateApplying(true);
+    setUpdateMessage('Baixando atualização da pasta updates/ (preservando dados e histórico)...');
+    try {
+      const r = await fetch('/api/update/apply', { method: 'POST' });
+      const d = (await r.json()) as {
+        ok?: boolean;
+        message?: string;
+        targetVersion?: string;
+        restartRequired?: boolean;
+      };
+      if (d.ok) {
+        setUpdateMessage(
+          d.message ||
+            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? '2.0.3'} aplicada. Reiniciando...`
+        );
+        notify('Atualização concluída! Reiniciando KPlayer...');
+        window.setTimeout(() => {
+          setUpdateApplying(false);
+          setUpdateMessage(null);
+          setBootRunId((n) => n + 1);
+        }, 1200);
+        return;
+      }
+      setUpdateMessage('Não foi possível aplicar a atualização agora.');
+      setUpdateApplying(false);
+    } catch {
+      setUpdateMessage('Erro de conexão ao aplicar atualização.');
+      setUpdateApplying(false);
+    }
+  }, [updateApplying, updateStatus?.latestVersion, notify]);
+
+  // Automatically check GitHub updates/ channel every time the app starts or restarts
+  useEffect(() => {
+    void checkForUpdates(false);
+  }, [bootRunId, checkForUpdates]);
 
   // Optional IP location
   useEffect(() => {
@@ -601,6 +710,7 @@ export default function App() {
         setIsPaused(false);
         setIsPlaying(true);
         setShowVideoOsd(true);
+        recordHistory('video', track.title, track.folder || 'Vídeo');
         setPrevScreen(screen === 'video' ? 'library' : screen);
         setScreen('video');
         return;
@@ -618,6 +728,7 @@ export default function App() {
       setCurrentMs(0);
       audio.src = track.url;
       audio.playbackRate = playbackRate;
+      recordHistory('audio', track.title, track.artist);
       audio
         .play()
         .then(() => {
@@ -628,7 +739,7 @@ export default function App() {
           notify(tr('Não foi possível abrir a mídia', language));
         });
     },
-    [ensureAudioEq, playbackRate, screen, language, notify]
+    [ensureAudioEq, playbackRate, screen, language, notify, recordHistory]
   );
 
   const playRadioStation = useCallback(
@@ -643,6 +754,7 @@ export default function App() {
       setActiveRadio(station);
       setDurationMs(0);
       setCurrentMs(0);
+      recordHistory('radio', station.name, station.country);
 
       // Use server proxy for HTTP streams (avoid HTTPS mixed-content block) or fallback on error
       const proxied = `/api/stream?url=${encodeURIComponent(station.url)}`;
@@ -677,7 +789,7 @@ export default function App() {
           }
         });
     },
-    [ensureAudioEq, language, notify]
+    [ensureAudioEq, language, notify, recordHistory]
   );
 
   const togglePlayPause = useCallback(() => {
@@ -790,19 +902,23 @@ export default function App() {
     }
   }, [screen, radioCategory, loadRadioCategory]);
 
-  const playIptvItem = useCallback((ch: IptvChannel, sectionLabel: string) => {
-    audioRef.current?.pause();
-    setActiveRadio(null);
-    setActiveVideoTitle(ch.name);
-    setActiveVideoSrc(ch.url);
-    setActiveVideoFallbacks(ch.fallbackUrls ?? []);
-    setActiveVideoLive(ch.mediaType ? ch.mediaType === 'live' : true);
-    setActiveVideoSection(sectionLabel);
-    setIsPaused(false);
-    setShowVideoOsd(true);
-    setPrevScreen('iptv');
-    setScreen('video');
-  }, []);
+  const playIptvItem = useCallback(
+    (ch: IptvChannel, sectionLabel: string) => {
+      audioRef.current?.pause();
+      setActiveRadio(null);
+      setActiveVideoTitle(ch.name);
+      setActiveVideoSrc(ch.url);
+      setActiveVideoFallbacks(ch.fallbackUrls ?? []);
+      setActiveVideoLive(ch.mediaType ? ch.mediaType === 'live' : true);
+      setActiveVideoSection(sectionLabel);
+      setIsPaused(false);
+      setShowVideoOsd(true);
+      recordHistory('iptv', ch.name, ch.group || sectionLabel);
+      setPrevScreen('iptv');
+      setScreen('video');
+    },
+    [recordHistory]
+  );
 
   // Handle local media / LRC upload
   const handleFilesSelected = useCallback(
@@ -960,94 +1076,18 @@ export default function App() {
     [activeTrack, audioTracks, openStreamingScreen]
   );
 
-  // Settings action handler
-  const activateOption = useCallback(
-    (key: string, dir: 1 | -1 = 1) => {
-      switch (key) {
-        case 'rate': {
-          const steps = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-          const i = steps.findIndex((v) => Math.abs(v - playbackRate) < 0.01);
-          setPlaybackRate(steps[(i + dir + steps.length) % steps.length]);
-          break;
-        }
-        case 'fit':
-          setVideoFit(((videoFit + dir + 3) % 3) as VideoFit);
-          break;
-        case 'repeat':
-          setRepeatMode(((repeatMode + dir + 3) % 3) as RepeatMode);
-          break;
-        case 'shuffle':
-          setShuffle((s) => !s);
-          break;
-        case 'eq':
-          setEqIdx((i) => (i + dir + EQ_PRESETS.length) % EQ_PRESETS.length);
-          break;
-        case 'favTrack':
-          toggleTrackFav();
-          break;
-        case 'myFavs':
-          setLibFavoritesOnly(true);
-          setLibLocationsView(false);
-          setLibFilter(1);
-          setLibSelected(0);
-          setScreen('library');
-          break;
-        case 'resume':
-          if (activeTrack) {
-            if (activeTrack.kind === 'audio') setScreen('music');
-            else playMediaTrack(activeTrack);
-          } else {
-            notify(tr('Abra uma mídia', language));
-          }
-          break;
-        case 'iptv':
-          openStreamingScreen('iptv', 'options');
-          break;
-        case 'football':
-          setScreen('football');
-          break;
-        case 'language':
-          setLanguage(((language + dir + 3) % 3) as LanguageCode);
-          break;
-        case 'theme':
-          setThemeIndex((i) => (i + dir + KP_THEMES.length) % KP_THEMES.length);
-          break;
-        case 'displayMode': {
-          const idx = R36S_DISPLAY_MODES.findIndex((m) => m.id === r36sDisplayMode);
-          const next = R36S_DISPLAY_MODES[(idx + dir + R36S_DISPLAY_MODES.length) % R36S_DISPLAY_MODES.length];
-          setR36sDisplayMode(next.id);
-          break;
-        }
-        case 'ipLocation':
-          setIpLocationEnabled((v) => !v);
-          break;
-        case 'sleep':
-          setSleepIdx((i) => (i + dir + SLEEP_OPTIONS.length) % SLEEP_OPTIONS.length);
-          break;
-        case 'terms':
-          setTermsReturn('options');
-          setTermsPage(0);
-          setScreen('terms');
-          break;
-        case 'exit':
-          setScreen('welcome');
-          break;
-        default:
-          notify(tr('Abra uma mídia', language));
+  const openOptionsScreen = useCallback(
+    (initialSec: OptionSectionId = 'root') => {
+      if (screen !== 'options') {
+        setPrevScreen(screen === 'boot' || screen === 'welcome' ? 'home' : screen);
       }
+      setOptionsInitialSection(initialSec);
+      setScreen('options');
+      window.setTimeout(() => {
+        optionsRef.current?.openSection(initialSec);
+      }, 0);
     },
-    [
-      playbackRate,
-      videoFit,
-      repeatMode,
-      language,
-      activeTrack,
-      playMediaTrack,
-      toggleTrackFav,
-      openStreamingScreen,
-      r36sDisplayMode,
-      notify,
-    ]
+    [screen]
   );
 
   // Unified R36S physical / keyboard / on-screen button handler
@@ -1064,8 +1104,7 @@ export default function App() {
         if (screen === 'options') {
           setScreen(prevScreen);
         } else if (screen !== 'welcome' && screen !== 'terms' && screen !== 'notice') {
-          setPrevScreen(screen);
-          setScreen('options');
+          openOptionsScreen('root');
         }
         return;
       }
@@ -1133,8 +1172,7 @@ export default function App() {
           if (activeRadio) openStreamingScreen('radio', 'home');
           else setScreen('music');
         } else if (btn === 'Y') {
-          setPrevScreen('home');
-          setScreen('options');
+          openOptionsScreen('root');
         }
         return;
       }
@@ -1263,21 +1301,7 @@ export default function App() {
       }
 
       if (screen === 'options') {
-        const grp = OPTION_GROUPS[optionGroupIdx];
-        if (btn === 'A') {
-          setScreen(prevScreen);
-        } else if (btn === 'X') {
-          setOptionGroupIdx((g) => (g + 1) % OPTION_GROUPS.length);
-          setOptionRowIdx(0);
-        } else if (btn === 'UP') {
-          setOptionRowIdx((r) => (r + grp.items.length - 1) % grp.items.length);
-        } else if (btn === 'DOWN') {
-          setOptionRowIdx((r) => (r + 1) % grp.items.length);
-        } else if (btn === 'LEFT') {
-          activateOption(grp.items[optionRowIdx], -1);
-        } else if (btn === 'RIGHT' || btn === 'B') {
-          activateOption(grp.items[optionRowIdx], 1);
-        }
+        optionsRef.current?.handleButton(btn);
       }
     },
     [
@@ -1310,9 +1334,7 @@ export default function App() {
       radioCategory,
       fetchUserRadios,
       loadRadioCategory,
-      optionGroupIdx,
-      optionRowIdx,
-      activateOption,
+      openOptionsScreen,
       acceptStreamNotice,
       noticeReturn,
       openStreamingScreen,
@@ -1378,78 +1400,20 @@ export default function App() {
     return audioTracks[(i + 1) % audioTracks.length] ?? null;
   }, [activeTrack, audioTracks]);
 
-  const optionValueLabel = (key: string): string => {
-    switch (key) {
-      case 'rate':
-        return `${playbackRate.toFixed(2)}x`;
-      case 'fit':
-        return videoFit === 0
-          ? tr('Proporção original', language)
-          : videoFit === 1
-          ? tr('Preencher (corte)', language)
-          : tr('Esticar', language);
-      case 'audioTrack':
-      case 'subtitles':
-        return tr('Abra uma mídia', language);
-      case 'repeat':
-        return repeatMode === 1
-          ? tr('Repetir faixa', language)
-          : repeatMode === 2
-          ? tr('Repetir fila', language)
-          : tr('Desativada', language);
-      case 'shuffle':
-        return tr(shuffle ? 'Ativada' : 'Desativada', language);
-      case 'eq':
-        return eqIdx === 0 ? tr('Desativada', language) : EQ_PRESETS[eqIdx].name;
-      case 'favTrack':
-        return activeTrack
-          ? tr(favoriteTrackIds.includes(activeTrack.id) ? 'Ativada' : 'Desativada', language)
-          : tr('Abra uma mídia', language);
-      case 'language':
-        return LANGUAGE_NAMES[language];
-      case 'theme':
-        return tr(theme.name, language);
-      case 'displayMode':
-        return r36sDisplayMode === 'auto'
-          ? `${tr('Auto (Adaptativo)', language)} (${stageSize.w}×${stageSize.h})`
-          : tr(activePreset.label, language);
-      case 'ipLocation':
-        return tr(ipLocationEnabled ? 'Ativada' : 'Desativada', language);
-      case 'sleep':
-        return sleepIdx === 0 ? tr('Desativada', language) : `${SLEEP_OPTIONS[sleepIdx]} min`;
-      default:
-        return tr('Abrir', language);
-    }
-  };
-
-  const optionNameLabel = (key: string): string => {
-    const names: Record<string, string> = {
-      rate: 'Velocidade',
-      fit: 'Formato da imagem',
-      audioTrack: 'Faixa de áudio',
-      subtitles: 'Legendas',
-      repeat: 'Modo de repetição',
-      shuffle: 'Aleatório',
-      eq: 'Equalizador',
-      favTrack: 'Favoritar faixa',
-      myFavs: 'Minhas favoritas',
-      resume: 'Retomar mídia',
-      iptv: 'IPTV',
-      football: 'Placar da Bola',
-      language: 'Idioma',
-      theme: 'Tema',
-      displayMode: 'Adaptação de tela',
-      ipLocation: 'Localização por IP',
-      sleep: 'Timer de sono',
-      terms: 'Termos de uso',
-      exit: 'Sair do KPlayer',
-    };
-    return tr(names[key] ?? key, language);
-  };
+  const updateBannerValue = useMemo(
+    () => ({
+      currentVersion: updateStatus?.currentVersion ?? '2.0.3',
+      updateAvailable: Boolean(updateStatus?.updateAvailable),
+      latestVersion: updateStatus?.latestVersion ?? '2.0.3',
+      onOpenUpdate: () => openOptionsScreen('update'),
+    }),
+    [updateStatus, openOptionsScreen]
+  );
 
   const selectedRadio = radioStations[radioSelected];
 
   return (
+    <UpdateBannerContext.Provider value={updateBannerValue}>
     <div className="h-screen w-screen bg-[#0a0c10] text-white flex flex-col overflow-hidden">
       {/* Hidden native input for real local media & LRC import */}
       <input
@@ -1488,8 +1452,38 @@ export default function App() {
 
       {/* Minimal Top Utility Bar for Edition Switcher, Media Import & Downloads */}
       <div className="min-h-10 px-3 py-1.5 bg-[#101319] border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-3 text-xs">
-          <span className="font-bold text-zinc-100 whitespace-nowrap">KPlayer 2.0.3</span>
+        <div className="flex items-center gap-2.5 text-xs flex-wrap">
+          <span className="font-bold text-zinc-100 whitespace-nowrap">
+            KPlayer v{updateStatus?.currentVersion ?? '2.0.3'}
+          </span>
+          {updateStatus?.updateAvailable ? (
+            <button
+              type="button"
+              onClick={() => openOptionsScreen('update')}
+              style={{
+                backgroundColor: rgbToRgba(theme.accent, 0.2),
+                border: `1px solid ${rgbToRgba(theme.accent, 0.6)}`,
+                color: theme.accent,
+              }}
+              className="px-2 py-0.5 rounded-full text-[11px] font-extrabold whitespace-nowrap cursor-pointer flex items-center gap-1.5 hover:brightness-110 transition-all"
+              title="Nova versão pronta na pasta updates/ do GitHub — clique ou pressione SELECT"
+            >
+              <span
+                style={{ backgroundColor: theme.accent }}
+                className="w-1.5 h-1.5 rounded-full animate-pulse"
+              />
+              Atualização v{updateStatus.latestVersion} disponível · SELECT
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openOptionsScreen('update')}
+              className="px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-white/5 text-zinc-400 hover:text-zinc-200 border border-white/10 whitespace-nowrap cursor-pointer transition-colors"
+              title="Auto-update monitorando novas versões na pasta updates/ do GitHub"
+            >
+              Auto-Update · SELECT
+            </button>
+          )}
           <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[#181c25] border border-white/10">
             {(
               [
@@ -3240,89 +3234,74 @@ export default function App() {
               />
             )}
 
-            {/* ==================== OPTIONS / SETTINGS (ADAPTIVE MODERN SKIN) ==================== */}
+            {/* ==================== NEW SELECTION-FIRST OPTIONS MENU (OPENED VIA SELECT) ==================== */}
             {screen === 'options' && (
-              <div className="w-full h-full relative overflow-hidden flex flex-col">
-                <ModernBackdrop theme={theme} />
-                <HeaderBar
-                  theme={theme}
-                  section={tr('OPÇÕES', language)}
-                  location={locationLabel}
-                />
-
-                <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-[54px] flex flex-col w-full max-w-[820px] mx-auto">
-                  <h2 style={{ color: theme.text }} className="text-[21px] @min-[540px]:text-[23px] font-extrabold shrink-0">
-                    {tr('Opções', language)}
-                  </h2>
-
-                  {/* 3 Glowing Pill Category Tabs: Reprodução, Biblioteca, Geral */}
-                  <div className="grid grid-cols-3 gap-2 mt-2 shrink-0">
-                    {OPTION_GROUPS.map((g, gi) => {
-                      const activeGrp = gi === optionGroupIdx;
-                      return (
-                        <button
-                          key={g.name}
-                          type="button"
-                          onClick={() => {
-                            setOptionGroupIdx(gi);
-                            setOptionRowIdx(0);
-                          }}
-                          style={{
-                            ...modernPillStyle(theme, activeGrp),
-                            height: 30,
-                          }}
-                          className="text-[12px] @min-[520px]:text-[13px] font-bold cursor-pointer transition-all truncate px-1.5"
-                        >
-                          {tr(g.name, language)}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Scrollable Glowing Option Rows */}
-                  <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-1.5">
-                    {OPTION_GROUPS[optionGroupIdx].items.map((key, ri) => {
-                      const focused = ri === optionRowIdx;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onMouseEnter={() => setOptionRowIdx(ri)}
-                          onClick={() => activateOption(key, 1)}
-                          style={{
-                            ...modernCardStyle(theme, focused, 10, theme.panel),
-                            minHeight: 38,
-                          }}
-                          className="w-full px-3.5 @min-[520px]:px-4 py-1.5 flex items-center justify-between gap-2 text-left cursor-pointer transition-all"
-                        >
-                          <span
-                            style={{ color: focused ? theme.accent : theme.text }}
-                            className="text-[13.5px] @min-[520px]:text-[14.5px] font-bold shrink-0"
-                          >
-                            {optionNameLabel(key)}
-                          </span>
-                          <span style={{ color: theme.muted }} className="text-[12.5px] @min-[520px]:text-[13.5px] font-medium truncate text-right">
-                            {optionValueLabel(key)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <FooterBar
-                  theme={theme}
-                  themeIndex={themeIndex}
-                  toast={toast}
-                  hints={[
-                    { key: 'DIR', label: tr('Navegar', language) },
-                    { key: 'B', label: tr('Alterar', language) },
-                    { key: 'X', label: tr('Categorias', language) },
-                    { key: 'A', label: tr('Voltar', language) },
-                    { key: 'SELECT', label: tr('Fechar', language) },
-                  ]}
-                />
-              </div>
+              <OptionsMenu
+                ref={optionsRef}
+                theme={theme}
+                themeIndex={themeIndex}
+                language={language}
+                locationLabel={locationLabel}
+                toast={toast}
+                initialSection={optionsInitialSection}
+                playbackRate={playbackRate}
+                videoFit={videoFit}
+                repeatMode={repeatMode}
+                shuffle={shuffle}
+                eqIdx={eqIdx}
+                eqPresets={EQ_PRESETS}
+                sleepIdx={sleepIdx}
+                sleepOptions={SLEEP_OPTIONS}
+                r36sDisplayMode={r36sDisplayMode}
+                displayModes={R36S_DISPLAY_MODES}
+                stageSize={stageSize}
+                ipLocationEnabled={ipLocationEnabled}
+                activeTrack={activeTrack}
+                favoriteTrackIds={favoriteTrackIds}
+                history={playbackHistory}
+                updateStatus={updateStatus}
+                updateChecking={updateChecking}
+                updateApplying={updateApplying}
+                updateMessage={updateMessage}
+                onSetThemeIndex={setThemeIndex}
+                onSetLanguage={setLanguage}
+                onSetDisplayMode={setR36sDisplayMode}
+                onSetPlaybackRate={setPlaybackRate}
+                onSetVideoFit={setVideoFit}
+                onSetRepeatMode={setRepeatMode}
+                onToggleShuffle={() => setShuffle((s) => !s)}
+                onSetEqIdx={setEqIdx}
+                onSetSleepIdx={setSleepIdx}
+                onSetIpLocation={setIpLocationEnabled}
+                onToggleFavTrack={toggleTrackFav}
+                onOpenFavorites={() => {
+                  setLibFavoritesOnly(true);
+                  setLibLocationsView(false);
+                  setLibFilter(1);
+                  setLibSelected(0);
+                  setScreen('library');
+                }}
+                onResumeMedia={() => {
+                  if (activeTrack) {
+                    if (activeTrack.kind === 'audio') setScreen('music');
+                    else playMediaTrack(activeTrack);
+                  } else {
+                    notify(tr('Abra uma mídia', language));
+                  }
+                }}
+                onOpenIptv={() => openStreamingScreen('iptv', 'options')}
+                onOpenFootball={() => setScreen('football')}
+                onOpenTerms={() => {
+                  setTermsReturn('options');
+                  setTermsPage(0);
+                  setScreen('terms');
+                }}
+                onExitApp={() => setScreen('welcome')}
+                onCheckUpdate={checkForUpdates}
+                onApplyUpdate={applyAppUpdate}
+                onSaveUpdateRepo={saveUpdateRepo}
+                onClose={() => setScreen(prevScreen)}
+              />
             )}
                 </div>
               </div>
@@ -3395,6 +3374,14 @@ export default function App() {
               onMatchesLoaded={setPreloadedMatches}
               compactFrame={isSplit || isBezelPreset}
               fluidAdaptive={!isSplit}
+              updateStatus={updateStatus}
+              updateChecking={updateChecking}
+              updateApplying={updateApplying}
+              updateMessage={updateMessage}
+              historyCount={playbackHistory.length}
+              onCheckUpdate={checkForUpdates}
+              onApplyUpdate={applyAppUpdate}
+              onSaveUpdateRepo={saveUpdateRepo}
             />
           );
 
@@ -3665,5 +3652,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </UpdateBannerContext.Provider>
   );
 }

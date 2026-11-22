@@ -8,6 +8,7 @@ import React, {
   useState,
 } from 'react';
 import type {
+  EpgChannelGuide,
   IptvCategory,
   IptvChannel,
   IptvSourceKey,
@@ -109,6 +110,33 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
   const [kbSaving, setKbSaving] = useState<boolean>(false);
   const [kbError, setKbError] = useState<string | null>(null);
   const fileUploadRef = useRef<HTMLInputElement | null>(null);
+
+  // Live EPG Guide modal
+  const [epgModalChannel, setEpgModalChannel] = useState<IptvChannel | null>(null);
+  const [epgGuide, setEpgGuide] = useState<EpgChannelGuide | null>(null);
+  const [epgLoading, setEpgLoading] = useState<boolean>(false);
+
+  const openEpgGuide = useCallback(async (ch: IptvChannel) => {
+    setEpgModalChannel(ch);
+    setEpgGuide(null);
+    setEpgLoading(true);
+    try {
+      const qs = new URLSearchParams({ channel: ch.name });
+      if (ch.id) qs.set('tvgId', ch.id);
+      const r = await fetch(`/api/iptv/epg?${qs.toString()}`);
+      const d = (await r.json()) as EpgChannelGuide;
+      setEpgGuide(d);
+    } catch {
+      setEpgGuide({
+        matchedChannel: null,
+        now: ch.epgNow ?? null,
+        next: ch.epgNext ?? null,
+        schedule: [],
+      });
+    } finally {
+      setEpgLoading(false);
+    }
+  }, []);
 
   const loadCategories = useCallback(async (src: IptvSourceKey, force = false) => {
     const cached = catCacheRef.current.get(src);
@@ -348,6 +376,10 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
     ref,
     () => ({
       handleButton: (btn: R36SButton) => {
+        if (epgModalChannel) {
+          if (btn === 'A') setEpgModalChannel(null);
+          return;
+        }
         if (showKbModal) {
           if (btn === 'A') setShowKbModal(false);
           return;
@@ -425,6 +457,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
       },
     }),
     [
+      epgModalChannel,
       showKbModal,
       view,
       categories,
@@ -747,70 +780,169 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                 </div>
 
                 <div className="hidden @min-[540px]:block mt-auto w-full space-y-1.5 pt-2">
-                  <div>
-                    <div style={{ color: theme.muted }} className="text-[10px]">
-                      {tr('Categoria', language)}
+                  {selectedItem?.epgNow ? (
+                    <div
+                      style={{
+                        backgroundColor: rgbToRgba(theme.elevated, 0.8),
+                        border: `1px solid ${themeHairline(theme)}`,
+                      }}
+                      className="p-2 rounded-lg space-y-1"
+                    >
+                      <div className="flex items-center justify-between gap-1 text-[9.5px] font-bold">
+                        <span style={{ color: theme.accent }}>AGORA</span>
+                        <span style={{ color: theme.muted }} className="tabular-nums">
+                          {selectedItem.epgNow.startLabel}–{selectedItem.epgNow.stopLabel}
+                        </span>
+                      </div>
+                      <div style={{ color: theme.text }} className="text-[11px] font-bold leading-snug line-clamp-2">
+                        {selectedItem.epgNow.title}
+                      </div>
+                      <div
+                        style={{ backgroundColor: rgbToRgba(theme.muted, 0.22) }}
+                        className="h-1 rounded-full overflow-hidden"
+                      >
+                        <div
+                          style={{
+                            width: `${Math.max(4, Math.min(100, selectedItem.epgNow.progressPct ?? 0))}%`,
+                            backgroundColor: theme.accent,
+                          }}
+                          className="h-full rounded-full"
+                        />
+                      </div>
+                      {selectedItem.epgNext && (
+                        <div style={{ color: theme.muted }} className="text-[9.5px] truncate pt-0.5 tabular-nums">
+                          A seguir {selectedItem.epgNext.startLabel}: {selectedItem.epgNext.title}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ color: theme.text }} className="text-[11.5px] font-semibold truncate">
-                      {selectedItem?.group || '--'}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ color: theme.muted }} className="text-[10px]">
-                      {tr('Detalhes', language)}
-                    </div>
-                    <div style={{ color: theme.accent }} className="text-[11px] font-bold truncate">
-                      {selectedItem?.id || '--'}
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div>
+                        <div style={{ color: theme.muted }} className="text-[10px]">
+                          {tr('Categoria', language)}
+                        </div>
+                        <div style={{ color: theme.text }} className="text-[11.5px] font-semibold truncate">
+                          {selectedItem?.group || '--'}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ color: theme.muted }} className="text-[10px]">
+                          {tr('Detalhes', language)}
+                        </div>
+                        <div style={{ color: theme.accent }} className="text-[11px] font-bold truncate">
+                          {selectedItem?.id || '--'}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => activateItem(selectedItem)}
-                  style={{
-                    ...modernPillStyle(theme, true),
-                    height: 28,
-                  }}
-                  className="px-3 @min-[540px]:w-full text-[11px] font-extrabold cursor-pointer shrink-0 @min-[540px]:mt-2"
-                >
-                  {selectedItem?.mediaType === 'series-show'
-                    ? tr('Episódios', language)
-                    : tr('Assistir', language)}
-                </button>
+                <div className="flex @min-[540px]:flex-col gap-1.5 shrink-0 @min-[540px]:w-full @min-[540px]:mt-2">
+                  <button
+                    type="button"
+                    onClick={() => activateItem(selectedItem)}
+                    style={{
+                      ...modernPillStyle(theme, true),
+                      height: 28,
+                    }}
+                    className="px-3 @min-[540px]:w-full text-[11px] font-extrabold cursor-pointer shrink-0"
+                  >
+                    {selectedItem?.mediaType === 'series-show'
+                      ? tr('Episódios', language)
+                      : tr('Assistir', language)}
+                  </button>
+                  {selectedItem &&
+                    (selectedItem.mediaType === 'live' ||
+                      activeSource.key === 'canais' ||
+                      activeSource.key === 'usuario') && (
+                      <button
+                        type="button"
+                        onClick={() => openEpgGuide(selectedItem)}
+                        style={{
+                          ...modernCardStyle(theme, false, 8),
+                          height: 26,
+                          color: theme.accent,
+                        }}
+                        className="px-2.5 @min-[540px]:w-full text-[10.5px] font-bold cursor-pointer shrink-0"
+                      >
+                        Guia EPG
+                      </button>
+                    )}
+                </div>
               </div>
 
               {/* Right Unlimited Scrollable List */}
               <div className="flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-1.5">
                 {visibleItems.map((ch, idx) => {
                   const focus = idx === itemSelected;
+                  const canShowEpg =
+                    ch.mediaType === 'live' ||
+                    activeSource.key === 'canais' ||
+                    activeSource.key === 'usuario';
                   return (
-                    <button
+                    <div
                       key={`${ch.name}-${idx}`}
-                      type="button"
                       onMouseEnter={() => setItemSelected(idx)}
                       onClick={() => activateItem(ch)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          activateItem(ch);
+                        }
+                      }}
                       style={{
                         ...modernCardStyle(theme, focus, 10),
-                        height: 40,
+                        minHeight: ch.epgNow ? 50 : 40,
                       }}
-                      className="w-full px-3 flex items-center gap-2.5 text-left cursor-pointer transition-all"
+                      className="w-full px-3 py-1.5 flex items-center gap-2.5 text-left cursor-pointer transition-all"
                     >
                       <span
                         style={{ color: focus ? theme.accent : theme.muted }}
-                        className="text-[11px] font-bold w-8 shrink-0"
+                        className="text-[11px] font-bold w-7 shrink-0 tabular-nums"
                       >
                         {idx + 1}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div style={{ color: theme.text }} className="text-[13px] font-bold truncate">
-                          {ch.name}
+                        <div className="flex items-center justify-between gap-2">
+                          <div style={{ color: theme.text }} className="text-[13px] font-bold truncate">
+                            {ch.name}
+                          </div>
+                          {ch.epgNow && (
+                            <span
+                              style={{ color: theme.accent }}
+                              className="text-[9.5px] font-bold shrink-0 tabular-nums"
+                            >
+                              {ch.epgNow.startLabel}–{ch.epgNow.stopLabel}
+                            </span>
+                          )}
                         </div>
-                        <div style={{ color: theme.muted }} className="text-[9.5px] truncate">
-                          {ch.id || ch.group}
-                        </div>
+                        {ch.epgNow ? (
+                          <div className="mt-0.5 space-y-1">
+                            <div style={{ color: theme.muted }} className="text-[10px] truncate">
+                              Agora: {ch.epgNow.title}
+                            </div>
+                            <div
+                              style={{ backgroundColor: rgbToRgba(theme.muted, 0.2) }}
+                              className="h-[2.5px] rounded-full overflow-hidden"
+                            >
+                              <div
+                                style={{
+                                  width: `${Math.max(4, Math.min(100, ch.epgNow.progressPct ?? 0))}%`,
+                                  backgroundColor: theme.accent,
+                                }}
+                                className="h-full rounded-full"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ color: theme.muted }} className="text-[9.5px] truncate">
+                            {ch.id || ch.group}
+                          </div>
+                        )}
                       </div>
-                      {ch.mediaType === 'series-show' && (
+                      {ch.mediaType === 'series-show' ? (
                         <span
                           style={{
                             color: theme.accent,
@@ -820,8 +952,25 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                         >
                           {ch.episodeCount ? `${ch.episodeCount} eps` : 'Ver'}
                         </span>
-                      )}
-                    </button>
+                      ) : canShowEpg ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEpgGuide(ch);
+                          }}
+                          style={{
+                            color: theme.accent,
+                            backgroundColor: rgbToRgba(theme.accent, 0.12),
+                            border: `1px solid ${rgbToRgba(theme.accent, 0.28)}`,
+                          }}
+                          className="text-[9.5px] font-bold px-2 py-1 rounded-md shrink-0 cursor-pointer"
+                          title="Abrir Guia de Programação (EPG)"
+                        >
+                          EPG
+                        </button>
+                      ) : null}
+                    </div>
                   );
                 })}
                 {visibleItems.length < filteredItems.length && (
@@ -1148,6 +1297,158 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                   {kbSaving ? '...' : tr('Salvar', language)}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== LIVE EPG GUIDE MODAL ==================== */}
+      {epgModalChannel && (
+        <div
+          style={{ backgroundColor: 'rgba(6, 9, 13, 0.86)' }}
+          className="absolute inset-0 z-30 flex items-center justify-center p-3 sm:p-4"
+          onClick={() => setEpgModalChannel(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ ...modernPanelStyle(theme, 14) }}
+            className="w-full max-w-[580px] max-h-[86%] flex flex-col overflow-hidden"
+          >
+            <div
+              className="px-3.5 py-2.5 flex items-center justify-between gap-2 shrink-0"
+              style={{ borderBottom: `1px solid ${themeHairline(theme)}` }}
+            >
+              <div className="min-w-0">
+                <div style={{ color: theme.accent }} className="text-[10px] font-bold uppercase tracking-wide">
+                  Guia de Programação (EPG) · Horário de Brasília
+                </div>
+                <div style={{ color: theme.text }} className="text-[14px] font-extrabold truncate">
+                  {epgModalChannel.name}
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ch = epgModalChannel;
+                    setEpgModalChannel(null);
+                    activateItem(ch);
+                  }}
+                  style={{ ...modernPillStyle(theme, true), height: 26, paddingLeft: 10, paddingRight: 10 }}
+                  className="text-[10.5px] font-extrabold cursor-pointer"
+                >
+                  {tr('Assistir', language)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEpgModalChannel(null)}
+                  style={{ color: theme.muted }}
+                  className="text-[17px] font-bold px-2 cursor-pointer"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto kp-scroll p-3.5 space-y-2.5">
+              {epgLoading ? (
+                <div className="py-10 text-center text-[12.5px] font-bold" style={{ color: theme.accent }}>
+                  Carregando grade ao vivo...
+                </div>
+              ) : !epgGuide || (!epgGuide.now && epgGuide.schedule.length === 0) ? (
+                <div className="py-10 text-center space-y-1">
+                  <div style={{ color: theme.text }} className="text-[13px] font-bold">
+                    Grade EPG não encontrada para este canal
+                  </div>
+                  <div style={{ color: theme.muted }} className="text-[11px]">
+                    Nem todos os canais regionais ou internacionais possuem guia XMLTV aberto no momento.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {epgGuide.now && (
+                    <div
+                      style={{
+                        backgroundColor: rgbToRgba(theme.accent, 0.1),
+                        border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
+                      }}
+                      className="p-3 rounded-xl space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between gap-2 text-[10.5px] font-bold">
+                        <span style={{ color: theme.accent }}>NO AR AGORA</span>
+                        <span style={{ color: theme.text }} className="tabular-nums">
+                          {epgGuide.now.startLabel} – {epgGuide.now.stopLabel}
+                        </span>
+                      </div>
+                      <div style={{ color: theme.text }} className="text-[14px] font-extrabold leading-snug">
+                        {epgGuide.now.title}
+                      </div>
+                      {epgGuide.now.category && (
+                        <div style={{ color: theme.accent }} className="text-[10px] font-semibold">
+                          {epgGuide.now.category}
+                        </div>
+                      )}
+                      {epgGuide.now.desc && (
+                        <p style={{ color: theme.muted }} className="text-[11px] leading-relaxed">
+                          {epgGuide.now.desc}
+                        </p>
+                      )}
+                      <div
+                        style={{ backgroundColor: rgbToRgba(theme.muted, 0.22) }}
+                        className="h-1.5 rounded-full overflow-hidden"
+                      >
+                        <div
+                          style={{
+                            width: `${Math.max(4, Math.min(100, epgGuide.now.progressPct ?? 0))}%`,
+                            backgroundColor: theme.accent,
+                          }}
+                          className="h-full rounded-full"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {epgGuide.schedule.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div style={{ color: theme.muted }} className="text-[10.5px] font-bold uppercase tracking-wide">
+                        Programação do dia ({epgGuide.schedule.length})
+                      </div>
+                      {epgGuide.schedule.map((prog, i) => {
+                        const isCurrent = epgGuide.now && prog.startMs === epgGuide.now.startMs;
+                        return (
+                          <div
+                            key={`${prog.startMs}-${i}`}
+                            style={{
+                              backgroundColor: isCurrent
+                                ? rgbToRgba(theme.accent, 0.12)
+                                : rgbToRgba(theme.elevated, 0.85),
+                              border: `1px solid ${isCurrent ? rgbToRgba(theme.accent, 0.35) : themeHairline(theme)}`,
+                            }}
+                            className="px-3 py-2 rounded-lg flex items-start gap-2.5"
+                          >
+                            <span
+                              style={{ color: isCurrent ? theme.accent : theme.muted }}
+                              className="text-[11px] font-bold tabular-nums shrink-0 pt-0.5"
+                            >
+                              {prog.startLabel}–{prog.stopLabel}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div style={{ color: theme.text }} className="text-[12px] font-bold leading-snug">
+                                {prog.title}
+                              </div>
+                              {prog.desc && (
+                                <div style={{ color: theme.muted }} className="text-[10.5px] line-clamp-2 mt-0.5">
+                                  {prog.desc}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

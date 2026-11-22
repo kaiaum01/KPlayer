@@ -34,6 +34,7 @@ files = [
     runtime / "KPlayer-metadata.xml",
     runtime / "iptv_fetch.py",
     runtime / "football_fetch.py",
+    runtime / "updater.py",
     runtime / "golazo",
     runtime / "fonts" / "Interface.ttf",
     runtime / "fonts" / "Bold.ttf",
@@ -56,12 +57,15 @@ files = [
     runtime / "radios_usuario" / "Ilustrada FM 102.3.pls",
 ]
 files += sorted((runtime / "licencas").glob("*.txt"))
+if (runtime / "update-repo.txt").is_file():
+    files.append(runtime / "update-repo.txt")
 
 EXECUTABLE_NAMES = {
     "KPlayer.sh",
     "kplayer",
     "iptv_fetch.py",
     "football_fetch.py",
+    "updater.py",
     "golazo",
 }
 
