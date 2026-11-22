@@ -12,6 +12,7 @@ export type ScreenMode =
   | 'radio'
   | 'iptv'
   | 'football'
+  | 'weather'
   | 'options';
 
 export interface LyricLine {
@@ -198,4 +199,54 @@ export interface PlaybackHistoryEntry {
   subtitle?: string;
   playedAt: number;
 }
+
+export type WeatherMode = 'unset' | 'ip' | 'manual';
+
+export interface WeatherLocation {
+  name: string;
+  region?: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+  timezone?: string;
+}
+
+export interface WeatherHourlyPoint {
+  time: string;
+  hourLabel: string;
+  temp: number;
+  weatherCode: number;
+  precipProb: number;
+  isDay: boolean;
+}
+
+export interface WeatherDailyPoint {
+  date: string;
+  dayLabel: string;
+  weatherCode: number;
+  tempMax: number;
+  tempMin: number;
+  precipProbMax: number;
+  uvMax: number;
+  sunrise: string;
+  sunset: string;
+}
+
+export interface WeatherData {
+  location: WeatherLocation;
+  fetchedAt: number;
+  current: {
+    temp: number;
+    apparentTemp: number;
+    humidity: number;
+    windSpeed: number;
+    pressure: number;
+    precipitation: number;
+    weatherCode: number;
+    isDay: boolean;
+  };
+  hourly: WeatherHourlyPoint[];
+  daily: WeatherDailyPoint[];
+}
+
 

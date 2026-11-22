@@ -1,7 +1,18 @@
 {
   "schemaVersion": 1,
-  "latest": "2.0.3",
+  "latest": "2.0.4",
   "releases": [
+    {
+      "version": "2.0.4",
+      "releasedAt": "2026-11-21T21:40:00Z",
+      "r36s": "updates/v2.0.4/KPlayer-v2.0.4-R36S.zip",
+      "android": "updates/v2.0.4/KPlayer-v2.0.4-Android.apk",
+      "notes": [
+        "App de Clima Open-Meteo no botão X + widget compacto na tela inicial",
+        "Barra inferior removida + lista de Atalhos nas Opções",
+        "Opções em ordem alfabética com Verificar atualizações (A) em penúltimo e Sair por último"
+      ]
+    },
     {
       "version": "2.0.3",
       "releasedAt": "2026-11-21T00:00:00Z",

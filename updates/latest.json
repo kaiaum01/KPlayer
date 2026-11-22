@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "version": "2.0.3",
-  "nextVersion": "2.0.4",
+  "version": "2.0.4",
+  "nextVersion": "2.0.5",
   "channel": "stable",
-  "releasedAt": "2026-11-21T00:00:00Z",
+  "releasedAt": "2026-11-21T21:40:00Z",
   "repository": "",
   "branch": "main",
   "updatesDir": "updates",
@@ -17,28 +17,27 @@
     "favorites.txt"
   ],
   "notes": [
-    "Auto-Update integrado via pasta updates/ do GitHub com preservação total de dados e histórico",
-    "Novo menu de Opções (SELECT) com seleção direta sem barras laterais",
-    "Guia de Programação ao vivo (EPG) para canais brasileiros de IPTV",
-    "Lista IPTV Brasil 2026 (Ramys) verificada e integrada junto aos canais existentes",
-    "R36S e Android 100% adaptativos ao tamanho de tela do dispositivo"
+    "Novo aplicativo de Clima integrado via Open-Meteo (botão X na tela inicial) com escolha entre localização por IP ou busca manual de cidade",
+    "Widget compacto de localização e clima no canto direito ao lado de 'Seu som. Sua tela.'",
+    "Barra inferior removida para ampliar a área útil, com guia completo de Atalhos dentro das Opções",
+    "Menu de Opções (SELECT) reorganizado em ordem alfabética, com 'Verificar atualizações' (A) em penúltimo e 'Sair' por último"
   ],
   "r36s": {
-    "filename": "KPlayer-v2.0.3-R36S.zip",
-    "path": "updates/v2.0.3/KPlayer-v2.0.3-R36S.zip",
+    "filename": "KPlayer-v2.0.4-R36S.zip",
+    "path": "updates/v2.0.4/KPlayer-v2.0.4-R36S.zip",
     "url": "",
     "sha256": "",
     "sizeBytes": 0
   },
   "android": {
-    "filename": "KPlayer-v2.0.3-Android.apk",
-    "path": "updates/v2.0.3/KPlayer-v2.0.3-Android.apk",
+    "filename": "KPlayer-v2.0.4-Android.apk",
+    "path": "updates/v2.0.4/KPlayer-v2.0.4-Android.apk",
     "url": "",
     "sha256": "",
     "sizeBytes": 0
   },
   "web": {
-    "version": "2.0.3",
+    "version": "2.0.4",
     "reloadRequired": true
   }
 }

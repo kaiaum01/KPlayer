@@ -540,86 +540,28 @@ const BUTTON_SPRITE_COL: Record<string, number> = {
 
 export function FooterBar({
   theme,
-  themeIndex = 0,
-  hints,
   toast,
 }: {
   theme: KpTheme;
   themeIndex?: number;
-  hints: Array<{ key: string; label: string }>;
+  hints?: Array<{ key: string; label: string }>;
   toast?: string | null;
 }) {
-  const twoRows = hints.length >= 6;
-  const cols = twoRows ? Math.ceil(hints.length / 2) : Math.max(1, hints.length);
-  const iconSize = twoRows ? 18 : 22;
+  if (!toast) return null;
 
   return (
-    <>
-      {toast && (
-        <div
-          style={{
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: theme.elevated,
-            color: theme.accent,
-            border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
-            boxShadow: `0 0 14px ${rgbToRgba(theme.accent, 0.32)}`,
-          }}
-          className="absolute left-4 right-4 max-w-[580px] mx-auto bottom-[52px] z-30 flex items-center justify-center text-[12.5px] font-semibold px-4"
-        >
-          <span className="truncate">{toast}</span>
-        </div>
-      )}
-      <div
-        style={{
-          backgroundColor: rgbToRgba(theme.panel, 0.92),
-          borderTop: `1px solid ${themeHairline(theme)}`,
-          minHeight: 44,
-          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-        }}
-        className="absolute bottom-0 left-0 right-0 z-20 grid items-center px-3 py-1 gap-x-2 gap-y-0.5"
-      >
-        {hints.map((h, i) => {
-          const spriteCol = BUTTON_SPRITE_COL[h.key];
-          const isSingle = h.key.length === 1;
-          return (
-            <div key={i} className="flex items-center justify-center @min-[500px]:justify-start gap-1.5 min-w-0">
-              {spriteCol !== undefined ? (
-                <div
-                  style={{ width: iconSize, height: iconSize }}
-                  className="flex items-center justify-center shrink-0"
-                >
-                  <KpSprite
-                    sheet="botoes"
-                    col={spriteCol}
-                    themeIndex={themeIndex}
-                    size={iconSize}
-                  />
-                </div>
-              ) : (
-                <span
-                  style={{
-                    backgroundColor: theme.elevated,
-                    color: theme.text,
-                    minWidth: isSingle ? 19 : 26,
-                    height: 18,
-                    borderRadius: isSingle ? 9999 : 5,
-                  }}
-                  className="inline-flex items-center justify-center px-1.5 text-[9px] font-bold leading-none shrink-0"
-                >
-                  {h.key}
-                </span>
-              )}
-              <span
-                style={{ color: theme.muted }}
-                className={`${twoRows ? 'text-[10px] @min-[520px]:text-[10.5px]' : 'text-[10.5px] @min-[520px]:text-[11.5px]'} leading-none truncate`}
-              >
-                {h.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </>
+    <div
+      style={{
+        height: 32,
+        borderRadius: 14,
+        backgroundColor: theme.elevated,
+        color: theme.accent,
+        border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
+        boxShadow: `0 4px 18px ${rgbToRgba(theme.bg, 0.55)}`,
+      }}
+      className="absolute left-4 right-4 max-w-[520px] mx-auto bottom-3 z-30 flex items-center justify-center text-[12px] font-semibold px-4 pointer-events-none"
+    >
+      <span className="truncate">{toast}</span>
+    </div>
   );
 }

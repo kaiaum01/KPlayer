@@ -30,7 +30,7 @@ import urllib.request
 CANAIS_BASE = "https://canais-saimo.pages.dev/"
 RAMYS_CANAIS_URL = "https://raw.githubusercontent.com/Ramys/Iptv-Brasil-2026/master/Canais.m3u8"
 FILMES_BASE = "https://filmes-saimo.pages.dev/"
-UA = "KPlayer-R36S/2.0.3"
+UA = "KPlayer-R36S/2.0.4"
 
 CACHE_DIR = Path("iptv/.cache")
 USER_DIR = Path("iptv_usuario")

@@ -9,7 +9,10 @@ import type {
   PlaybackHistoryEntry,
   RepeatMode,
   VideoFit,
+  WeatherLocation,
+  WeatherMode,
 } from '../types';
+import { formatWeatherLocationShort } from '../utils/weather';
 import { HeaderBar } from './HeaderBar';
 import {
   FooterBar,
@@ -29,18 +32,19 @@ export interface OptionsMenuHandle {
 
 export type OptionSectionId =
   | 'root'
-  | 'update'
-  | 'theme'
-  | 'language'
   | 'displayMode'
+  | 'shortcuts'
+  | 'library'
+  | 'weather'
+  | 'language'
   | 'playback'
   | 'playback_rate'
   | 'playback_eq'
   | 'playback_repeat'
   | 'playback_fit'
+  | 'theme'
   | 'sleep'
-  | 'ipLocation'
-  | 'library';
+  | 'update';
 
 export interface OptionsMenuProps {
   theme: KpTheme;
@@ -60,7 +64,8 @@ export interface OptionsMenuProps {
   r36sDisplayMode: 'auto' | 'r36s' | 'square' | 'wide';
   displayModes: Array<{ id: 'auto' | 'r36s' | 'square' | 'wide'; label: string }>;
   stageSize: { w: number; h: number };
-  ipLocationEnabled: boolean;
+  weatherMode: WeatherMode;
+  weatherLocation: WeatherLocation | null;
   activeTrack: MediaTrack | null;
   favoriteTrackIds: string[];
   history: PlaybackHistoryEntry[];
@@ -77,7 +82,10 @@ export interface OptionsMenuProps {
   onToggleShuffle: () => void;
   onSetEqIdx: (idx: number) => void;
   onSetSleepIdx: (idx: number) => void;
-  onSetIpLocation: (enabled: boolean) => void;
+  onEnableIpWeather: () => Promise<void>;
+  onOpenWeatherManual: () => void;
+  onOpenWeatherScreen: () => void;
+  onDisableWeather: () => void;
   onToggleFavTrack: () => void;
   onOpenFavorites: () => void;
   onResumeMedia: () => void;
@@ -96,12 +104,25 @@ interface MenuEntry {
   label: string;
   value?: string;
   badge?: string;
+  leadingTag?: string;
   accentDot?: string;
   selected?: boolean;
+  hideChevron?: boolean;
   onSelect: () => void;
 }
 
 const SPEED_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+const SHORTCUT_ITEMS: Array<{ keyLabel: string; keyboard: string; action: string }> = [
+  { keyLabel: '↑ ↓ ← →', keyboard: 'Setas / WASD', action: 'Navegar nos menus, listas e grade inicial' },
+  { keyLabel: 'B', keyboard: 'Enter / Z', action: 'Abrir item, selecionar opção ou reproduzir' },
+  { keyLabel: 'A', keyboard: 'Backspace / Esc / X', action: 'Voltar para a tela ou etapa anterior' },
+  { keyLabel: 'X', keyboard: 'Espaço / C', action: 'Abrir Clima (no início) · Favoritar rádio · Fila/Pastas' },
+  { keyLabel: 'Y', keyboard: 'M / V', action: 'Abrir Opções (no início) · Atualizar listas / Trocar cidade' },
+  { keyLabel: 'SELECT', keyboard: 'Tab / O', action: 'Abrir ou fechar este menu de Opções em qualquer tela' },
+  { keyLabel: 'START', keyboard: 'P', action: 'Reproduzir ou pausar áudio / vídeo atual' },
+  { keyLabel: 'L1 / R1', keyboard: '[ / ] ou Q / E', action: 'Faixa ou estação anterior / próxima' },
+];
 
 export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(function OptionsMenu(
   props,
@@ -125,7 +146,8 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     r36sDisplayMode,
     displayModes,
     stageSize,
-    ipLocationEnabled,
+    weatherMode,
+    weatherLocation,
     activeTrack,
     favoriteTrackIds,
     history,
@@ -142,7 +164,10 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     onToggleShuffle,
     onSetEqIdx,
     onSetSleepIdx,
-    onSetIpLocation,
+    onEnableIpWeather,
+    onOpenWeatherManual,
+    onOpenWeatherScreen,
+    onDisableWeather,
     onToggleFavTrack,
     onOpenFavorites,
     onResumeMedia,
@@ -213,40 +238,79 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
       ? tr('Preencher (corte)', language)
       : tr('Esticar', language);
 
+  const weatherSummary = useMemo(() => {
+    const locStr = formatWeatherLocationShort(weatherLocation);
+    if (weatherMode === 'ip') return locStr ? `IP · ${locStr}` : 'Localização por IP';
+    if (weatherMode === 'manual') return locStr ? `Manual · ${locStr}` : 'Cidade manual';
+    return 'Não configurado';
+  }, [weatherMode, weatherLocation]);
+
   const sectionTitle = useMemo(() => {
     const titles: Record<OptionSectionId, string> = {
       root: tr('Opções', language),
-      update: 'Atualizar KPlayer',
-      theme: tr('Tema', language),
-      language: tr('Idioma', language),
       displayMode: tr('Adaptação de tela', language),
+      shortcuts: 'Atalhos',
+      library: 'Biblioteca & Histórico',
+      weather: 'Clima e Localização',
+      language: tr('Idioma', language),
       playback: 'Reprodução & Áudio',
       playback_rate: tr('Velocidade', language),
       playback_eq: tr('Equalizador', language),
       playback_repeat: tr('Modo de repetição', language),
       playback_fit: tr('Formato da imagem', language),
+      theme: tr('Tema', language),
       sleep: tr('Timer de sono', language),
-      ipLocation: tr('Localização por IP', language),
-      library: 'Biblioteca & Histórico',
+      update: 'Verificar atualizações',
     };
     return titles[section];
   }, [section, language]);
 
   const entries: MenuEntry[] = useMemo(() => {
     if (section === 'root') {
+      // Strictly alphabetical (A–Z), followed by penultimate "Verificar atualizações" (marker A) and last "Sair"
       const updBadge = updateStatus?.updateAvailable
-        ? `Nova v${updateStatus.latestVersion}`
+        ? `v${updateStatus.latestVersion}`
         : undefined;
       const updValue = updateStatus?.updateAvailable
-        ? `v${updateStatus.currentVersion} → v${updateStatus.latestVersion}`
-        : `v${updateStatus?.currentVersion ?? '2.0.3'} • Busca v${updateStatus?.nextExpectedVersion ?? '2.0.4'}`;
+        ? `Nova v${updateStatus.latestVersion}`
+        : `v${updateStatus?.currentVersion ?? '2.0.4'}`;
+
       return [
         {
-          id: 'update',
-          label: 'Atualizar KPlayer (Auto-Update)',
-          value: updValue,
-          badge: updBadge,
-          onSelect: () => goSection('update'),
+          id: 'displayMode',
+          label: tr('Adaptação de tela', language),
+          value: activeDisplayLabel,
+          onSelect: () => goSection('displayMode'),
+        },
+        {
+          id: 'shortcuts',
+          label: 'Atalhos',
+          value: `${SHORTCUT_ITEMS.length} controles`,
+          onSelect: () => goSection('shortcuts'),
+        },
+        {
+          id: 'library',
+          label: 'Biblioteca & Histórico',
+          value: `${history.length} recentes · ${favoriteTrackIds.length} favs`,
+          onSelect: () => goSection('library'),
+        },
+        {
+          id: 'weather',
+          label: 'Clima e Localização',
+          value: weatherSummary,
+          onSelect: () => goSection('weather'),
+        },
+        {
+          id: 'language',
+          label: tr('Idioma', language),
+          value: LANGUAGE_NAMES[language],
+          onSelect: () => goSection('language'),
+        },
+        {
+          id: 'playback',
+          label: 'Reprodução & Áudio',
+          value: `${playbackRate.toFixed(2)}x · ${eqIdx === 0 ? 'EQ Off' : eqPresets[eqIdx]?.name ?? 'EQ'}`,
+          onSelect: () => goSection('playback'),
         },
         {
           id: 'theme',
@@ -256,22 +320,10 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           onSelect: () => goSection('theme'),
         },
         {
-          id: 'language',
-          label: tr('Idioma', language),
-          value: LANGUAGE_NAMES[language],
-          onSelect: () => goSection('language'),
-        },
-        {
-          id: 'displayMode',
-          label: tr('Adaptação de tela', language),
-          value: activeDisplayLabel,
-          onSelect: () => goSection('displayMode'),
-        },
-        {
-          id: 'playback',
-          label: 'Reprodução & Áudio',
-          value: `${playbackRate.toFixed(2)}x • ${eqIdx === 0 ? 'EQ Off' : eqPresets[eqIdx]?.name ?? 'EQ'}`,
-          onSelect: () => goSection('playback'),
+          id: 'terms',
+          label: tr('Termos de uso', language),
+          value: tr('Abrir', language),
+          onSelect: onOpenTerms,
         },
         {
           id: 'sleep',
@@ -279,29 +331,69 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           value: sleepIdx === 0 ? tr('Desativada', language) : `${sleepOptions[sleepIdx]} min`,
           onSelect: () => goSection('sleep'),
         },
+        // Penultimate: ONLY "A" marker + "Verificar atualizações"
         {
-          id: 'ipLocation',
-          label: tr('Localização por IP', language),
-          value: tr(ipLocationEnabled ? 'Ativada' : 'Desativada', language),
-          onSelect: () => goSection('ipLocation'),
+          id: 'update',
+          leadingTag: 'A',
+          label: 'Verificar atualizações',
+          value: updValue,
+          badge: updBadge,
+          onSelect: () => goSection('update'),
         },
-        {
-          id: 'library',
-          label: 'Biblioteca & Histórico',
-          value: `${history.length} recentes • ${favoriteTrackIds.length} favs`,
-          onSelect: () => goSection('library'),
-        },
-        {
-          id: 'terms',
-          label: tr('Termos de uso', language),
-          value: tr('Abrir', language),
-          onSelect: onOpenTerms,
-        },
+        // Last: ONLY "Sair"
         {
           id: 'exit',
-          label: tr('Sair do KPlayer', language),
-          value: tr('Início', language),
+          label: 'Sair',
+          hideChevron: true,
           onSelect: onExitApp,
+        },
+      ];
+    }
+
+    if (section === 'shortcuts') {
+      return [
+        {
+          id: 'back-root-shortcuts',
+          label: '← Voltar ao menu de Opções',
+          hideChevron: true,
+          onSelect: () => goSection('root'),
+        },
+      ];
+    }
+
+    if (section === 'weather') {
+      return [
+        {
+          id: 'wx-open',
+          label: 'Abrir aplicativo de Clima',
+          value: 'Previsão Open-Meteo (botão X no início)',
+          onSelect: onOpenWeatherScreen,
+        },
+        {
+          id: 'wx-ip',
+          label: 'Usar localização do meu IP',
+          selected: weatherMode === 'ip',
+          value: weatherMode === 'ip' ? 'Ativo' : 'Automático',
+          onSelect: () => {
+            void onEnableIpWeather();
+          },
+        },
+        {
+          id: 'wx-manual',
+          label: 'Pesquisar cidade manualmente',
+          selected: weatherMode === 'manual',
+          value:
+            weatherMode === 'manual' && weatherLocation
+              ? formatWeatherLocationShort(weatherLocation)
+              : 'Escolher cidade',
+          onSelect: onOpenWeatherManual,
+        },
+        {
+          id: 'wx-off',
+          label: 'Limpar localização configurada',
+          selected: weatherMode === 'unset',
+          value: weatherMode === 'unset' ? 'Sem local' : undefined,
+          onSelect: onDisableWeather,
         },
       ];
     }
@@ -332,6 +424,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         {
           id: 'back-root',
           label: '← Voltar ao menu de Opções',
+          hideChevron: true,
           onSelect: () => goSection('root'),
         },
       ];
@@ -371,10 +464,11 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     if (section === 'playback') {
       return [
         {
-          id: 'rate',
-          label: tr('Velocidade', language),
-          value: `${playbackRate.toFixed(2)}x`,
-          onSelect: () => goSection('playback_rate'),
+          id: 'shuffle',
+          label: tr('Aleatório', language),
+          value: tr(shuffle ? 'Ativada' : 'Desativada', language),
+          selected: shuffle,
+          onSelect: onToggleShuffle,
         },
         {
           id: 'eq',
@@ -383,23 +477,22 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           onSelect: () => goSection('playback_eq'),
         },
         {
+          id: 'fit',
+          label: tr('Formato da imagem', language),
+          value: fitLabel,
+          onSelect: () => goSection('playback_fit'),
+        },
+        {
           id: 'repeat',
           label: tr('Modo de repetição', language),
           value: repeatLabel,
           onSelect: () => goSection('playback_repeat'),
         },
         {
-          id: 'shuffle',
-          label: tr('Aleatório', language),
-          value: tr(shuffle ? 'Ativada' : 'Desativada', language),
-          selected: shuffle,
-          onSelect: onToggleShuffle,
-        },
-        {
-          id: 'fit',
-          label: tr('Formato da imagem', language),
-          value: fitLabel,
-          onSelect: () => goSection('playback_fit'),
+          id: 'rate',
+          label: tr('Velocidade', language),
+          value: `${playbackRate.toFixed(2)}x`,
+          onSelect: () => goSection('playback_rate'),
         },
       ];
     }
@@ -466,25 +559,6 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
       }));
     }
 
-    if (section === 'ipLocation') {
-      return [
-        {
-          id: 'ip-on',
-          label: 'Ativar localização por IP',
-          selected: ipLocationEnabled,
-          value: ipLocationEnabled ? 'Ativo' : undefined,
-          onSelect: () => onSetIpLocation(true),
-        },
-        {
-          id: 'ip-off',
-          label: 'Desativar localização por IP',
-          selected: !ipLocationEnabled,
-          value: !ipLocationEnabled ? 'Ativo' : undefined,
-          onSelect: () => onSetIpLocation(false),
-        },
-      ];
-    }
-
     // library & history shortcuts
     return [
       {
@@ -496,28 +570,28 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         onSelect: onToggleFavTrack,
       },
       {
-        id: 'my-favs',
-        label: tr('Minhas favoritas', language),
-        value: `${favoriteTrackIds.length}`,
-        onSelect: onOpenFavorites,
-      },
-      {
-        id: 'resume',
-        label: tr('Retomar mídia', language),
-        value: activeTrack?.title ?? tr('Abra uma mídia', language),
-        onSelect: onResumeMedia,
-      },
-      {
         id: 'iptv',
         label: tr('IPTV', language),
         value: tr('Abrir', language),
         onSelect: onOpenIptv,
       },
       {
+        id: 'my-favs',
+        label: tr('Minhas favoritas', language),
+        value: `${favoriteTrackIds.length}`,
+        onSelect: onOpenFavorites,
+      },
+      {
         id: 'football',
         label: tr('Placar da Bola', language),
         value: tr('Abrir', language),
         onSelect: onOpenFootball,
+      },
+      {
+        id: 'resume',
+        label: tr('Retomar mídia', language),
+        value: activeTrack?.title ?? tr('Abra uma mídia', language),
+        onSelect: onResumeMedia,
       },
     ];
   }, [
@@ -530,12 +604,14 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     themeIndex,
     language,
     activeDisplayLabel,
+    weatherSummary,
+    weatherMode,
+    weatherLocation,
     playbackRate,
     eqIdx,
     eqPresets,
     sleepIdx,
     sleepOptions,
-    ipLocationEnabled,
     history.length,
     favoriteTrackIds,
     displayModes,
@@ -560,7 +636,10 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     onToggleShuffle,
     onSetVideoFit,
     onSetSleepIdx,
-    onSetIpLocation,
+    onEnableIpWeather,
+    onOpenWeatherManual,
+    onOpenWeatherScreen,
+    onDisableWeather,
     onToggleFavTrack,
     onOpenFavorites,
     onResumeMedia,
@@ -618,8 +697,8 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
       <ModernBackdrop theme={theme} />
       <HeaderBar theme={theme} section={tr('OPÇÕES', language)} location={locationLabel} />
 
-      <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-[54px] flex flex-col w-full max-w-[760px] mx-auto">
-        {/* Clean Selection-First Header (NO horizontal side tabs!) */}
+      <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-4 flex flex-col w-full max-w-[760px] mx-auto">
+        {/* Clean Selection-First Header (NO horizontal side tabs) */}
         <div className="flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             {section !== 'root' && (
@@ -631,7 +710,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                   border: `1px solid ${themeHairline(theme)}`,
                   color: theme.text,
                 }}
-                className="h-[28px] px-2.5 rounded-lg text-[11.5px] font-bold cursor-pointer shrink-0"
+                className="h-[30px] px-2.5 rounded-lg text-[11.5px] font-bold cursor-pointer shrink-0"
               >
                 ← Voltar
               </button>
@@ -645,7 +724,9 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
               </h2>
               <p style={{ color: theme.muted }} className="text-[10.5px] truncate">
                 {section === 'root'
-                  ? 'Selecione uma opção abaixo com ↑ ↓ e pressione B para abrir'
+                  ? 'Lista em ordem alfabética · Pressione B para abrir ou SELECT para fechar'
+                  : section === 'shortcuts'
+                  ? 'Todos os controles do R36S e atalhos do teclado'
                   : 'Escolha uma opção na lista e pressione B para confirmar'}
               </p>
             </div>
@@ -656,7 +737,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
             onClick={onClose}
             style={{
               ...modernCardStyle(theme, false, 8),
-              height: 28,
+              height: 30,
               color: theme.muted,
             }}
             className="px-2.5 text-[11px] font-bold cursor-pointer shrink-0"
@@ -664,6 +745,46 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
             SELECT · Fechar
           </button>
         </div>
+
+        {/* Dedicated Shortcuts List Panel when 'shortcuts' is selected */}
+        {section === 'shortcuts' && (
+          <div
+            style={{ ...modernPanelStyle(theme, 14) }}
+            className="mt-2.5 p-3 space-y-1.5 overflow-y-auto kp-scroll flex-1 min-h-0"
+          >
+            {SHORTCUT_ITEMS.map((item) => (
+              <div
+                key={item.keyLabel}
+                style={{
+                  backgroundColor: rgbToRgba(theme.elevated, 0.72),
+                  border: `1px solid ${themeHairline(theme)}`,
+                }}
+                className="px-3 py-2 rounded-xl flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    style={{
+                      backgroundColor: rgbToRgba(theme.accent, 0.16),
+                      color: theme.accent,
+                      border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
+                    }}
+                    className="px-2 py-0.5 rounded-md text-[11px] font-extrabold tabular-nums shrink-0 min-w-[54px] text-center"
+                  >
+                    {item.keyLabel}
+                  </span>
+                  <div className="min-w-0">
+                    <div style={{ color: theme.text }} className="text-[12.5px] font-bold leading-snug">
+                      {item.action}
+                    </div>
+                    <div style={{ color: theme.muted }} className="text-[10.5px]">
+                      Teclado: {item.keyboard}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Dedicated Auto-Update Info Panel when 'update' is selected */}
         {section === 'update' && (
@@ -673,25 +794,20 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div style={{ color: theme.accent }} className="text-[10.5px] font-extrabold uppercase tracking-wide">
+                <div style={{ color: theme.accent }} className="text-[11px] font-extrabold">
                   {updateStatus?.updateAvailable
                     ? `Nova versão disponível: v${updateStatus.latestVersion}`
-                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.3'}`}
+                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.4'}`}
                 </div>
                 <div style={{ color: theme.muted }} className="text-[11px] mt-0.5">
                   {updateStatus?.updateAvailable
                     ? 'Pronta para baixar da pasta updates/ do GitHub e reiniciar automaticamente.'
-                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.4'} e próximas versões na pasta updates/.`}
+                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.5'} e próximas versões na pasta updates/.`}
                 </div>
               </div>
               <span
-                style={{
-                  backgroundColor: updateStatus?.updateAvailable
-                    ? rgbToRgba(theme.accent, 0.2)
-                    : theme.elevated,
-                  color: updateStatus?.updateAvailable ? theme.accent : theme.muted,
-                }}
-                className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold tabular-nums shrink-0"
+                style={{ color: updateStatus?.updateAvailable ? theme.accent : theme.muted }}
+                className="text-[11px] font-bold tabular-nums shrink-0"
               >
                 {updateStatus?.source === 'github' ? 'GitHub Online' : 'Manifesto Local'}
               </span>
@@ -713,8 +829,8 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
               </div>
             )}
 
-            <div style={{ color: theme.muted }} className="text-[10px] leading-snug">
-              Dados protegidos no update: favoritos ({favoriteTrackIds.length}), histórico ({history.length}), listas IPTV/Rádio do usuário, idioma e tema.
+            <div style={{ color: theme.muted }} className="text-[10.5px] leading-snug">
+              Dados protegidos no update: favoritos ({favoriteTrackIds.length}), histórico ({history.length}), listas IPTV/Rádio do usuário, clima, idioma e tema.
             </div>
 
             {updateMessage && (
@@ -760,7 +876,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
             style={{ ...modernPanelStyle(theme, 12) }}
             className="mt-2.5 p-2.5 space-y-1 shrink-0"
           >
-            <div style={{ color: theme.accent }} className="text-[10px] font-extrabold uppercase tracking-wide">
+            <div style={{ color: theme.accent }} className="text-[10.5px] font-extrabold">
               Histórico recente preservado ({history.length})
             </div>
             {history.slice(0, 3).map((item, idx) => (
@@ -771,7 +887,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 <span style={{ color: theme.text }} className="truncate font-semibold">
                   {item.title}
                 </span>
-                <span style={{ color: theme.muted }} className="text-[10px] uppercase shrink-0">
+                <span style={{ color: theme.muted }} className="text-[10px] shrink-0">
                   {item.kind}
                 </span>
               </div>
@@ -780,7 +896,9 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         )}
 
         {/* Pure Vertical Select-First Menu List (Zero Horizontal Side Bars) */}
-        <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-1.5">
+        <div
+          className={`mt-2.5 ${section === 'shortcuts' ? 'shrink-0' : 'flex-1 min-h-0 overflow-y-auto kp-scroll pr-1'} space-y-1.5`}
+        >
           {entries.map((entry, idx) => {
             const focused = idx === cursor;
             return (
@@ -796,6 +914,18 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 className="w-full px-3.5 @min-[520px]:px-4 py-2 flex items-center justify-between gap-3 text-left cursor-pointer transition-all"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
+                  {entry.leadingTag && (
+                    <span
+                      style={{
+                        backgroundColor: rgbToRgba(theme.accent, focused ? 0.25 : 0.14),
+                        color: theme.accent,
+                        border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
+                      }}
+                      className="w-6 h-6 rounded-md text-[12px] font-extrabold flex items-center justify-center shrink-0"
+                    >
+                      {entry.leadingTag}
+                    </span>
+                  )}
                   {entry.accentDot && (
                     <span
                       style={{ backgroundColor: entry.accentDot }}
@@ -814,7 +944,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                         backgroundColor: theme.accent,
                         color: theme.bg,
                       }}
-                      className="px-2 py-0.5 rounded-md text-[9.5px] font-extrabold uppercase tracking-wide shrink-0"
+                      className="px-2 py-0.5 rounded-md text-[9.5px] font-extrabold shrink-0"
                     >
                       {entry.badge}
                     </span>
@@ -830,9 +960,11 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                       {entry.value}
                     </span>
                   )}
-                  <span style={{ color: focused ? theme.accent : theme.dim }} className="text-[14px] font-bold shrink-0">
-                    {entry.selected ? '✓' : section === 'root' || section === 'playback' ? '›' : ''}
-                  </span>
+                  {!entry.hideChevron && (
+                    <span style={{ color: focused ? theme.accent : theme.dim }} className="text-[14px] font-bold shrink-0">
+                      {entry.selected ? '✓' : section === 'root' || section === 'playback' ? '›' : ''}
+                    </span>
+                  )}
                 </div>
               </button>
             );
@@ -840,17 +972,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         </div>
       </div>
 
-      <FooterBar
-        theme={theme}
-        themeIndex={themeIndex}
-        toast={toast}
-        hints={[
-          { key: 'DIR', label: '↑ ↓ Escolher' },
-          { key: 'B', label: section === 'root' ? tr('Abrir', language) : tr('Confirmar', language) },
-          { key: 'A', label: tr('Voltar', language) },
-          { key: 'SELECT', label: tr('Fechar', language) },
-        ]}
-      />
+      <FooterBar theme={theme} toast={toast} />
     </div>
   );
 });

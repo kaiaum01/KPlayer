@@ -1,4 +1,4 @@
-name: KPlayer - Publicar Auto-Update (pasta updates/)
+name: KPlayer - Auto-Update (updates/) e Release Automática
 
 on:
   workflow_dispatch:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   build-r36s-update:
-    name: Compilar R36S para canal updates/
+    name: Compilar R36S para canal updates/ e Release
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -62,7 +62,7 @@ jobs:
             releases/KPlayer-v*-R36S.zip.sha256
 
   build-android-update:
-    name: Compilar Android APK para canal updates/
+    name: Compilar Android APK para canal updates/ e Release
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -90,8 +90,8 @@ jobs:
             releases/KPlayer-v*-Android.apk
             releases/KPlayer-v*-Android.apk.sha256
 
-  publish-updates-folder:
-    name: Atualizar pasta updates/ no GitHub
+  publish-updates-and-release:
+    name: Publicar pasta updates/ e GitHub Release automaticamente
     needs: [build-r36s-update, build-android-update]
     runs-on: ubuntu-24.04
     steps:
@@ -123,3 +123,56 @@ jobs:
           VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
           git commit -m "chore(updates): publicar auto-update v${VERSION} [skip ci]"
           git push origin HEAD:main
+      - name: Montar notas da Release com modificações desta versão
+        run: |
+          VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
+          TAG="v${VERSION}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${TAG}" >> "$GITHUB_ENV"
+
+          {
+            if [ -f releases/RELEASE_NOTES.md ]; then
+              cat releases/RELEASE_NOTES.md
+            else
+              echo "# KPlayer ${TAG}"
+            fi
+            echo ""
+            echo "---"
+            echo ""
+            echo "## Modificações incluídas neste commit"
+            PREV_TAG="$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -n 1 || true)"
+            if [ -n "$PREV_TAG" ]; then
+              git log "${PREV_TAG}..HEAD" --no-merges --pretty=format:"- %s (%h)" | grep -v "\[skip ci\]" | head -n 25 || true
+            else
+              git log -n 10 --no-merges --pretty=format:"- %s (%h)" | grep -v "\[skip ci\]" || true
+            fi
+            echo ""
+            echo ""
+            echo "### Canal Auto-Update"
+            echo "- Manifesto: \`updates/latest.json\`"
+            echo "- Pacotes arquivados: \`updates/${TAG}/\`"
+          } > /tmp/kplayer_release_notes.md
+      - name: Criar ou atualizar GitHub Release automaticamente
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ASSETS=(
+            "releases/KPlayer-v${VERSION}-R36S.zip"
+            "releases/KPlayer-v${VERSION}-R36S.zip.sha256"
+            "releases/KPlayer-v${VERSION}-Android.apk"
+            "releases/KPlayer-v${VERSION}-Android.apk.sha256"
+          )
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE_TAG}" \
+              --title "KPlayer ${RELEASE_TAG} — R36S & Android" \
+              --notes-file /tmp/kplayer_release_notes.md \
+              --latest
+            gh release upload "${RELEASE_TAG}" "${ASSETS[@]}" --clobber
+          else
+            gh release create "${RELEASE_TAG}" "${ASSETS[@]}" \
+              --title "KPlayer ${RELEASE_TAG} — R36S & Android" \
+              --notes-file /tmp/kplayer_release_notes.md \
+              --target main \
+              --latest
+          fi

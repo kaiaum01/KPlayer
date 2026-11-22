@@ -214,7 +214,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.0.3' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.0.4' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -869,7 +869,7 @@ async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<s
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-EPG/2.0.3' },
+      headers: { 'User-Agent': 'KPlayer-EPG/2.0.4' },
     });
     clearTimeout(timer);
     if (!res.ok) return '';
@@ -1648,7 +1648,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.0.3' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.0.4' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1669,7 +1669,7 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipPath = path.join(__dirname, 'releases', 'KPlayer-v2.0.3-R36S.zip');
+  const r36sZipPath = path.join(__dirname, 'releases', 'KPlayer-v2.0.4-R36S.zip');
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
   app.get('/api/r36s/info', async (_req, res) => {
@@ -1683,8 +1683,8 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.0.3',
-        filename: 'KPlayer-v2.0.3-R36S.zip',
+        version: '2.0.4',
+        filename: 'KPlayer-v2.0.4-R36S.zip',
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
@@ -1697,7 +1697,7 @@ async function createServer() {
   app.get('/api/r36s/download', async (_req, res) => {
     try {
       await fs.access(r36sZipPath);
-      return res.download(r36sZipPath, 'KPlayer-v2.0.3-R36S.zip');
+      return res.download(r36sZipPath, 'KPlayer-v2.0.4-R36S.zip');
     } catch {
       return res.status(404).json({ error: 'Pacote R36S não encontrado' });
     }
@@ -1706,7 +1706,7 @@ async function createServer() {
   app.get('/api/r36s/sha256', async (_req, res) => {
     try {
       await fs.access(r36sShaPath);
-      return res.download(r36sShaPath, 'KPlayer-v2.0.3-R36S.zip.sha256');
+      return res.download(r36sShaPath, 'KPlayer-v2.0.4-R36S.zip.sha256');
     } catch {
       return res.status(404).json({ error: 'Checksum não encontrado' });
     }
@@ -1739,7 +1739,7 @@ async function createServer() {
 
   function nextPatchVersion(ver: string): string {
     const m = ver.trim().replace(/^v/i, '').match(SEMVER_RE);
-    if (!m) return '2.0.4';
+    if (!m) return '2.0.5';
     return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
   }
 
@@ -1759,7 +1759,7 @@ async function createServer() {
     } catch {
       // Fallback below
     }
-    return '2.0.3';
+    return '2.0.4';
   }
 
   async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
@@ -2346,7 +2346,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.3' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.4' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -2457,7 +2457,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.3' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.4' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -2651,20 +2651,267 @@ async function createServer() {
 
   app.get('/api/location', async (_req, res) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    const timer = setTimeout(() => controller.abort(), 4500);
     try {
-      const r = await fetch('http://ip-api.com/json/?fields=status,city,region', {
+      const r = await fetch('https://ipwho.is/', {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.4' },
+      });
+      const data = (await r.json()) as {
+        success?: boolean;
+        city?: string;
+        region?: string;
+        country?: string;
+        latitude?: number;
+        longitude?: number;
+      };
+      if (
+        data.success &&
+        data.city &&
+        typeof data.latitude === 'number' &&
+        typeof data.longitude === 'number'
+      ) {
+        clearTimeout(timer);
+        return res.json({
+          ok: true,
+          location: data.region ? `${data.city}, ${data.region}` : data.city,
+          city: data.city,
+          region: data.region || '',
+          country: data.country || '',
+          latitude: data.latitude,
+          longitude: data.longitude,
+        });
+      }
+    } catch {
+      // Fallback to ip-api below
+    }
+
+    try {
+      const r2 = await fetch('http://ip-api.com/json/?fields=status,city,regionName,region,country,lat,lon', {
         signal: controller.signal,
       });
       clearTimeout(timer);
-      const data = (await r.json()) as { status?: string; city?: string; region?: string };
-      if (data.status === 'success' && data.city) {
-        return res.json({ location: data.region ? `${data.city}, ${data.region}` : data.city });
+      const data = (await r2.json()) as {
+        status?: string;
+        city?: string;
+        regionName?: string;
+        region?: string;
+        country?: string;
+        lat?: number;
+        lon?: number;
+      };
+      if (data.status === 'success' && data.city && typeof data.lat === 'number' && typeof data.lon === 'number') {
+        const reg = data.region || data.regionName || '';
+        return res.json({
+          ok: true,
+          location: reg ? `${data.city}, ${reg}` : data.city,
+          city: data.city,
+          region: reg,
+          country: data.country || '',
+          latitude: data.lat,
+          longitude: data.lon,
+        });
       }
-      return res.json({ location: 'Mídias locais' });
+      return res.json({ ok: false, location: 'Mídias locais' });
     } catch {
       clearTimeout(timer);
-      return res.json({ location: 'Mídias locais' });
+      return res.json({ ok: false, location: 'Mídias locais' });
+    }
+  });
+
+  // ==================== OPEN-METEO WEATHER & GEOCODING API ====================
+
+  const weatherCache = new Map<string, { fetchedAt: number; payload: Record<string, unknown> }>();
+  const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000;
+
+  const PT_WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  function formatIsoWeekdayPt(isoDate: string): string {
+    const parts = isoDate.split('-').map(Number);
+    if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return isoDate;
+    const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 12, 0, 0));
+    return `${PT_WEEKDAYS[d.getUTCDay()]} ${String(parts[2]).padStart(2, '0')}`;
+  }
+
+  function formatIsoClock(isoDateTime: string): string {
+    const idx = isoDateTime.indexOf('T');
+    if (idx < 0) return isoDateTime;
+    return isoDateTime.slice(idx + 1, idx + 6);
+  }
+
+  app.get('/api/weather/search', async (req, res) => {
+    const q = String(req.query.q ?? '').trim().slice(0, 80);
+    if (q.length < 2) {
+      return res.json({ results: [] });
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=pt&format=json`;
+      const upstream = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.4' },
+      });
+      clearTimeout(timer);
+      if (!upstream.ok) return res.status(502).json({ results: [], error: 'geocoding_unavailable' });
+      const data = (await upstream.json()) as {
+        results?: Array<{
+          name?: string;
+          admin1?: string;
+          country?: string;
+          latitude?: number;
+          longitude?: number;
+          timezone?: string;
+        }>;
+      };
+      const results = (data.results ?? [])
+        .filter((item) => item.name && typeof item.latitude === 'number' && typeof item.longitude === 'number')
+        .map((item) => ({
+          name: String(item.name),
+          region: item.admin1 ? String(item.admin1) : '',
+          country: item.country ? String(item.country) : '',
+          latitude: Number(item.latitude),
+          longitude: Number(item.longitude),
+          timezone: item.timezone ? String(item.timezone) : 'auto',
+        }));
+      return res.json({ results });
+    } catch {
+      clearTimeout(timer);
+      return res.status(502).json({ results: [], error: 'geocoding_failed' });
+    }
+  });
+
+  app.get('/api/weather', async (req, res) => {
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return res.status(400).json({ error: 'invalid_coordinates' });
+    }
+    const name = String(req.query.name ?? '').trim().slice(0, 80) || 'Localização atual';
+    const region = String(req.query.region ?? '').trim().slice(0, 80);
+    const country = String(req.query.country ?? '').trim().slice(0, 80);
+    const force = req.query.refresh === '1';
+
+    const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+    const cached = weatherCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.fetchedAt < WEATHER_CACHE_TTL_MS) {
+      return res.json({
+        ...cached.payload,
+        location: { name, region, country, latitude: lat, longitude: lon },
+      });
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7000);
+    try {
+      const apiUrl =
+        `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat.toFixed(4))}` +
+        `&longitude=${encodeURIComponent(lon.toFixed(4))}` +
+        `&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,surface_pressure` +
+        `&hourly=temperature_2m,precipitation_probability,weather_code,is_day` +
+        `&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max` +
+        `&timezone=auto&forecast_days=7`;
+      const upstream = await fetch(apiUrl, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.4' },
+      });
+      clearTimeout(timer);
+      if (!upstream.ok) return res.status(502).json({ error: 'weather_unavailable' });
+      const raw = (await upstream.json()) as {
+        timezone?: string;
+        current?: {
+          time?: string;
+          temperature_2m?: number;
+          relative_humidity_2m?: number;
+          apparent_temperature?: number;
+          is_day?: number;
+          precipitation?: number;
+          weather_code?: number;
+          wind_speed_10m?: number;
+          surface_pressure?: number;
+        };
+        hourly?: {
+          time?: string[];
+          temperature_2m?: number[];
+          precipitation_probability?: number[];
+          weather_code?: number[];
+          is_day?: number[];
+        };
+        daily?: {
+          time?: string[];
+          weather_code?: number[];
+          temperature_2m_max?: number[];
+          temperature_2m_min?: number[];
+          sunrise?: string[];
+          sunset?: string[];
+          uv_index_max?: number[];
+          precipitation_probability_max?: number[];
+        };
+      };
+
+      const cur = raw.current;
+      if (!cur || typeof cur.temperature_2m !== 'number') {
+        return res.status(502).json({ error: 'weather_empty' });
+      }
+
+      // Build next 12 hourly slots starting from current local time
+      const curTimePrefix = (cur.time || '').slice(0, 13);
+      const hTimes = raw.hourly?.time ?? [];
+      let startIdx = hTimes.findIndex((t) => t.slice(0, 13) >= curTimePrefix);
+      if (startIdx < 0) startIdx = 0;
+      const hourly = [];
+      for (let i = startIdx; i < Math.min(hTimes.length, startIdx + 12); i++) {
+        hourly.push({
+          time: hTimes[i],
+          hourLabel: i === startIdx ? 'Agora' : formatIsoClock(hTimes[i]),
+          temp: Number(raw.hourly?.temperature_2m?.[i] ?? cur.temperature_2m),
+          weatherCode: Number(raw.hourly?.weather_code?.[i] ?? cur.weather_code ?? 0),
+          precipProb: Number(raw.hourly?.precipitation_probability?.[i] ?? 0),
+          isDay: Number(raw.hourly?.is_day?.[i] ?? 1) === 1,
+        });
+      }
+
+      const dTimes = raw.daily?.time ?? [];
+      const daily = dTimes.map((dt, idx) => ({
+        date: dt,
+        dayLabel: formatIsoWeekdayPt(dt),
+        weatherCode: Number(raw.daily?.weather_code?.[idx] ?? 0),
+        tempMax: Number(raw.daily?.temperature_2m_max?.[idx] ?? cur.temperature_2m),
+        tempMin: Number(raw.daily?.temperature_2m_min?.[idx] ?? cur.temperature_2m),
+        precipProbMax: Number(raw.daily?.precipitation_probability_max?.[idx] ?? 0),
+        uvMax: Number(raw.daily?.uv_index_max?.[idx] ?? 0),
+        sunrise: formatIsoClock(raw.daily?.sunrise?.[idx] ?? ''),
+        sunset: formatIsoClock(raw.daily?.sunset?.[idx] ?? ''),
+      }));
+
+      const payload = {
+        location: {
+          name,
+          region,
+          country,
+          latitude: lat,
+          longitude: lon,
+          timezone: raw.timezone || 'auto',
+        },
+        fetchedAt: Date.now(),
+        current: {
+          temp: Number(cur.temperature_2m),
+          apparentTemp: Number(cur.apparent_temperature ?? cur.temperature_2m),
+          humidity: Number(cur.relative_humidity_2m ?? 0),
+          windSpeed: Number(cur.wind_speed_10m ?? 0),
+          pressure: Number(cur.surface_pressure ?? 1013),
+          precipitation: Number(cur.precipitation ?? 0),
+          weatherCode: Number(cur.weather_code ?? 0),
+          isDay: Number(cur.is_day ?? 1) === 1,
+        },
+        hourly,
+        daily,
+      };
+      weatherCache.set(cacheKey, { fetchedAt: Date.now(), payload });
+      return res.json(payload);
+    } catch {
+      clearTimeout(timer);
+      return res.status(502).json({ error: 'weather_fetch_failed' });
     }
   });
 
@@ -2685,7 +2932,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.3',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.4',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -2781,7 +3028,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.0.3 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.0.4 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

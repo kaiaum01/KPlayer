@@ -23,7 +23,7 @@ object NetworkRepository {
         .followRedirects(true)
         .build()
 
-    private const val UA = "KPlayer-Android/2.0.3"
+    private const val UA = "KPlayer-Android/2.0.4"
     private const val CANAIS_BASE = "https://canais-saimo.pages.dev"
     private const val FILMES_BASE = "https://filmes-saimo.pages.dev"
     private const val RAMYS_CANAIS_URL = "https://raw.githubusercontent.com/Ramys/Iptv-Brasil-2026/master/Canais.m3u8"
@@ -198,7 +198,7 @@ object NetworkRepository {
 
     suspend fun checkAppUpdate(
         repoSlug: String,
-        currentVersion: String = "2.0.3",
+        currentVersion: String = "2.0.4",
         branch: String = "main",
     ): AppUpdateInfo? = withContext(Dispatchers.IO) {
         val cleanRepo = repoSlug.trim()

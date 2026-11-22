@@ -13,6 +13,9 @@ import type {
   RepeatMode,
   ScreenMode,
   VideoFit,
+  WeatherData,
+  WeatherLocation,
+  WeatherMode,
 } from './types';
 import {
   AUDIO_EXT_RE,
@@ -22,8 +25,10 @@ import {
   formatTime,
   parseLrc,
 } from './utils/media';
+import { describeWeatherCode, formatWeatherLocationShort } from './utils/weather';
 import { HeaderBar, UpdateBannerContext } from './components/HeaderBar';
 import { OptionsMenu, type OptionsMenuHandle, type OptionSectionId } from './components/OptionsMenu';
+import { WeatherGlyph, WeatherScreen, type WeatherScreenHandle } from './components/WeatherScreen';
 import {
   AudioVisualizer,
   FooterBar,
@@ -120,9 +125,18 @@ export default function App() {
   const [welcomeFocus, setWelcomeFocus] = useState<0 | 1>(0);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => loadStorage('kp_repeat', 0));
   const [shuffle, setShuffle] = useState<boolean>(() => loadStorage('kp_shuffle', false));
-  const [ipLocationEnabled, setIpLocationEnabled] = useState<boolean>(() =>
-    loadStorage('kp_ip_loc', false)
+  const [weatherMode, setWeatherMode] = useState<WeatherMode>(() => {
+    const saved = loadStorage<string>('kp_weather_mode', '');
+    if (saved === 'ip' || saved === 'manual' || saved === 'unset') return saved;
+    return loadStorage<boolean>('kp_ip_loc', false) ? 'ip' : 'unset';
+  });
+  const [weatherLocation, setWeatherLocation] = useState<WeatherLocation | null>(() =>
+    loadStorage<WeatherLocation | null>('kp_weather_loc', null)
   );
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [weatherSetupView, setWeatherSetupView] = useState<'auto' | 'choose' | 'manual'>('auto');
   const [favoriteTrackIds, setFavoriteTrackIds] = useState<string[]>(() =>
     loadStorage('kp_fav_tracks', [])
   );
@@ -231,6 +245,7 @@ export default function App() {
   const placarRef = useRef<PlacarDaBolaHandle | null>(null);
   const iptvRef = useRef<IptvScreenHandle | null>(null);
   const optionsRef = useRef<OptionsMenuHandle | null>(null);
+  const weatherRef = useRef<WeatherScreenHandle | null>(null);
 
   const [activeTrack, setActiveTrack] = useState<MediaTrack | null>(() => tracks[0] ?? null);
   const [activeRadio, setActiveRadio] = useState<RadioStation | null>(null);
@@ -316,7 +331,9 @@ export default function App() {
       localStorage.setItem('kp_theme', JSON.stringify(themeIndex));
       localStorage.setItem('kp_repeat', JSON.stringify(repeatMode));
       localStorage.setItem('kp_shuffle', JSON.stringify(shuffle));
-      localStorage.setItem('kp_ip_loc', JSON.stringify(ipLocationEnabled));
+      localStorage.setItem('kp_ip_loc', JSON.stringify(weatherMode === 'ip'));
+      localStorage.setItem('kp_weather_mode', JSON.stringify(weatherMode));
+      localStorage.setItem('kp_weather_loc', JSON.stringify(weatherLocation));
       localStorage.setItem('kp_fav_tracks', JSON.stringify(favoriteTrackIds));
       localStorage.setItem('kp_fav_radios', JSON.stringify(favoriteRadios));
       localStorage.setItem('kp_history', JSON.stringify(playbackHistory));
@@ -331,7 +348,8 @@ export default function App() {
     themeIndex,
     repeatMode,
     shuffle,
-    ipLocationEnabled,
+    weatherMode,
+    weatherLocation,
     favoriteTrackIds,
     favoriteRadios,
     playbackHistory,
@@ -420,7 +438,7 @@ export default function App() {
       if (d.ok) {
         setUpdateMessage(
           d.message ||
-            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? '2.0.3'} aplicada. Reiniciando...`
+            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? '2.0.4'} aplicada. Reiniciando...`
         );
         notify('Atualização concluída! Reiniciando KPlayer...');
         window.setTimeout(() => {
@@ -443,19 +461,120 @@ export default function App() {
     void checkForUpdates(false);
   }, [bootRunId, checkForUpdates]);
 
-  // Optional IP location
+  // Open-Meteo Weather & Location Engine (IP auto-detect or manual city)
+  const fetchWeatherForLocation = useCallback(
+    async (loc: WeatherLocation, force = false) => {
+      setWeatherLoading(true);
+      setWeatherError(null);
+      try {
+        const params = new URLSearchParams({
+          lat: String(loc.latitude),
+          lon: String(loc.longitude),
+          name: loc.name,
+          region: loc.region ?? '',
+          country: loc.country ?? '',
+        });
+        if (force) params.set('refresh', '1');
+        const r = await fetch(`/api/weather?${params.toString()}`);
+        if (!r.ok) throw new Error('weather_unavailable');
+        const data = (await r.json()) as WeatherData;
+        setWeatherData(data);
+        const shortLoc = formatWeatherLocationShort(data.location);
+        if (shortLoc) setLocationLabel(shortLoc);
+      } catch {
+        setWeatherError('Não foi possível carregar o clima da Open-Meteo agora.');
+      } finally {
+        setWeatherLoading(false);
+      }
+    },
+    []
+  );
+
+  const enableIpWeather = useCallback(async () => {
+    setWeatherLoading(true);
+    setWeatherError(null);
+    try {
+      const r = await fetch('/api/location');
+      const d = (await r.json()) as {
+        ok?: boolean;
+        location?: string;
+        city?: string;
+        region?: string;
+        country?: string;
+        latitude?: number;
+        longitude?: number;
+      };
+      if (d.ok && d.city && typeof d.latitude === 'number' && typeof d.longitude === 'number') {
+        const loc: WeatherLocation = {
+          name: d.city,
+          region: d.region || '',
+          country: d.country || '',
+          latitude: d.latitude,
+          longitude: d.longitude,
+        };
+        setWeatherMode('ip');
+        setWeatherLocation(loc);
+        setLocationLabel(formatWeatherLocationShort(loc) || d.city);
+        await fetchWeatherForLocation(loc, true);
+        notify(`Clima ativado via IP: ${loc.name}`);
+      } else {
+        setWeatherError('Não foi possível detectar sua cidade pelo IP. Tente pesquisar manualmente.');
+        setWeatherLoading(false);
+      }
+    } catch {
+      setWeatherError('Erro ao detectar localização pelo IP. Tente pesquisar manualmente.');
+      setWeatherLoading(false);
+    }
+  }, [fetchWeatherForLocation, notify]);
+
+  const selectManualWeatherLocation = useCallback(
+    async (loc: WeatherLocation) => {
+      setWeatherMode('manual');
+      setWeatherLocation(loc);
+      setLocationLabel(formatWeatherLocationShort(loc) || loc.name);
+      await fetchWeatherForLocation(loc, true);
+      notify(`Clima definido: ${loc.name}`);
+    },
+    [fetchWeatherForLocation, notify]
+  );
+
+  const disableWeather = useCallback(() => {
+    setWeatherMode('unset');
+    setWeatherLocation(null);
+    setWeatherData(null);
+    setWeatherError(null);
+    setLocationLabel(tr('Mídias locais', language));
+    notify('Localização do clima removida');
+  }, [language, notify]);
+
+  const openWeatherScreen = useCallback(
+    (setupMode: 'auto' | 'choose' | 'manual' = 'auto') => {
+      setWeatherSetupView(setupMode);
+      setScreen('weather');
+      window.setTimeout(() => {
+        if (setupMode === 'choose' || setupMode === 'manual') {
+          weatherRef.current?.openSetup(setupMode);
+        }
+      }, 0);
+    },
+    []
+  );
+
+  // Sync weather automatically when configured via IP or manual city
   useEffect(() => {
-    if (!ipLocationEnabled) {
+    if (weatherMode === 'unset') {
       setLocationLabel(tr('Mídias locais', language));
       return;
     }
-    fetch('/api/location')
-      .then((r) => r.json())
-      .then((d: { location?: string }) => {
-        if (d.location) setLocationLabel(d.location);
-      })
-      .catch(() => {});
-  }, [ipLocationEnabled, language]);
+    if (weatherLocation) {
+      setLocationLabel(formatWeatherLocationShort(weatherLocation) || weatherLocation.name);
+      void fetchWeatherForLocation(weatherLocation, false);
+      return;
+    }
+    if (weatherMode === 'ip') {
+      void enableIpWeather();
+    }
+  }, [weatherMode, weatherLocation, language, fetchWeatherForLocation, enableIpWeather]);
 
   // Load user's actual .pls stations from ports/kplayer/radios_usuario/
   const fetchUserRadios = useCallback(async () => {
@@ -1169,8 +1288,7 @@ export default function App() {
         else if (btn === 'UP' || btn === 'DOWN') setDashFocus((f) => (f + 3) % 6);
         else if (btn === 'B') openDashboardCard(dashFocus);
         else if (btn === 'X') {
-          if (activeRadio) openStreamingScreen('radio', 'home');
-          else setScreen('music');
+          openWeatherScreen('auto');
         } else if (btn === 'Y') {
           openOptionsScreen('root');
         }
@@ -1300,6 +1418,11 @@ export default function App() {
         return;
       }
 
+      if (screen === 'weather') {
+        weatherRef.current?.handleButton(btn);
+        return;
+      }
+
       if (screen === 'options') {
         optionsRef.current?.handleButton(btn);
       }
@@ -1314,6 +1437,7 @@ export default function App() {
       termsReturn,
       dashFocus,
       openDashboardCard,
+      openWeatherScreen,
       activeRadio,
       libLocationsView,
       libFavoritesOnly,
@@ -1402,9 +1526,9 @@ export default function App() {
 
   const updateBannerValue = useMemo(
     () => ({
-      currentVersion: updateStatus?.currentVersion ?? '2.0.3',
+      currentVersion: updateStatus?.currentVersion ?? '2.0.4',
       updateAvailable: Boolean(updateStatus?.updateAvailable),
-      latestVersion: updateStatus?.latestVersion ?? '2.0.3',
+      latestVersion: updateStatus?.latestVersion ?? '2.0.4',
       onOpenUpdate: () => openOptionsScreen('update'),
     }),
     [updateStatus, openOptionsScreen]
@@ -1454,7 +1578,7 @@ export default function App() {
       <div className="min-h-10 px-3 py-1.5 bg-[#101319] border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2.5 text-xs flex-wrap">
           <span className="font-bold text-zinc-100 whitespace-nowrap">
-            KPlayer v{updateStatus?.currentVersion ?? '2.0.3'}
+            KPlayer v{updateStatus?.currentVersion ?? '2.0.4'}
           </span>
           {updateStatus?.updateAvailable ? (
             <button
@@ -1792,7 +1916,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.3 • R36S
+                      v2.0.4 • R36S
                     </div>
                   </div>
 
@@ -2141,20 +2265,85 @@ export default function App() {
                   location={locationLabel}
                 />
 
-                <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col justify-between gap-2.5 overflow-y-auto kp-scroll w-full max-w-[1120px] mx-auto">
-                  {/* Two-tone Hero Headline */}
-                  <div className="shrink-0">
-                    <div className="flex flex-wrap items-baseline gap-x-2.5 leading-tight">
-                      <span style={{ color: theme.text }} className="text-[23px] @min-[520px]:text-[28px] @min-[840px]:text-[32px] font-extrabold tracking-tight">
-                        {tr('Seu som.', language)}
-                      </span>
-                      <span style={{ color: theme.muted }} className="text-[23px] @min-[520px]:text-[28px] @min-[840px]:text-[32px] font-extrabold tracking-tight">
-                        {tr('Sua tela.', language)}
-                      </span>
+                <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-3.5 flex flex-col justify-between gap-2.5 overflow-y-auto kp-scroll w-full max-w-[1120px] mx-auto">
+                  {/* Two-tone Hero Headline + Compact Right-Corner Location & Weather Widget (Open-Meteo · Button X) */}
+                  <div className="shrink-0 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2.5 leading-tight">
+                        <span style={{ color: theme.text }} className="text-[23px] @min-[520px]:text-[28px] @min-[840px]:text-[32px] font-extrabold tracking-tight">
+                          {tr('Seu som.', language)}
+                        </span>
+                        <span style={{ color: theme.muted }} className="text-[23px] @min-[520px]:text-[28px] @min-[840px]:text-[32px] font-extrabold tracking-tight">
+                          {tr('Sua tela.', language)}
+                        </span>
+                      </div>
+                      <p style={{ color: theme.muted }} className="text-[11.5px] @min-[520px]:text-[12.5px] mt-0.5 truncate">
+                        {tr('Músicas, vídeos, rádios e TV ao vivo num player só.', language)}
+                      </p>
                     </div>
-                    <p style={{ color: theme.muted }} className="text-[11.5px] @min-[520px]:text-[12.5px] mt-0.5 truncate">
-                      {tr('Músicas, vídeos, rádios e TV ao vivo num player só.', language)}
-                    </p>
+
+                    {(() => {
+                      const wxInfo = weatherData
+                        ? describeWeatherCode(weatherData.current.weatherCode, weatherData.current.isDay)
+                        : null;
+                      const cityShort = formatWeatherLocationShort(weatherData?.location ?? weatherLocation);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => openWeatherScreen('auto')}
+                          style={{
+                            ...modernCardStyle(theme, false, 14, theme.panel),
+                          }}
+                          className="px-2.5 @min-[520px]:px-3 py-1.5 flex items-center gap-2 shrink-0 max-w-[46%] cursor-pointer transition-all hover:brightness-110 text-right"
+                          title="Abrir Clima (botão X)"
+                        >
+                          <div className="flex items-center justify-center shrink-0">
+                            <WeatherGlyph
+                              kind={wxInfo?.icon ?? 'partly-day'}
+                              size={20}
+                              color={theme.accent}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            {weatherData ? (
+                              <>
+                                <div className="flex items-baseline justify-end gap-1.5 leading-none">
+                                  <span
+                                    style={{ color: theme.text }}
+                                    className="text-[15px] @min-[520px]:text-[17px] font-extrabold tabular-nums"
+                                  >
+                                    {Math.round(weatherData.current.temp)}°C
+                                  </span>
+                                  <span style={{ color: theme.accent }} className="text-[9.5px] font-extrabold shrink-0">
+                                    X
+                                  </span>
+                                </div>
+                                <div
+                                  style={{ color: theme.muted }}
+                                  className="text-[10px] @min-[520px]:text-[10.5px] truncate max-w-[120px] @min-[520px]:max-w-[165px] mt-0.5"
+                                >
+                                  {cityShort || wxInfo?.label}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex items-center justify-end gap-1 leading-none">
+                                  <span style={{ color: theme.text }} className="text-[11.5px] font-bold whitespace-nowrap">
+                                    Clima
+                                  </span>
+                                  <span style={{ color: theme.accent }} className="text-[9.5px] font-extrabold">
+                                    X
+                                  </span>
+                                </div>
+                                <div style={{ color: theme.muted }} className="text-[9.5px] truncate mt-0.5">
+                                  {weatherLoading ? 'Carregando...' : 'Definir local'}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })()}
                   </div>
 
                   {/* Adaptive Category Card Grid (2x3 on compact portrait, 3x2 on 4:3 / landscape / desktop) */}
@@ -3234,7 +3423,31 @@ export default function App() {
               />
             )}
 
-            {/* ==================== NEW SELECTION-FIRST OPTIONS MENU (OPENED VIA SELECT) ==================== */}
+            {/* ==================== OPEN-METEO WEATHER APP (OPENED VIA BUTTON X ON HOME) ==================== */}
+            {screen === 'weather' && (
+              <WeatherScreen
+                ref={weatherRef}
+                theme={theme}
+                language={language}
+                locationLabel={locationLabel}
+                toast={toast}
+                weatherMode={weatherMode}
+                weatherLocation={weatherLocation}
+                weatherData={weatherData}
+                weatherLoading={weatherLoading}
+                weatherError={weatherError}
+                initialSetupView={weatherSetupView}
+                onChooseIpLocation={enableIpWeather}
+                onSelectManualLocation={selectManualWeatherLocation}
+                onRefreshWeather={async () => {
+                  if (weatherLocation) await fetchWeatherForLocation(weatherLocation, true);
+                  else if (weatherMode === 'ip') await enableIpWeather();
+                }}
+                onBack={() => setScreen('home')}
+              />
+            )}
+
+            {/* ==================== ALPHABETICAL SELECTION-FIRST OPTIONS MENU (OPENED VIA SELECT) ==================== */}
             {screen === 'options' && (
               <OptionsMenu
                 ref={optionsRef}
@@ -3255,7 +3468,8 @@ export default function App() {
                 r36sDisplayMode={r36sDisplayMode}
                 displayModes={R36S_DISPLAY_MODES}
                 stageSize={stageSize}
-                ipLocationEnabled={ipLocationEnabled}
+                weatherMode={weatherMode}
+                weatherLocation={weatherLocation}
                 activeTrack={activeTrack}
                 favoriteTrackIds={favoriteTrackIds}
                 history={playbackHistory}
@@ -3272,7 +3486,10 @@ export default function App() {
                 onToggleShuffle={() => setShuffle((s) => !s)}
                 onSetEqIdx={setEqIdx}
                 onSetSleepIdx={setSleepIdx}
-                onSetIpLocation={setIpLocationEnabled}
+                onEnableIpWeather={enableIpWeather}
+                onOpenWeatherManual={() => openWeatherScreen('manual')}
+                onOpenWeatherScreen={() => openWeatherScreen('auto')}
+                onDisableWeather={disableWeather}
                 onToggleFavTrack={toggleTrackFav}
                 onOpenFavorites={() => {
                   setLibFavoritesOnly(true);
@@ -3382,6 +3599,12 @@ export default function App() {
               onCheckUpdate={checkForUpdates}
               onApplyUpdate={applyAppUpdate}
               onSaveUpdateRepo={saveUpdateRepo}
+              weatherData={weatherData}
+              weatherLocation={weatherLocation}
+              onOpenWeather={() => {
+                setEditionView('r36s');
+                openWeatherScreen('auto');
+              }}
             />
           );
 
@@ -3452,7 +3675,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.3 — Visual Moderno
+                  KPlayer v2.0.4 — Visual Moderno
                 </h2>
               </div>
               <button
@@ -3468,7 +3691,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
                   src={portCoverImg}
-                  alt="Capa do Port KPlayer v2.0.3 para R36S dArkOS"
+                  alt="Capa do Port KPlayer v2.0.4 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -3477,7 +3700,7 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.3-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.4-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -3510,7 +3733,7 @@ export default function App() {
             <div className="mt-4 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.3-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.4-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code>,{' '}
                   <code className="text-zinc-100">kplayer/</code>,{' '}
@@ -3527,22 +3750,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 v2.0.3, capa 640×480 e XML dArkOS, tela de boas-vindas animada com seletor de temas, libVLC ARM64, <strong>Placar da Bola</strong>, IPTV categorizado (245 canais + filmes/séries + IPTV do Usuário) e rádios <code className="text-zinc-300">.pls</code>.
+                Inclui binário ARM64 v2.0.4, Clima Open-Meteo, auto-update via pasta updates/, capa 640×480 e XML dArkOS, libVLC ARM64, <strong>Placar da Bola</strong>, IPTV Brasil + EPG e rádios <code className="text-zinc-300">.pls</code>.
               </p>
             </div>
 
             <div className="mt-5 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.3-R36S.zip"
+                download="KPlayer-v2.0.4-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.3-R36S.zip
+                ⬇ Baixar KPlayer-v2.0.4-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.3-R36S.zip.sha256"
+                download="KPlayer-v2.0.4-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256
@@ -3568,7 +3791,7 @@ export default function App() {
                   Edição Android · Lado a Lado com R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.3 — Android Adaptativo
+                  KPlayer v2.0.4 — Android Adaptativo
                 </h2>
               </div>
               <button
@@ -3584,7 +3807,7 @@ export default function App() {
               <div className="w-[128px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
                   src={portCoverImg}
-                  alt="Capa KPlayer v2.0.3 Android"
+                  alt="Capa KPlayer v2.0.4 Android"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -3608,7 +3831,7 @@ export default function App() {
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Workflow CI</span>
-                  <span className="font-medium text-[#1db954]">android-build.yml (APK)</span>
+                  <span className="font-medium text-[#1db954]">auto-update.yml (Release + APK)</span>
                 </div>
               </div>
             </div>
@@ -3621,7 +3844,7 @@ export default function App() {
                 <li>Vídeos locais e streams HLS via Media3 ExoPlayer, IPTV desbloqueado (Canais · Filmes · Séries · Usuário), Rádio Online, Placar da Bola e os mesmos 7 temas + Aviso de Transparência.</li>
               </ul>
               <p className="text-[11px] text-zinc-400 pt-1">
-                O projeto nativo está em <code className="text-zinc-200">android/</code> e é compilado automaticamente no GitHub Actions gerando <code className="text-zinc-200">KPlayer-v2.0.3-Android.apk</code> lado a lado com o pacote principal do R36S.
+                O projeto nativo está em <code className="text-zinc-200">android/</code> e é compilado automaticamente no GitHub Actions gerando <code className="text-zinc-200">KPlayer-v2.0.4-Android.apk</code> e publicando a Release lado a lado com o pacote principal do R36S.
               </p>
             </div>
 

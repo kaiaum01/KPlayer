@@ -51,9 +51,13 @@ import type {
   RadioStation,
   RepeatMode,
   VideoFit,
+  WeatherData,
+  WeatherLocation,
 } from '../types';
 import { formatTime } from '../utils/media';
+import { describeWeatherCode, formatWeatherLocationShort } from '../utils/weather';
 import { AudioVisualizer, VinylArt, mixRgb, rgbToRgba } from './R36SIcons';
+import { WeatherGlyph } from './WeatherScreen';
 
 export interface AndroidPlayerAppProps {
   theme: KpTheme;
@@ -103,6 +107,9 @@ export interface AndroidPlayerAppProps {
   onCheckUpdate?: (force?: boolean) => Promise<void>;
   onApplyUpdate?: () => Promise<void>;
   onSaveUpdateRepo?: (repo: string) => Promise<boolean>;
+  weatherData?: WeatherData | null;
+  weatherLocation?: WeatherLocation | null;
+  onOpenWeather?: () => void;
 }
 
 type AndroidTab = 'home' | 'music' | 'iptv' | 'radio' | 'football';
@@ -167,6 +174,9 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
   onCheckUpdate,
   onApplyUpdate,
   onSaveUpdateRepo,
+  weatherData = null,
+  weatherLocation = null,
+  onOpenWeather,
 }) => {
   const [tab, setTab] = useState<AndroidTab>('home');
   const [showNowPlaying, setShowNowPlaying] = useState(false);
@@ -621,7 +631,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
           {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
         </span>
         <div className="w-16 h-4 rounded-full bg-black/50 border border-white/10" aria-hidden="true" />
-        <span style={{ color: theme.muted }}>Android · 2.0.3</span>
+        <span style={{ color: theme.muted }}>Android · 2.0.4</span>
       </div>
 
       {/* ==================== ADAPTIVE BODY: LEFT NAV RAIL (>=680px) + MAIN VIEWPORT ==================== */}
@@ -643,7 +653,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                   K <span style={{ color: theme.accent }}>Player</span>
                 </div>
                 <div className="text-[10.5px] mt-1 truncate" style={{ color: theme.muted }}>
-                  Android · v2.0.3
+                  Android · v2.0.4
                 </div>
               </div>
             </div>
@@ -812,29 +822,61 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
         {!pendingNoticeTab && !showVideosSheet && !showSettingsSheet && tab === 'home' && (
           <div className="flex-1 overflow-y-auto kp-scroll px-4 @min-[680px]:px-6 pt-2 @min-[680px]:pt-4 pb-36 @min-[680px]:pb-24">
             <div className="max-w-5xl mx-auto w-full space-y-5">
-            {/* Compact Top App Bar */}
-            <header className="flex items-center justify-between min-h-[44px]">
-              <div>
+            {/* Compact Top App Bar with Weather & Location */}
+            <header className="flex items-center justify-between gap-2 min-h-[44px]">
+              <div className="min-w-0">
                 <h1 className="text-[22px] font-extrabold tracking-tight leading-none">
                   K <span style={{ color: theme.accent }}>Player</span>
                 </h1>
-                <p className="text-[12px] mt-1" style={{ color: theme.muted }}>
+                <p className="text-[12px] mt-1 truncate" style={{ color: theme.muted }}>
                   Android Adaptativo · {audioTracks.length} músicas · {videoTracks.length} vídeos
                 </p>
               </div>
-              <button
-                type="button"
-                aria-label="Opções e Temas"
-                onClick={() => setShowSettingsSheet(true)}
-                style={{
-                  backgroundColor: theme.panel,
-                  color: theme.text,
-                  border: `1px solid ${subtleBorder}`,
-                }}
-                className="w-11 h-11 rounded-2xl flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {onOpenWeather && (
+                  <button
+                    type="button"
+                    onClick={onOpenWeather}
+                    style={{
+                      backgroundColor: theme.panel,
+                      border: `1px solid ${subtleBorder}`,
+                    }}
+                    className="h-11 px-2.5 rounded-2xl flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                    title="Abrir Clima Open-Meteo"
+                  >
+                    <WeatherGlyph
+                      kind={
+                        weatherData
+                          ? describeWeatherCode(weatherData.current.weatherCode, weatherData.current.isDay).icon
+                          : 'partly-day'
+                      }
+                      size={18}
+                      color={theme.accent}
+                    />
+                    <div className="text-right leading-tight">
+                      <div className="text-[12.5px] font-extrabold tabular-nums">
+                        {weatherData ? `${Math.round(weatherData.current.temp)}°C` : 'Clima'}
+                      </div>
+                      <div className="text-[9.5px] truncate max-w-[76px]" style={{ color: theme.muted }}>
+                        {formatWeatherLocationShort(weatherData?.location ?? weatherLocation) || 'Definir'}
+                      </div>
+                    </div>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  aria-label="Opções e Temas"
+                  onClick={() => setShowSettingsSheet(true)}
+                  style={{
+                    backgroundColor: theme.panel,
+                    color: theme.text,
+                    border: `1px solid ${subtleBorder}`,
+                  }}
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+              </div>
             </header>
 
             {/* Primary Focal Hero Card — Modern Now Playing / Quick Play */}
@@ -1917,7 +1959,7 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
               <div>
                 <h1 className="text-[19px] font-extrabold leading-tight">Opções & Temas</h1>
                 <p className="text-[11.5px]" style={{ color: theme.muted }}>
-                  Sincronizado com o KPlayer v2.0.3
+                  Sincronizado com o KPlayer v2.0.4
                 </p>
               </div>
             </header>
@@ -1938,12 +1980,12 @@ export const AndroidPlayerApp: React.FC<AndroidPlayerAppProps> = ({
                   <div>
                     <div className="flex items-center gap-1.5">
                       <Download className="w-4 h-4" style={{ color: theme.accent }} />
-                      <span className="text-[13.5px] font-extrabold">Atualizar KPlayer (Auto-Update)</span>
+                      <span className="text-[13.5px] font-extrabold">Verificar atualizações</span>
                     </div>
                     <p className="text-[11.5px] mt-0.5" style={{ color: theme.muted }}>
                       {updateStatus?.updateAvailable
                         ? `Nova versão v${updateStatus.latestVersion} pronta na pasta updates/ do GitHub.`
-                        : `Versão v${updateStatus?.currentVersion ?? '2.0.3'} instalada · Monitorando v${updateStatus?.nextExpectedVersion ?? '2.0.4'}+ ao iniciar.`}
+                        : `Versão v${updateStatus?.currentVersion ?? '2.0.4'} instalada · Monitorando v${updateStatus?.nextExpectedVersion ?? '2.0.5'}+ ao iniciar.`}
                     </p>
                   </div>
                   <span

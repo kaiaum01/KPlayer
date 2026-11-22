@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-UA = "KPlayer-Updater/2.0.3"
+UA = "KPlayer-Updater/2.0.4"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",
     "github.com",
@@ -61,7 +61,7 @@ def read_installed_version(gamedir: Path) -> str:
             v = p.read_text(encoding="utf-8", errors="replace").strip()
             if re.fullmatch(r"\d+\.\d+\.\d+", v):
                 return v
-    return "2.0.3"
+    return "2.0.4"
 
 
 def read_repo_slug(gamedir: Path) -> str:
