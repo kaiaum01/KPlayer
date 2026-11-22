@@ -868,6 +868,8 @@ extern char **environ;
 #include "radio.h"
 #include "iptv.h"
 #include "football.h"
+#include "updater.h"
+#include "weather.h"
 #include "splash.h"
 // First-run screens use the skin drawing helpers.
 #include "onboarding.h"
@@ -889,114 +891,376 @@ static void track_label(bool subtitle, char *out, size_t n) {
     }
   libvlc_track_description_list_release(list);
 }
-/* Stable action IDs are kept separate from their presentation order. */
-static const int option_groups[][8] = {
-  {0, 1, 2, 3, 4, 12, 16, -1},
-  {7, 13, 14, 17, -1, -1, -1, -1},
-  {5, 9, 18, 11, 15, 6, 8, -1}
+/* Selection-first vertical Options menu (v2.0.4/v2.0.5):
+ * Zero horizontal side tabs. Root items strictly alphabetical (A-Z),
+ * with ONLY [A] Verificar atualizacoes in penultimate and ONLY Sair last. */
+enum {
+  OPT_SEC_ROOT = 0,
+  OPT_SEC_SHORTCUTS = 1,
+  OPT_SEC_LIBRARY = 2,
+  OPT_SEC_WEATHER = 3,
+  OPT_SEC_PLAYBACK = 4,
+  OPT_SEC_UPDATE = 5
 };
-static const int option_group_counts[] = {7, 4, 7};
-static const char *option_group_names[] = {"Reprodução", "Biblioteca", "Geral"};
-static int option_group_for(int id) {
-  for (int g = 0; g < 3; g++)
-    for (int n = 0; n < option_group_counts[g]; n++)
-      if (option_groups[g][n] == id) return g;
-  return 0;
+
+static int opt_section = OPT_SEC_ROOT;
+static int opt_cursor = 0;
+static int opt_scroll = 0;
+
+/* Root order (strict A-Z, then penultimate [A] Verificar atualizacoes, then last Sair):
+ * 18=Adaptacao de tela, 20=Atalhos, 21=Biblioteca & Historico, 22=Clima e Localizacao,
+ * 5=Idioma, 23=Reproducao & Audio, 9=Tema, 6=Termos de uso, 15=Timer de sono,
+ * 19=Verificar atualizacoes (penultimate, badge A), 8=Sair (last). */
+static const int opt_root_ids[] = {18, 20, 21, 22, 5, 23, 9, 6, 15, 19, 8};
+#define OPT_ROOT_COUNT ((int)(sizeof(opt_root_ids) / sizeof(opt_root_ids[0])))
+
+static const int opt_library_ids[] = {7, 13, 14, 17, -99};
+#define OPT_LIBRARY_COUNT 5
+
+static const int opt_weather_ids[] = {30, 31, 32, 11, 33, -99};
+#define OPT_WEATHER_COUNT 6
+
+static const int opt_playback_ids[] = {0, 1, 2, 3, 4, 12, 16, -99};
+#define OPT_PLAYBACK_COUNT 8
+
+static const int opt_update_ids[] = {40, 41, -99};
+#define OPT_UPDATE_COUNT 3
+
+typedef struct {
+  const char *btn;
+  const char *action;
+} ShortcutRow;
+
+static const ShortcutRow opt_shortcuts[] = {
+    {"DIR", "Navegar menus, listas e avançar/voltar 10s"},
+    {"B", "Confirmar, abrir item ou pausar/retomar"},
+    {"A", "Voltar à tela anterior ou fechar submenu"},
+    {"X", "Abrir Clima (Início), alternar abas ou ocultar OSD"},
+    {"Y", "Atualizar listas, trocar cidade do clima ou Opções"},
+    {"L1 / R1", "Faixa/canal anterior ou próximo (e Player no Início)"},
+    {"START", "Pausar / retomar reprodução rapidamente"},
+    {"SELECT", "Abrir ou fechar o menu de Opções (e atualizações)"},
+};
+#define OPT_SHORTCUTS_COUNT ((int)(sizeof(opt_shortcuts) / sizeof(opt_shortcuts[0])))
+
+static int opt_current_list(const int **out_ids) {
+  switch (opt_section) {
+  case OPT_SEC_LIBRARY:
+    *out_ids = opt_library_ids;
+    return OPT_LIBRARY_COUNT;
+  case OPT_SEC_WEATHER:
+    *out_ids = opt_weather_ids;
+    return OPT_WEATHER_COUNT;
+  case OPT_SEC_PLAYBACK:
+    *out_ids = opt_playback_ids;
+    return OPT_PLAYBACK_COUNT;
+  case OPT_SEC_UPDATE:
+    *out_ids = opt_update_ids;
+    return OPT_UPDATE_COUNT;
+  default:
+    *out_ids = opt_root_ids;
+    return OPT_ROOT_COUNT;
+  }
 }
+
+static void opt_sync_option_id(void) {
+  if (opt_section == OPT_SEC_SHORTCUTS) return;
+  const int *ids = NULL;
+  int cnt = opt_current_list(&ids);
+  if (cnt <= 0) return;
+  if (opt_cursor < 0) opt_cursor = 0;
+  if (opt_cursor >= cnt) opt_cursor = cnt - 1;
+  option = ids[opt_cursor];
+}
+
+static void opt_enter_section(int sec) {
+  opt_section = sec;
+  opt_cursor = 0;
+  opt_scroll = 0;
+  opt_sync_option_id();
+}
+
+static const char *opt_label_for(int id) {
+  switch (id) {
+  case 0: return tr("Velocidade");
+  case 1: return tr("Formato da imagem");
+  case 2: return tr("Faixa de áudio");
+  case 3: return tr("Legendas");
+  case 4: return tr("Modo de repetição");
+  case 5: return tr("Idioma");
+  case 6: return tr("Termos de uso");
+  case 7: return tr("Favoritar faixa");
+  case 8: return tr("Sair");
+  case 9: return tr("Tema");
+  case 11: return tr("Localização na barra");
+  case 12: return tr("Aleatório");
+  case 13: return tr("Minhas favoritas");
+  case 14: return tr("Retomar mídia");
+  case 15: return tr("Timer de sono");
+  case 16: return tr("Equalizador");
+  case 17: return tr("IPTV");
+  case 18: return tr("Adaptação de tela");
+  case 19: return "Verificar atualizações";
+  case 20: return "Atalhos";
+  case 21: return "Biblioteca & Histórico";
+  case 22: return "Clima e Localização";
+  case 23: return "Reprodução & Áudio";
+  case 30: return "Abrir aplicativo de Clima";
+  case 31: return "Usar localização do meu IP";
+  case 32: return "Pesquisar cidade manualmente";
+  case 33: return "Limpar localização salva";
+  case 40: return "Verificar nova versão agora";
+  case 41: return "Baixar e atualizar (sem perder dados)";
+  case -99: return "← Voltar ao menu de Opções";
+  default: return "";
+  }
+}
+
+static void opt_value_for(int id, char *value, size_t cap) {
+  value[0] = 0;
+  switch (id) {
+  case 0:
+    snprintf(value, cap, "%.2fx", rate);
+    break;
+  case 1:
+    snprintf(value, cap, "%s",
+             fit == 0   ? tr("Proporção original")
+             : fit == 1 ? tr("Preencher (corte)")
+                        : tr("Esticar"));
+    break;
+  case 2:
+  case 3:
+    if (options_from_video && !preview_mode)
+      track_label(id == 3, value, cap);
+    else
+      snprintf(value, cap, "%s", tr("Abra uma mídia"));
+    break;
+  case 4:
+    snprintf(value, cap, "%s",
+             repeat_mode == 1   ? tr("Repetir faixa")
+             : repeat_mode == 2 ? tr("Repetir fila")
+                                : tr("Desativada"));
+    break;
+  case 5:
+    snprintf(value, cap, "%s", language_names[language]);
+    break;
+  case 6:
+    snprintf(value, cap, "%s", tr("Abrir"));
+    break;
+  case 7:
+    snprintf(value, cap, "%s",
+             active && playing_audio
+                 ? (is_favorite() ? tr("Ativada") : tr("Desativada"))
+                 : tr("Abra uma mídia"));
+    break;
+  case 8:
+    value[0] = 0; /* Only "Sair", nothing extra */
+    break;
+  case 9:
+    snprintf(value, cap, "%s", tr(themes[theme_index].name));
+    break;
+  case 11:
+    snprintf(value, cap, "%s", tr(network_location_enabled ? "Ativada" : "Desativada"));
+    break;
+  case 12:
+    snprintf(value, cap, "%s", tr(shuffle_enabled ? "Ativada" : "Desativada"));
+    break;
+  case 15: {
+    const int minutes[] = {0, 15, 30, 60, 90, 120};
+    if (sleep_choice) snprintf(value, cap, "%d min", minutes[sleep_choice]);
+    else snprintf(value, cap, "%s", tr("Desativada"));
+    break;
+  }
+  case 16:
+    if (eq_choice && eq_name_fn) {
+      const char *name = eq_name_fn((unsigned)eq_choice - 1);
+      snprintf(value, cap, "%s", name ? name : "-");
+    } else snprintf(value, cap, "%s", tr("Desativada"));
+    break;
+  case 18:
+    if (display_mode == 0)
+      snprintf(value, cap, "Auto (%dx%d)", dev_w, dev_h);
+    else if (display_mode == 1)
+      snprintf(value, cap, "%s", tr("Preencher tela"));
+    else
+      snprintf(value, cap, "%s", tr("Clássico 4:3"));
+    break;
+  case 19: {
+    char lat[32] = "";
+    if (updater_is_available(lat, sizeof(lat)))
+      snprintf(value, cap, "v%s disponível", lat);
+    else
+      snprintf(value, cap, "v%s", KPLAYER_VERSION);
+    break;
+  }
+  case 20:
+    snprintf(value, cap, "%d comandos ›", OPT_SHORTCUTS_COUNT);
+    break;
+  case 21:
+  case 23:
+    snprintf(value, cap, "Selecionar ›");
+    break;
+  case 22: {
+    pthread_mutex_lock(&weather_mutex);
+    int wm = weather_mode;
+    char cname[64];
+    snprintf(cname, sizeof(cname), "%s", weather_saved_city.name);
+    pthread_mutex_unlock(&weather_mutex);
+    if (wm == WEATHER_MODE_IP) snprintf(value, cap, "IP: %s", cname[0] ? cname : "Auto");
+    else if (wm == WEATHER_MODE_MANUAL && cname[0]) snprintf(value, cap, "%s", cname);
+    else snprintf(value, cap, "Configurar ›");
+    break;
+  }
+  case 30:
+    snprintf(value, cap, "Open-Meteo ›");
+    break;
+  case 31:
+    snprintf(value, cap, weather_mode == WEATHER_MODE_IP ? "Ativo" : "Detectar");
+    break;
+  case 32:
+    snprintf(value, cap, "Buscar ›");
+    break;
+  case 33:
+    snprintf(value, cap, weather_mode == WEATHER_MODE_UNSET ? "Sem local" : "Remover");
+    break;
+  case 40:
+    snprintf(value, cap, "GitHub updates/");
+    break;
+  case 41: {
+    char lat[32] = "";
+    if (updater_is_available(lat, sizeof(lat)))
+      snprintf(value, cap, "Instalar v%s", lat);
+    else
+      snprintf(value, cap, "Preserva dados");
+    break;
+  }
+  case -99:
+    value[0] = 0;
+    break;
+  default:
+    snprintf(value, cap, "%s", tr("Abrir"));
+  }
+}
+
 static void draw_options(void) {
   backdrop();
   draw_header(tr("OPÇÕES"));
-  label(tr("Opções"), 24, 52, 25, textc, 500);
-  const char *names[] = {
-      tr("Velocidade"),    tr("Formato da imagem"), tr("Faixa de áudio"),
-      tr("Legendas"),      tr("Modo de repetição"), tr("Idioma"),
-      tr("Termos de uso"), tr("Favoritar faixa"),   tr("Sair do KPlayer"),
-      tr("Tema"), "", tr("Localização por IP"), tr("Aleatório"), tr("Minhas favoritas"), tr("Retomar mídia"), tr("Timer de sono"), tr("Equalizador"), tr("IPTV"), tr("Adaptação de tela")};
-  int group = option_group_for(option);
-  for (int g = 0; g < 3; g++) {
-    int x = 24 + g * 199;
-    pill(x, 85, 194, 32, g == group);
-    centered(tr(option_group_names[g]), x + 5, 93, 184, 14,
-             g == group ? bg : muted);
+
+  const char *sec_title = tr("Opções");
+  const char *sec_sub = "Selecione uma opção (ordem alfabética)";
+  if (opt_section == OPT_SEC_SHORTCUTS) {
+    sec_title = "Atalhos do Controle";
+    sec_sub = "Comandos do R36S • Pressione A para voltar";
+  } else if (opt_section == OPT_SEC_LIBRARY) {
+    sec_title = "Biblioteca & Histórico";
+    sec_sub = "Favoritos, retomada e IPTV";
+  } else if (opt_section == OPT_SEC_WEATHER) {
+    sec_title = "Clima e Localização";
+    sec_sub = "API Open-Meteo • IP automático ou busca manual";
+  } else if (opt_section == OPT_SEC_PLAYBACK) {
+    sec_title = "Reprodução & Áudio";
+    sec_sub = "Velocidade, tela, faixas, repetição e equalizador";
+  } else if (opt_section == OPT_SEC_UPDATE) {
+    sec_title = "Verificar atualizações";
+    sec_sub = "Auto-update pela pasta updates/ do GitHub sem perda de dados";
   }
-  for (int row = 0; row < option_group_counts[group]; row++) {
-    int i = option_groups[group][row];
-    int y = 129 + row * 42;
-    card(24, y, 592, 37, 10, i == option, panel);
-    label(names[i], 40, y + 10, 18, i == option ? accent : textc, 280);
-    char value[256];
-    switch (i) {
-    case 0:
-      snprintf(value, sizeof(value), "%.2fx", rate);
-      break;
-    case 1:
-      snprintf(value, sizeof(value), "%s",
-               fit == 0   ? tr("Proporção original")
-               : fit == 1 ? tr("Preencher (corte)")
-                          : tr("Esticar"));
-      break;
-    case 2:
-    case 3:
-      if (options_from_video && !preview_mode)
-        track_label(i == 3, value, sizeof(value));
-      else
-        snprintf(value, sizeof(value), "%s", tr("Abra uma mídia"));
-      break;
-    case 4:
-      snprintf(value, sizeof(value), "%s",
-               repeat_mode == 1 ? tr("Repetir faixa") : repeat_mode == 2 ? tr("Repetir fila") : tr("Desativada"));
-      break;
-    case 5:
-      snprintf(value, sizeof(value), "%s", language_names[language]);
-      break;
-    case 6:
-      snprintf(value, sizeof(value), "%s", tr("Abrir"));
-      break;
-    case 7:
-      snprintf(value, sizeof(value), "%s",
-               active && playing_audio
-                   ? (is_favorite() ? tr("Ativada") : tr("Desativada"))
-                   : tr("Abra uma mídia"));
-      break;
-    case 9:
-      snprintf(value, sizeof(value), "%s", tr(themes[theme_index].name));
-      break;
-    case 11:
-      snprintf(value, sizeof(value), "%s", tr(network_location_enabled ? "Ativada" : "Desativada"));
-      break;
-    case 12:
-      snprintf(value, sizeof(value), "%s", tr(shuffle_enabled ? "Ativada" : "Desativada"));
-      break;
-    case 15: {
-      const int minutes[] = {0, 15, 30, 60, 90, 120};
-      if (sleep_choice) snprintf(value, sizeof(value), "%d min", minutes[sleep_choice]);
-      else snprintf(value, sizeof(value), "%s", tr("Desativada"));
-      break;
+  label(sec_title, 24, 44, 22, textc, 500);
+  label(sec_sub, 24, 71, 11, muted, 590);
+
+  if (opt_section == OPT_SEC_SHORTCUTS) {
+    for (int i = 0; i < OPT_SHORTCUTS_COUNT; i++) {
+      int y = 96 + i * 44;
+      panel_card(24, y, 592, 38, 10);
+      rounded(36, y + 7, 86, 24, 8, alpha(accent, 38));
+      centered(opt_shortcuts[i].btn, 36, y + 12, 86, 12, accent);
+      label(opt_shortcuts[i].action, 136, y + 11, 13, textc, 468);
     }
-    case 16:
-      if (eq_choice && eq_name_fn) {
-        const char *name = eq_name_fn((unsigned)eq_choice - 1);
-        snprintf(value, sizeof(value), "%s", name ? name : "-");
-      } else snprintf(value, sizeof(value), "%s", tr("Desativada"));
-      break;
-    case 18:
-      if (display_mode == 0)
-        snprintf(value, sizeof(value), "Auto (%dx%d)", dev_w, dev_h);
-      else if (display_mode == 1)
-        snprintf(value, sizeof(value), "%s", tr("Preencher tela"));
-      else
-        snprintf(value, sizeof(value), "%s", tr("Clássico 4:3"));
-      break;
-    default:
-      snprintf(value, sizeof(value), "%s", tr("Abrir"));
-    }
-    label(value, 344, y + 10, 17, muted, 253);
+    footer_hints(NULL, 0);
+    return;
   }
-  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Alterar"},
-                              {"X", "Categorias"}, {"A", "Voltar"},
-                              {"SELECT", "Fechar"}};
-  footer_hints(hints, 5);
+
+  int list_top = 96;
+  int visible_rows = 8;
+
+  if (opt_section == OPT_SEC_UPDATE) {
+    pthread_mutex_lock(&kp_upd_mutex);
+    bool avail = kp_upd_available;
+    bool checking = kp_upd_checking;
+    bool applying = kp_upd_applying;
+    char cur[32], lat[32], nxt[32], src[32], msg[192], repo[128];
+    int ncnt = kp_upd_note_count;
+    char notes[4][160];
+    snprintf(cur, sizeof(cur), "%s", kp_upd_current);
+    snprintf(lat, sizeof(lat), "%s", kp_upd_latest);
+    snprintf(nxt, sizeof(nxt), "%s", kp_upd_next);
+    snprintf(src, sizeof(src), "%s", kp_upd_source);
+    snprintf(msg, sizeof(msg), "%s", kp_upd_message);
+    snprintf(repo, sizeof(repo), "%s", kp_upd_repo);
+    for (int i = 0; i < ncnt; i++) snprintf(notes[i], sizeof(notes[i]), "%s", kp_upd_notes[i]);
+    pthread_mutex_unlock(&kp_upd_mutex);
+
+    panel_card(24, 94, 592, 168, 12);
+    char hdr[128];
+    if (avail) snprintf(hdr, sizeof(hdr), "Nova versão disponível: v%.31s", lat);
+    else snprintf(hdr, sizeof(hdr), "Versão instalada: v%.31s (monitorando v%.31s+)", cur, nxt);
+    label(hdr, 40, 104, 15, avail ? accent : textc, 430);
+    label(!strcmp(src, "github") || !strcmp(src, "github-release") ? "GitHub Online" : "Canal Local",
+          480, 106, 11, avail ? accent : muted, 124);
+
+    if (repo[0]) {
+      char rline[192];
+      snprintf(rline, sizeof(rline), "Repositório: %.127s (updates/latest.json)", repo);
+      label(rline, 40, 126, 11, muted, 560);
+    } else {
+      label("Repositório: configurado automaticamente na build do GitHub (update-repo.txt)",
+            40, 126, 11, muted, 560);
+    }
+
+    if (msg[0]) label(msg, 40, 146, 12, (checking || applying || avail) ? accent : textc, 560);
+
+    for (int i = 0; i < ncnt && i < 3; i++) {
+      char nb[176];
+      snprintf(nb, sizeof(nb), "• %.159s", notes[i]);
+      label(nb, 40, 170 + i * 18, 11, muted, 560);
+    }
+    label("Preservados no update: favoritos, histórico, listas IPTV/Rádio, clima e ajustes.",
+          40, 236, 10, dim, 560);
+
+    list_top = 276;
+    visible_rows = 4;
+  }
+
+  const int *ids = NULL;
+  int cnt = opt_current_list(&ids);
+  if (opt_cursor >= cnt && cnt > 0) opt_cursor = cnt - 1;
+  if (opt_cursor < opt_scroll) opt_scroll = opt_cursor;
+  if (opt_cursor >= opt_scroll + visible_rows) opt_scroll = opt_cursor - visible_rows + 1;
+
+  for (int row = 0; row < visible_rows && opt_scroll + row < cnt; row++) {
+    int idx = opt_scroll + row;
+    int id = ids[idx];
+    int y = list_top + row * 45;
+    bool focus = (idx == opt_cursor);
+    card(24, y, 592, 39, 10, focus, panel);
+
+    int text_x = 40;
+    if (id == 19) {
+      /* Penultimate item: ONLY "A" badge + "Verificar atualizacoes" */
+      rounded(36, y + 8, 24, 23, 7, focus ? accent : alpha(accent, 42));
+      centered("A", 36, y + 12, 24, 13, focus ? bg : accent);
+      text_x = 70;
+    }
+
+    label(opt_label_for(id), text_x, y + 10, 16,
+          id == 8 ? (focus ? accent : textc) : (focus ? accent : textc), 320);
+
+    char val[160];
+    opt_value_for(id, val, sizeof(val));
+    if (val[0]) label(val, 366, y + 11, 14, focus ? accent : muted, 236);
+  }
+  footer_hints(NULL, 0);
 }
+
 static void cycle_track(bool subtitle, int dir) {
   libvlc_track_description_t *list =
       subtitle ? libvlc_video_get_spu_description(player)
@@ -1115,6 +1379,44 @@ static void change_option(int dir) {
     refresh_device_display();
     save_settings();
     break;
+  case 19:
+    opt_enter_section(OPT_SEC_UPDATE);
+    break;
+  case 20:
+    opt_enter_section(OPT_SEC_SHORTCUTS);
+    break;
+  case 21:
+    opt_enter_section(OPT_SEC_LIBRARY);
+    break;
+  case 22:
+    opt_enter_section(OPT_SEC_WEATHER);
+    break;
+  case 23:
+    opt_enter_section(OPT_SEC_PLAYBACK);
+    break;
+  case 30:
+    weather_open(2);
+    break;
+  case 31:
+    weather_start_ip(true);
+    weather_open(2);
+    break;
+  case 32:
+    weather_open_manual_search(2);
+    break;
+  case 33:
+    weather_clear_location();
+    notify("Localização do clima removida");
+    break;
+  case 40:
+    updater_start_check(true);
+    break;
+  case 41:
+    updater_start_apply();
+    break;
+  case -99:
+    opt_enter_section(OPT_SEC_ROOT);
+    break;
   }
   menu_dirty = true;
 }
@@ -1138,7 +1440,7 @@ static void open_options(void) {
   return_mode = mode;
   mode = 2;
   options_from_video = active;
-  option = 0;
+  opt_enter_section(OPT_SEC_ROOT);
 }
 static void key(SDL_Keycode k, bool repeat) {
   if (radio_play_is_busy()) {
@@ -1216,20 +1518,39 @@ static void key(SDL_Keycode k, bool repeat) {
     return;
   }
   if (mode == 2) {
-    int group = option_group_for(option), row = 0;
-    while (row < option_group_counts[group] && option_groups[group][row] != option) row++;
-    if ((k == SDLK_BACKSPACE || k == SDLK_m) && !repeat)
-      mode = return_mode;
-    else if (k == SDLK_UP)
-      option = option_groups[group][(row + option_group_counts[group] - 1) % option_group_counts[group]];
-    else if (k == SDLK_DOWN)
-      option = option_groups[group][(row + 1) % option_group_counts[group]];
-    else if (k == SDLK_SPACE && !repeat)
-      option = option_groups[(group + 1) % 3][0];
-    else if (k == SDLK_LEFT && option != 10)
-      change_option(-1);
-    else if ((k == SDLK_RIGHT && option != 10) || (k == SDLK_RETURN && !repeat))
+    if (opt_section == OPT_SEC_SHORTCUTS) {
+      if ((k == SDLK_BACKSPACE || k == SDLK_RETURN || k == SDLK_m) && !repeat)
+        opt_enter_section(OPT_SEC_ROOT);
+      return;
+    }
+    const int *ids = NULL;
+    int cnt = opt_current_list(&ids);
+    if ((k == SDLK_BACKSPACE || k == SDLK_m) && !repeat) {
+      if (opt_section != OPT_SEC_ROOT) opt_enter_section(OPT_SEC_ROOT);
+      else mode = return_mode;
+    } else if (k == SDLK_UP && cnt > 0) {
+      opt_cursor = (opt_cursor + cnt - 1) % cnt;
+      opt_sync_option_id();
+    } else if (k == SDLK_DOWN && cnt > 0) {
+      opt_cursor = (opt_cursor + 1) % cnt;
+      opt_sync_option_id();
+    } else if (k == SDLK_LEFT) {
+      if (option == 0 || option == 1 || option == 2 || option == 3 ||
+          option == 4 || option == 5 || option == 9 || option == 11 ||
+          option == 12 || option == 15 || option == 16 || option == 18)
+        change_option(-1);
+    } else if (k == SDLK_RIGHT) {
+      if (option == 0 || option == 1 || option == 2 || option == 3 ||
+          option == 4 || option == 5 || option == 9 || option == 11 ||
+          option == 12 || option == 15 || option == 16 || option == 18)
+        change_option(1);
+    } else if (k == SDLK_RETURN && !repeat) {
       change_option(1);
+    }
+    return;
+  }
+  if (mode == 11) {
+    if (!repeat) weather_key(k);
     return;
   }
   if (mode == 3) {
@@ -1256,9 +1577,12 @@ static void key(SDL_Keycode k, bool repeat) {
           open_stream_notice(8, 3);
       } else if (dash_focus == 5)
         football_open();
-    } else if (k == SDLK_SPACE && !repeat && active)
+    } else if (k == SDLK_SPACE && !repeat) {
+      /* Button X on Home opens the Open-Meteo Weather App */
+      weather_open(3);
+    } else if ((k == SDLK_q || k == SDLK_e) && !repeat && active) {
       mode = playing_audio ? 4 : 1;
-    else if (k == SDLK_m && !repeat)
+    } else if (k == SDLK_m && !repeat)
       open_options();
     return;
   }
@@ -1634,6 +1958,9 @@ int main(int argc, char **argv) {
       snprintf(football_matches[0].score, sizeof(football_matches[0].score), "1 - 0");
       snprintf(football_matches[0].status, sizeof(football_matches[0].status), "45'");
       draw_football();
+    } else if (!strcmp(argv[1], "--preview-weather")) {
+      weather_view = WEATHER_VIEW_SETUP;
+      draw_weather();
     } else if (!strcmp(argv[1], "--preview-locations")) {
       show_locations();
       draw_menu();
@@ -1670,8 +1997,12 @@ int main(int argc, char **argv) {
   load_settings();
   load_favorites();
   run_boot_splash();
+  weather_boot_refresh();
+  updater_start_check(false);
   while (running) {
     uint32_t frame = SDL_GetTicks();
+    updater_poll_main_thread();
+    if (!running) break;
     if (sleep_choice && (int32_t)(frame - sleep_end) >= 0) {
       sleep_choice = 0;
       sleep_end = 0;
@@ -1757,6 +2088,8 @@ int main(int argc, char **argv) {
       draw_iptv();
     else if (mode == 10)
       draw_stream_notice();
+    else if (mode == 11)
+      draw_weather();
     else
       draw_menu();
     SDL_RenderPresent(renderer);
@@ -1791,5 +2124,5 @@ int main(int argc, char **argv) {
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();
-  return 0;
+  return kp_upd_exit_code ? kp_upd_exit_code : 0;
 }

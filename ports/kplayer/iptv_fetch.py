@@ -27,10 +27,18 @@ import unicodedata
 import urllib.parse
 import urllib.request
 
+import gzip
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+
 CANAIS_BASE = "https://canais-saimo.pages.dev/"
 RAMYS_CANAIS_URL = "https://raw.githubusercontent.com/Ramys/Iptv-Brasil-2026/master/Canais.m3u8"
+EPG_BR_URLS = (
+    "https://epgshare01.online/epgshare01/epg_ripper_BR1.xml.gz",
+    "https://www.open-epg.com/files/brazil1.xml.gz",
+)
 FILMES_BASE = "https://filmes-saimo.pages.dev/"
-UA = "KPlayer-R36S/2.0.4"
+UA = "KPlayer-R36S/2.0.5"
 
 CACHE_DIR = Path("iptv/.cache")
 USER_DIR = Path("iptv_usuario")
@@ -976,6 +984,112 @@ def cmd_user_add_url(url: str, name: str = "") -> bool:
     return True
 
 
+def _norm_epg_key(raw: str) -> str:
+    s = unicodedata.normalize("NFD", raw or "")
+    s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn").lower()
+    s = re.sub(r"\b(fhd|uhd|hd|sd|4k|h265|hevc|br|brasil|tv|canal|ao vivo)\b", " ", s)
+    return re.sub(r"[^a-z0-9]+", "", s)
+
+
+def _parse_xmltv_ts(raw: str) -> float:
+    m = re.match(r"^(\d{14})\s*([+-]\d{4})?", (raw or "").strip())
+    if not m:
+        return 0.0
+    dt = datetime.strptime(m.group(1), "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+    ts = dt.timestamp()
+    tz = m.group(2)
+    if tz:
+        sign = 1 if tz[0] == "+" else -1
+        off = (int(tz[1:3]) * 60 + int(tz[3:5])) * 60
+        ts -= sign * off
+    return ts
+
+
+def _load_epg_xml_cached(refresh: bool = False) -> Path | None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    xml_cache = CACHE_DIR / "epg_br.xml"
+    if not refresh and xml_cache.is_file():
+        try:
+            if time.time() - xml_cache.stat().st_mtime < 3 * 3600 and xml_cache.stat().st_size > 1024:
+                return xml_cache
+        except OSError:
+            pass
+    for url in EPG_BR_URLS:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                raw = resp.read(32 * 1024 * 1024)
+            xml_bytes = gzip.decompress(raw) if url.endswith(".gz") else raw
+            tmp = xml_cache.with_suffix(".tmp")
+            tmp.write_bytes(xml_bytes)
+            os.replace(tmp, xml_cache)
+            return xml_cache
+        except Exception:
+            continue
+    return xml_cache if xml_cache.is_file() else None
+
+
+def cmd_epg(channel_name: str, tvg_id: str, out_path: Path, refresh: bool = False) -> bool:
+    xml_path = _load_epg_xml_cached(refresh=refresh)
+    if not xml_path:
+        write_atomic(out_path, "")
+        return False
+    want_id = _norm_epg_key(tvg_id)
+    want_name = _norm_epg_key(channel_name)
+    if not want_id and not want_name:
+        write_atomic(out_path, "")
+        return False
+
+    matched_ids: set[str] = set()
+    now_ts = time.time()
+    now_prog: tuple[float, float, str] | None = None
+    next_prog: tuple[float, float, str] | None = None
+
+    try:
+        for _event, elem in ET.iterparse(str(xml_path), events=("end",)):
+            tag = elem.tag.rsplit("}", 1)[-1]
+            if tag == "channel":
+                cid = elem.attrib.get("id", "")
+                cid_k = _norm_epg_key(cid)
+                names = [cid_k]
+                for dn in elem.findall("display-name"):
+                    if dn.text:
+                        names.append(_norm_epg_key(dn.text))
+                if (want_id and want_id in names) or (
+                    want_name and any(n and (n == want_name or want_name in n or n in want_name) for n in names)
+                ):
+                    matched_ids.add(cid)
+                elem.clear()
+            elif tag == "programme":
+                cid = elem.attrib.get("channel", "")
+                if cid in matched_ids or (want_id and _norm_epg_key(cid) == want_id):
+                    st = _parse_xmltv_ts(elem.attrib.get("start", ""))
+                    en = _parse_xmltv_ts(elem.attrib.get("stop", ""))
+                    t_el = elem.find("title")
+                    title = sanitize_title(t_el.text or "") if t_el is not None else ""
+                    if title and st > 0 and en > st:
+                        if st <= now_ts < en:
+                            now_prog = (st, en, title)
+                        elif st >= now_ts and (next_prog is None or st < next_prog[0]):
+                            next_prog = (st, en, title)
+                elem.clear()
+    except Exception:
+        pass
+
+    def fmt_span(p: tuple[float, float, str] | None) -> tuple[str, str]:
+        if not p:
+            return ("", "")
+        s1 = datetime.fromtimestamp(p[0]).strftime("%H:%M")
+        s2 = datetime.fromtimestamp(p[1]).strftime("%H:%M")
+        return (f"{s1}-{s2}", p[2])
+
+    nt, np = fmt_span(now_prog)
+    xt, xp = fmt_span(next_prog)
+    out = f"NOW\t{nt}\t{np}\nNEXT\t{xt}\t{xp}\n"
+    write_atomic(out_path, out)
+    return bool(np or xp)
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if a != "--refresh"]
     refresh = "--refresh" in sys.argv[1:]
@@ -985,6 +1099,7 @@ def main() -> int:
             "  iptv_fetch.py categories <canais|filmes|series|usuario> <out_tsv> [--refresh]\n"
             "  iptv_fetch.py list <canais|filmes|series|usuario> <cat_id> <out_m3u8> [--refresh]\n"
             "  iptv_fetch.py episodes <letter> <shard> <title> <out_m3u8> [--refresh]\n"
+            "  iptv_fetch.py epg <channel_name> <tvg_id> <out_tsv> [--refresh]\n"
             "  iptv_fetch.py user-add-url <url> [name]\n"
         )
         return 2
@@ -997,6 +1112,8 @@ def main() -> int:
             return 0 if cmd_list(args[1], args[2], Path(args[3]), refresh=refresh) else 1
         if cmd == "episodes" and len(args) == 5:
             return 0 if cmd_episodes(args[1], args[2], args[3], Path(args[4]), refresh=refresh) else 1
+        if cmd == "epg" and len(args) == 4:
+            return 0 if cmd_epg(args[1], args[2], Path(args[3]), refresh=refresh) else 1
         if cmd == "user-add-url" and len(args) in (2, 3):
             return 0 if cmd_user_add_url(args[1], args[2] if len(args) == 3 else "") else 1
         # Legacy backwards-compat: iptv_fetch.py canais <out>

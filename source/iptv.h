@@ -79,6 +79,104 @@ static int iptv_done_source = 0;
 static int iptv_fetch_source = 0;
 static char iptv_done_path[256] = "";
 
+/* Live EPG off-thread lookup state for Canais ao vivo */
+static pthread_mutex_t iptv_epg_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool iptv_epg_busy = false;
+static char iptv_epg_key[192] = "";
+static char iptv_epg_now_time[24] = "";
+static char iptv_epg_now_title[128] = "";
+static char iptv_epg_next_time[24] = "";
+static char iptv_epg_next_title[128] = "";
+static uint32_t iptv_epg_last_req = 0;
+
+typedef struct {
+  char name[160];
+  char id[192];
+  char key[192];
+} IptvEpgJob;
+
+static void *iptv_epg_worker(void *arg) {
+  IptvEpgJob *job = (IptvEpgJob *)arg;
+  const char *out_path = "iptv/.cache/epg-current.tsv";
+  char *argv[] = {"python3", "./iptv_fetch.py", "epg", job->name, job->id,
+                  (char *)out_path, NULL};
+  extern char **environ;
+  pid_t pid = 0;
+  int rc = -1;
+  if (posix_spawnp(&pid, "python3", NULL, NULL, argv, environ) == 0) {
+    int st = 0;
+    while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {}
+    if (WIFEXITED(st)) rc = WEXITSTATUS(st);
+  }
+  char nt[24] = "", np[128] = "", xt[24] = "", xp[128] = "";
+  if (rc == 0) {
+    FILE *f = fopen(out_path, "r");
+    if (f) {
+      char line[320];
+      while (fgets(line, sizeof(line), f)) {
+        size_t n = strlen(line);
+        while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
+        if (!strncmp(line, "NOW\t", 4)) {
+          char *t = line + 4;
+          char *tab = strchr(t, '\t');
+          if (tab) {
+            *tab = 0;
+            snprintf(nt, sizeof(nt), "%.23s", t);
+            snprintf(np, sizeof(np), "%.127s", tab + 1);
+          }
+        } else if (!strncmp(line, "NEXT\t", 5)) {
+          char *t = line + 5;
+          char *tab = strchr(t, '\t');
+          if (tab) {
+            *tab = 0;
+            snprintf(xt, sizeof(xt), "%.23s", t);
+            snprintf(xp, sizeof(xp), "%.127s", tab + 1);
+          }
+        }
+      }
+      fclose(f);
+    }
+  }
+  pthread_mutex_lock(&iptv_epg_mutex);
+  if (!strcmp(iptv_epg_key, job->key)) {
+    snprintf(iptv_epg_now_time, sizeof(iptv_epg_now_time), "%s", nt);
+    snprintf(iptv_epg_now_title, sizeof(iptv_epg_now_title), "%s", np);
+    snprintf(iptv_epg_next_time, sizeof(iptv_epg_next_time), "%s", xt);
+    snprintf(iptv_epg_next_title, sizeof(iptv_epg_next_title), "%s", xp);
+  }
+  iptv_epg_busy = false;
+  pthread_mutex_unlock(&iptv_epg_mutex);
+  free(job);
+  return NULL;
+}
+
+static void iptv_epg_maybe_fetch(const IptvChannel *ch) {
+  if (!ch || !ch->name[0] || preview_mode) return;
+  char keybuf[192];
+  snprintf(keybuf, sizeof(keybuf), "%.95s|%.94s", ch->name, ch->id);
+  uint32_t now = SDL_GetTicks();
+  pthread_mutex_lock(&iptv_epg_mutex);
+  if (!strcmp(iptv_epg_key, keybuf) || iptv_epg_busy || (now - iptv_epg_last_req) < 350) {
+    pthread_mutex_unlock(&iptv_epg_mutex);
+    return;
+  }
+  snprintf(iptv_epg_key, sizeof(iptv_epg_key), "%s", keybuf);
+  iptv_epg_now_time[0] = iptv_epg_now_title[0] = 0;
+  iptv_epg_next_time[0] = iptv_epg_next_title[0] = 0;
+  iptv_epg_busy = true;
+  iptv_epg_last_req = now;
+  pthread_mutex_unlock(&iptv_epg_mutex);
+
+  IptvEpgJob *job = calloc(1, sizeof(*job));
+  if (!job) return;
+  snprintf(job->name, sizeof(job->name), "%s", ch->name);
+  snprintf(job->id, sizeof(job->id), "%s", ch->id);
+  snprintf(job->key, sizeof(job->key), "%s", keybuf);
+  pthread_t t;
+  if (pthread_create(&t, NULL, iptv_epg_worker, job) == 0) pthread_detach(t);
+  else { free(job); pthread_mutex_lock(&iptv_epg_mutex); iptv_epg_busy = false; pthread_mutex_unlock(&iptv_epg_mutex); }
+}
+
 static void iptv_copy_str(char *dst, size_t cap, const char *src) {
   if (!dst || !cap) return;
   if (!src) {
@@ -816,30 +914,54 @@ static void draw_iptv(void) {
     if (*sel < *off) *off = *sel;
     if (*sel >= *off + 6) *off = *sel - 5;
     IptvChannel *channel = &list[*sel];
-    panel_card(24, 114, 200, 276, 16);
-    rounded(47, 130, 154, 110, 8, elevated);
+    if (!is_ep_view && iptv_source == 0) iptv_epg_maybe_fetch(channel);
+    panel_card(24, 114, 200, 336, 16);
+    rounded(47, 128, 154, 102, 8, elevated);
     radio_update_art(channel->logo);
     if (radio_art_texture && channel->logo[0] && !strcmp(radio_art_display_url, channel->logo)) {
-      SDL_Rect dst = {52, 135, 144, 100};
+      SDL_Rect dst = {52, 133, 144, 92};
       SDL_RenderCopy(renderer, radio_art_texture, NULL, &dst);
     } else {
-      centered(tr("Sem imagem"), 52, 174, 144, 14, muted);
+      centered(tr("Sem imagem"), 52, 168, 144, 14, muted);
     }
-    centered(channel->name, 35, 250, 178, 14, textc);
-    label(is_ep_view ? tr("Temporada") : tr("Categoria"), 36, 290, 12, muted, 170);
-    label(channel->group[0] ? channel->group : "--", 36, 309, 13, textc, 170);
-    label(tr("Detalhes"), 36, 338, 12, muted, 170);
-    /* Display clean details (strip internal series:<L>:<shard>: prefix if present) */
-    const char *detail = channel->id;
-    if (!strncmp(detail, "series:", 7)) {
-      const char *c1 = strchr(detail + 7, ':');
-      const char *c2 = c1 ? strchr(c1 + 1, ':') : NULL;
-      if (c2 && c2[1]) detail = c2 + 1;
+    centered(channel->name, 35, 238, 178, 14, textc);
+    label(is_ep_view ? tr("Temporada") : tr("Categoria"), 36, 266, 11, muted, 170);
+    label(channel->group[0] ? channel->group : "--", 36, 282, 12, textc, 170);
+    if (!is_ep_view && iptv_source == 0) {
+      pthread_mutex_lock(&iptv_epg_mutex);
+      char e_nt[24], e_np[128], e_xt[24], e_xp[128];
+      bool e_busy = iptv_epg_busy;
+      snprintf(e_nt, sizeof(e_nt), "%s", iptv_epg_now_time);
+      snprintf(e_np, sizeof(e_np), "%s", iptv_epg_now_title);
+      snprintf(e_xt, sizeof(e_xt), "%s", iptv_epg_next_time);
+      snprintf(e_xp, sizeof(e_xp), "%s", iptv_epg_next_title);
+      pthread_mutex_unlock(&iptv_epg_mutex);
+      label("EPG • AGORA", 36, 308, 10, accent, 170);
+      if (e_np[0]) {
+        label(e_np, 36, 324, 12, textc, 174);
+        if (e_nt[0]) label(e_nt, 36, 341, 10, muted, 174);
+      } else {
+        label(e_busy ? "Carregando guia..." : "Guia indisponível", 36, 324, 11, muted, 174);
+      }
+      if (e_xp[0]) {
+        label("A SEGUIR", 36, 366, 10, dim, 170);
+        label(e_xp, 36, 381, 11, muted, 174);
+        if (e_xt[0]) label(e_xt, 36, 397, 10, dim, 174);
+      }
+    } else {
+      label(tr("Detalhes"), 36, 312, 12, muted, 170);
+      /* Display clean details (strip internal series:<L>:<shard>: prefix if present) */
+      const char *detail = channel->id;
+      if (!strncmp(detail, "series:", 7)) {
+        const char *c1 = strchr(detail + 7, ':');
+        const char *c2 = c1 ? strchr(c1 + 1, ':') : NULL;
+        if (c2 && c2[1]) detail = c2 + 1;
+      }
+      label(detail[0] ? detail : "--", 36, 331, 12, accent, 170);
     }
-    label(detail[0] ? detail : "--", 36, 357, 12, accent, 170);
 
-    for (int row = 0; row < 6 && *off + row < list_count; row++) {
-      int idx = *off + row, y = 114 + row * 46;
+    for (int row = 0; row < 7 && *off + row < list_count; row++) {
+      int idx = *off + row, y = 114 + row * 48;
       bool focus = idx == *sel;
       card(238, y, 378, 41, 10, focus, panel);
       char number[24];

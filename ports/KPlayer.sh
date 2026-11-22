@@ -41,13 +41,15 @@ chmod +x ./kplayer
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
 while true; do
-    chmod +x ./kplayer 2>/dev/null || true
+    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py 2>/dev/null || true
     ./kplayer
     result=$?
     if [ "$result" -eq 42 ]; then
         printf 'K PLAYER atualizado com sucesso — reiniciando automaticamente...\n'
+        if [ -n "${mapper_pid:-}" ]; then kill "$mapper_pid" 2>/dev/null || true; wait "$mapper_pid" 2>/dev/null || true; fi
+        trap - EXIT
         sleep 1
-        continue
+        exec "$script_dir/KPlayer.sh"
     fi
     break
 done

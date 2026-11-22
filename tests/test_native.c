@@ -497,21 +497,29 @@ int main(void) {
   assert(audio_panel == 0);
   key(SDLK_SPACE, false);
   assert(audio_panel == 1);
-  mode = 2;
-  option = 0;
+  open_options();
+  assert(opt_section == OPT_SEC_ROOT && option == 18);
   key(SDLK_DOWN, false);
-  assert(option == 1);
-  key(SDLK_UP, false);
-  assert(option == 0);
-  key(SDLK_SPACE, false);
-  assert(option == 7 && option_group_for(option) == 1);
-  key(SDLK_DOWN, false);
-  assert(option == 13);
-  key(SDLK_SPACE, false);
-  assert(option == 5 && option_group_for(option) == 2);
-  key(SDLK_SPACE, false);
-  assert(option == 0 && option_group_for(option) == 0);
-  option = 8;
+  assert(option == 20); /* Atalhos */
+  key(SDLK_RETURN, false);
+  assert(opt_section == OPT_SEC_SHORTCUTS);
+  draw_options();
+  key(SDLK_BACKSPACE, false);
+  assert(opt_section == OPT_SEC_ROOT);
+  /* Verify penultimate is Verificar atualizacoes (19) and last is Sair (8) */
+  assert(opt_root_ids[OPT_ROOT_COUNT - 2] == 19);
+  assert(opt_root_ids[OPT_ROOT_COUNT - 1] == 8);
+  opt_cursor = OPT_ROOT_COUNT - 2;
+  opt_sync_option_id();
+  assert(option == 19);
+  key(SDLK_RETURN, false);
+  assert(opt_section == OPT_SEC_UPDATE);
+  draw_options();
+  key(SDLK_BACKSPACE, false);
+  assert(opt_section == OPT_SEC_ROOT);
+  opt_cursor = OPT_ROOT_COUNT - 1;
+  opt_sync_option_id();
+  assert(option == 8);
   running = 1;
   key(SDLK_RETURN, false);
   assert(!running);
@@ -559,7 +567,15 @@ int main(void) {
   note_until = 0;
   active = true;
   playing_audio = true;
+  /* Button X on Home opens the Open-Meteo Weather App (asking IP vs Manual first) */
+  weather_mode = WEATHER_MODE_UNSET;
   key(SDLK_SPACE, false);
+  assert(mode == 11 && weather_view == WEATHER_VIEW_SETUP);
+  draw_weather();
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 3 && active);
+  /* L1/R1 on Home jumps to active media player */
+  key(SDLK_e, false);
   assert(mode == 4);
   key(SDLK_BACKSPACE, false);
   assert(mode == 3 && active);

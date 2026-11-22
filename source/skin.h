@@ -38,6 +38,8 @@ static void art(int x, int y, int size) {
   } else
     vinyl(x + size / 2, y + size / 2, size / 2, active && !paused);
 }
+static bool updater_is_available(char *latest_out, size_t latest_cap);
+static void draw_home_weather_widget(void);
 static void draw_header(const char *section) {
   update_status();
   rect(0, 0, 640, 32, alpha(panel, 215));
@@ -46,9 +48,16 @@ static void draw_header(const char *section) {
   fill_circle(18, 16, 4, accent);
   label("K PLAYER", 30, 8, 15, textc, 85);
   label(KPLAYER_VERSION, 113, 10, 11, dim, 34);
-  label(top_location, 154, 10, 11, muted, 120);
-  rounded(272, 6, 144, 20, 10, elevated);
-  centered(section, 272, 9, 144, 11, muted);
+  label(top_location, 152, 10, 11, muted, 108);
+  rounded(262, 6, 134, 20, 10, elevated);
+  centered(section, 262, 9, 134, 11, muted);
+  char upd_ver[32] = "";
+  if (updater_is_available(upd_ver, sizeof(upd_ver))) {
+    char badge[48];
+    snprintf(badge, sizeof(badge), "v%s • SEL", upd_ver);
+    rounded(404, 6, 112, 20, 10, alpha(accent, 44));
+    centered(badge, 404, 9, 112, 10, accent);
+  }
   label(clock_text, 526, 9, 12, muted, 50);
   if (battery_percent >= 0) {
     char s[16];
@@ -98,33 +107,14 @@ static void media_ui_button_circle(const char *name, int cx, int cy);
 static void media_ui_button_pill(const char *name, int x, int y, int width);
 typedef struct { const char *key; const char *action; } FooterHint;
 static void footer_hints(const FooterHint *hints, int count) {
-  rect(0, 436, 640, 44, alpha(panel, 225));
-  rect(0, 436, 640, 1, hairline());
-  if (count <= 0) return;
-  int cols = count >= 6 ? (count + 1) / 2 : count;
-  int cell = 616 / cols;
-  for (int i = 0; i < count; i++) {
-    int x = 12 + (i % cols) * cell;
-    int cy = count >= 6 ? 447 + (i / cols) * 20 : 458;
-    int width = (int)strlen(hints[i].key) == 1 ? 24 :
-                (int)ceil(measure(hints[i].key, 9)) + 12;
-    if (width < 26) width = 26;
-    int id = !strcmp(hints[i].key,"DIR") ? 0 : !strcmp(hints[i].key,"A") ? 1 :
-             !strcmp(hints[i].key,"B") ? 2 : !strcmp(hints[i].key,"X") ? 3 :
-             !strcmp(hints[i].key,"Y") ? 4 : !strcmp(hints[i].key,"SELECT") ? 6 : -1;
-    if (count >= 6 && id >= 0 && kp_sprite(KP_SPR_BUTTONS, id, x + 3, cy - 8, 16, 16)) {
-      /* Two-line footers keep each sprite inside its own 20-pixel row. */
-    } else if (strlen(hints[i].key) == 1)
-      media_ui_button_circle(hints[i].key, x + 13, cy);
-    else
-      media_ui_button_pill(hints[i].key, x, cy - 9, width);
-    label(tr(hints[i].action), x + width + 4, cy - 6, count >= 6 ? 11 : 12, muted,
-          cell - width - 7);
-  }
+  /* Bottom shortcut bar removed in v2.0.4+ (shortcuts live in Options -> Atalhos).
+   * Keep only floating status toasts cleanly at the bottom edge. */
+  (void)hints;
+  (void)count;
   if (SDL_GetTicks() < note_until) {
-    glow_rect(30, 397, 580, 32, 16, accent, 4);
-    rounded(30, 397, 580, 32, 16, elevated);
-    centered(status_note, 40, 405, 560, 13, accent);
+    glow_rect(30, 434, 580, 32, 16, accent, 4);
+    rounded(30, 434, 580, 32, 16, elevated);
+    centered(status_note, 40, 442, 560, 13, accent);
   }
 }
 static void progress(int x, int y, int w) {
@@ -147,12 +137,13 @@ static void tile_arrow(int x, int y, SDL_Color c) {
 static void draw_home(void) {
   backdrop();
   draw_header(tr("DASHBOARD"));
-  /* Hero: two-tone headline. */
+  /* Hero: two-tone headline on left + compact Open-Meteo weather widget on right. */
   const char *h1 = tr("Seu som."), *h2 = tr("Sua tela.");
-  label(h1, 18, 42, 29, textc, 300);
-  label(h2, 18 + (int)measure(h1, 29) + 10, 42, 29, muted, 300);
-  label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 82, 12,
-        muted, 600);
+  label(h1, 18, 42, 26, textc, 220);
+  label(h2, 18 + (int)measure(h1, 26) + 8, 42, 26, muted, 220);
+  label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 77, 11,
+        muted, 386);
+  draw_home_weather_widget();
   const char *names[] = {tr("Músicas"), tr("Vídeos"), tr("Arquivos"),
                          tr("Rádio Online"), tr("IPTV"), tr("Placar da Bola")},
              *desc[] = {tr("Sua trilha sonora,"), tr("Cinema na palma"),
@@ -161,15 +152,15 @@ static void draw_home(void) {
              *tags[] = {tr("LRC Sync"), tr("Ocultar auto."), tr("Mídias locais"),
                         tr("Radio Browser"), tr("TV Online"), tr("Placar ao vivo")};
   for (int i = 0; i < 6; i++) {
-    int x = 16 + (i % 3) * 208, y = 104 + (i / 3) * 104;
+    int x = 16 + (i % 3) * 208, y = 104 + (i / 3) * 112;
     bool focus = i == dash_focus;
     if (focus) {
-      glow_rect(x, y, 192, 94, 16, accent, 6);
-      rounded(x, y, 192, 94, 16, accent);
+      glow_rect(x, y, 192, 102, 16, accent, 6);
+      rounded(x, y, 192, 102, 16, accent);
     } else
-      rounded(x, y, 192, 94, 16, hairline());
+      rounded(x, y, 192, 102, 16, hairline());
     rounded_gradient(x + (focus ? 2 : 1), y + (focus ? 2 : 1), 192 - (focus ? 4 : 2),
-                     94 - (focus ? 4 : 2), focus ? 14 : 15,
+                     102 - (focus ? 4 : 2), focus ? 14 : 15,
                      mix(elevated, accent, focus ? 0.22f : 0.10f), panel);
     rounded(x + 12, y + 12, 38, 38, 12, mix(panel, textc, 0.08f));
     rounded(x + 13, y + 13, 36, 36, 11, alpha(bg, 165));
@@ -177,28 +168,26 @@ static void draw_home(void) {
       icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 19, y + 19, 24, accent);
     label(tags[i], x + 60, y + 14, 10, accent, 104);
     tile_arrow(x + 170, y + 14, focus ? accent : dim);
-    label(names[i], x + 14, y + 54, 17, textc, 168);
-    label(desc[i], x + 14, y + 75, 10, muted, 168);
+    label(names[i], x + 14, y + 58, 17, textc, 168);
+    label(desc[i], x + 14, y + 80, 10, muted, 168);
   }
-  /* Now playing card. */
-  panel_card(16, 318, 608, 108, 18);
+  /* Now playing card (uses freed bottom space smoothly). */
+  panel_card(16, 336, 608, 124, 18);
   bool on = active && !paused;
-  art(30, 330, 84);
+  art(30, 354, 88);
   label(active ? (on ? tr("TOCANDO AGORA") : tr("PAUSADO")) : tr("NADA TOCANDO"),
-        130, 336, 10, active ? accent : dim, 300);
-  label(active ? title : tr("Pronto para dar o play"), 130, 352, 18, textc, 330);
+        134, 356, 10, active ? accent : dim, 300);
+  label(active ? title : tr("Pronto para dar o play"), 134, 374, 18, textc, 330);
   label(active ? (artist[0] ? artist : tr("Reprodução local"))
                : tr("Abra Músicas ou Vídeos para começar"),
-        130, 379, 12, muted, 330);
-  visualizer(130, 400, 200, 14, 34, on);
-  fill_circle(500, 372, 14, mix(elevated, textc, 0.05f));
-  media_ui_skip(500, 372, false);
-  play_button(524, 350, 44);
-  fill_circle(592, 372, 14, mix(elevated, textc, 0.05f));
-  media_ui_skip(592, 372, true);
-  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Abrir"},
-      {"X", "Player"}, {"Y", "Opções"}, {"START", "Pausa"}};
-  footer_hints(hints, 5);
+        134, 402, 12, muted, 330);
+  visualizer(134, 424, 200, 14, 34, on);
+  fill_circle(500, 398, 14, mix(elevated, textc, 0.05f));
+  media_ui_skip(500, 398, false);
+  play_button(524, 376, 44);
+  fill_circle(592, 398, 14, mix(elevated, textc, 0.05f));
+  media_ui_skip(592, 398, true);
+  footer_hints(NULL, 0);
 }
 static void draw_menu(void) {
   backdrop();
