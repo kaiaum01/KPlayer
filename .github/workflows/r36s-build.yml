@@ -3,7 +3,7 @@ name: Compilar KPlayer R36S
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - 'source/**'
       - 'tests/**'
@@ -57,7 +57,8 @@ jobs:
           gcc -O1 -g -fsanitize=address,undefined -I source/include tests/test_native.c -o output/test-native -ldl -lpthread -lm
           gcc -O1 -g -fsanitize=address,undefined tests/test_tags.c -o output/test-tags
           ASAN_OPTIONS=detect_leaks=0 output/test-tags
-          (cd ports/kplayer && SDL_VIDEODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
+          (cd ports/kplayer && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
+          rm -f *.bmp
       - name: Compilar frontend para R36S
         run: |
           aarch64-linux-gnu-gcc -O2 -std=gnu11 -Wall -Wextra -Werror \

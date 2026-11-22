@@ -1,11 +1,11 @@
 <!--
-  Metadados do KPlayer v2.0.5 para EmulationStation / dArkOS (R36S).
+  Metadados do KPlayer v2.0.6 para EmulationStation / dArkOS (R36S).
   Se voce ja possui um arquivo /roms/ports/gamelist.xml com outros jogos/ports,
   basta colar o bloco <game>...</game> abaixo antes de </gameList>.
 -->
 <game>
   <path>./KPlayer.sh</path>
-  <name>KPlayer v2.0.5</name>
+  <name>KPlayer v2.0.6</name>
   <desc>Central de mídia portátil para R36S (dArkOS / PortMaster) com interface moderna 640x480. Reproduz músicas das pastas /roms/bgmusic e /roms2/bgmusic com letras sincronizadas (.LRC) e equalizador, vídeos das pastas /roms/videos e /roms2/videos via libVLC ARM64, Rádio Online, IPTV ao vivo e Placar da Bola com estatísticas, eventos e escalações em tempo real.</desc>
   <image>./images/KPlayer-image.png</image>
   <thumbnail>./images/KPlayer-image.png</thumbnail>

@@ -254,10 +254,10 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
 
         {!activeMatch ? (
           /* ==================== MATCH LIST VIEW ==================== */
-          <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-[52px] flex flex-col">
+          <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-3 flex flex-col">
             <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
               <div className="flex items-center gap-2">
-                <h2 style={{ color: theme.text }} className="text-[18px] @min-[520px]:text-[20px] font-extrabold leading-none">
+                <h2 style={{ color: theme.text }} className="text-[20px] @min-[520px]:text-[22px] font-extrabold leading-none">
                   {tr('Placar da Bola', lang)}
                 </h2>
                 {liveCount > 0 && (
@@ -267,7 +267,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                       color: theme.accent,
                       border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
                     }}
-                    className="px-2 py-0.5 rounded-full text-[9.5px] font-extrabold inline-flex items-center gap-1"
+                    className="px-2.5 py-0.5 rounded-full text-[10.5px] font-extrabold inline-flex items-center gap-1"
                   >
                     <span
                       style={{ backgroundColor: theme.accent }}
@@ -288,7 +288,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                       setSelectedIdx(0);
                     }}
                     style={modernPillStyle(theme, filterIdx === idx)}
-                    className="px-2.5 h-[22px] text-[10.5px] font-bold cursor-pointer transition-all"
+                    className="px-3 h-[26px] text-[11.5px] font-bold cursor-pointer transition-all"
                   >
                     {tr(f.label, lang)}
                   </button>
@@ -330,19 +330,19 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                       onMouseEnter={() => setSelectedIdx(realIdx)}
                       onClick={() => loadMatchDetail(m, false)}
                       style={{
-                        ...modernCardStyle(theme, focus, 11, theme.panel),
-                        minHeight: 60,
+                        ...modernCardStyle(theme, focus, 12, theme.panel),
+                        minHeight: 72,
                       }}
-                      className="w-full px-3 py-1.5 flex flex-col justify-between text-left cursor-pointer transition-all"
+                      className="w-full px-3.5 py-2 flex flex-col justify-between text-left cursor-pointer transition-all"
                     >
                       {/* Row 1: League + Venue + Status Pill */}
                       <div className="flex items-center justify-between gap-2 w-full">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span style={{ color: theme.accent }} className="text-[9.5px] font-extrabold truncate">
+                          <span style={{ color: theme.accent }} className="text-[11px] font-extrabold truncate">
                             {m.league}
                           </span>
                           {m.venue && (
-                            <span style={{ color: theme.dim }} className="text-[9.5px] truncate hidden @min-[440px]:inline">
+                            <span style={{ color: theme.dim }} className="text-[10.5px] truncate hidden @min-[440px]:inline">
                               • {m.venue}
                             </span>
                           )}
@@ -352,7 +352,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                             backgroundColor: isLive ? theme.accent : mixRgb(theme.elevated, theme.bg, 0.2),
                             color: isLive ? theme.bg : theme.muted,
                           }}
-                          className="px-2 py-0.5 rounded-full text-[9px] font-extrabold shrink-0 inline-flex items-center gap-1"
+                          className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 inline-flex items-center gap-1"
                         >
                           {isLive && (
                             <span
@@ -365,16 +365,16 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                       </div>
 
                       {/* Row 2: Teams + Crests + Score Badge */}
-                      <div className="flex items-center justify-between gap-2 w-full">
+                      <div className="flex items-center justify-between gap-2 w-full my-0.5">
                         <div className="flex items-center justify-end gap-1.5 flex-1 min-w-0">
-                          <span style={{ color: theme.text }} className="text-[12.5px] @min-[500px]:text-[13px] font-bold truncate">
+                          <span style={{ color: theme.text }} className="text-[14px] @min-[500px]:text-[15px] font-extrabold truncate">
                             {m.home}
                           </span>
                           {m.homeLogo && (
                             <img
                               src={m.homeLogo}
                               alt=""
-                              className="w-[17px] h-[17px] object-contain shrink-0"
+                              className="w-[20px] h-[20px] object-contain shrink-0"
                             />
                           )}
                         </div>
@@ -385,7 +385,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                             border: `1px solid ${isLive ? rgbToRgba(theme.accent, 0.55) : themeHairline(theme)}`,
                             color: isLive ? theme.accent : theme.text,
                           }}
-                          className="px-2.5 py-0.5 rounded-[7px] text-[13px] font-black tabular-nums min-w-[60px] text-center shrink-0"
+                          className="px-3 py-0.5 rounded-[8px] text-[15px] font-black tabular-nums min-w-[68px] text-center shrink-0"
                         >
                           {m.score}
                         </div>
@@ -395,17 +395,17 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                             <img
                               src={m.awayLogo}
                               alt=""
-                              className="w-[17px] h-[17px] object-contain shrink-0"
+                              className="w-[20px] h-[20px] object-contain shrink-0"
                             />
                           )}
-                          <span style={{ color: theme.text }} className="text-[12.5px] @min-[500px]:text-[13px] font-bold truncate">
+                          <span style={{ color: theme.text }} className="text-[14px] @min-[500px]:text-[15px] font-extrabold truncate">
                             {m.away}
                           </span>
                         </div>
                       </div>
 
                       {/* Row 3: Quick Stats / Goals Preview */}
-                      <div style={{ color: theme.muted }} className="text-[9.5px] truncate w-full">
+                      <div style={{ color: theme.muted }} className="text-[11px] truncate w-full">
                         {m.preview || tr('B para estatísticas, eventos e escalações', lang)}
                       </div>
                     </button>
@@ -417,7 +417,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
             {filteredMatches.length > 0 && (
               <div
                 style={{ color: theme.dim }}
-                className="text-[10px] mt-1.5 flex items-center justify-between px-0.5 shrink-0"
+                className="text-[11px] mt-1.5 flex items-center justify-between px-0.5 shrink-0"
               >
                 <span>
                   {selectedIdx + 1} / {filteredMatches.length}
@@ -428,13 +428,13 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
           </div>
         ) : (
           /* ==================== SOFASCORE-STYLE MATCH CENTER DETAIL ==================== */
-          <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col">
+          <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-3 flex flex-col">
             {/* Top Match Scoreboard Card */}
             <div
-              style={{ ...modernPanelStyle(theme, 14), minHeight: 96 }}
-              className="px-3.5 py-2 flex flex-col justify-between shrink-0"
+              style={{ ...modernPanelStyle(theme, 14), minHeight: 102 }}
+              className="px-4 py-2.5 flex flex-col justify-between shrink-0"
             >
-              <div className="flex items-center justify-between gap-2 text-[9.5px]">
+              <div className="flex items-center justify-between gap-2 text-[11px]">
                 <span style={{ color: theme.accent }} className="font-extrabold truncate">
                   {activeMatch.league}
                   {(detail?.venue || activeMatch.venue) ? ` • ${detail?.venue || activeMatch.venue}` : ''}
@@ -448,7 +448,7 @@ export const PlacarDaBolaScreen = forwardRef<PlacarDaBolaHandle, PlacarDaBolaScr
                 {/* Home Team */}
                 <div className="flex items-center justify-end gap-2 flex-1 min-w-0">
                   <div className="min-w-0 text-right">
-                    <div style={{ color: theme.text }} className="text-[13px] @min-[520px]:text-[14px] font-extrabold truncate">
+                    <div style={{ color: theme.text }} className="text-[14.5px] @min-[520px]:text-[16px] font-extrabold truncate">
                       {activeMatch.home}
                     </div>
                     <div className="flex items-center justify-end gap-1.5 mt-0.5">

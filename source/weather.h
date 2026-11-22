@@ -399,7 +399,7 @@ static void weather_open_manual_search(int ret_mode) {
   mode = 11;
 }
 
-/* Compact weather + location widget placed in the right corner next to "Seu som. Sua tela." */
+/* Compact weather + location widget (used in top-right when Home layout is inverted). */
 static void draw_home_weather_widget(void) {
   pthread_mutex_lock(&weather_mutex);
   WeatherState snap = weather_data;
@@ -409,30 +409,89 @@ static void draw_home_weather_widget(void) {
 
   int wx = 414, wy = 40, ww = 210, wh = 54;
   panel_card(wx, wy, ww, wh, 12);
-  /* Small X badge in top-right of widget */
-  rounded(wx + ww - 54, wy + 6, 46, 16, 8, alpha(accent, 42));
-  centered("X Clima", wx + ww - 54, wy + 8, 46, 9, accent);
+  rounded(wx + ww - 58, wy + 6, 50, 17, 8, alpha(accent, 42));
+  centered("X Clima", wx + ww - 58, wy + 8, 50, 10, accent);
 
   if (snap.valid) {
-    char tbuf[24];
-    snprintf(tbuf, sizeof(tbuf), "%s°C", snap.temp);
-    label(tbuf, wx + 12, wy + 7, 19, textc, 84);
-    char loc_line[120];
+    char tbuf[28];
+    snprintf(tbuf, sizeof(tbuf), "%.15s°C", snap.temp);
+    label(tbuf, wx + 12, wy + 6, 20, textc, 90);
+    char loc_line[128];
     if (snap.city.region[0])
       snprintf(loc_line, sizeof(loc_line), "%.63s, %.47s", snap.city.name, snap.city.region);
     else
       snprintf(loc_line, sizeof(loc_line), "%.63s", snap.city.name);
-    label(loc_line, wx + 12, wy + 33, 10, accent, ww - 24);
-    label(snap.desc, wx + 82, wy + 24, 10, muted, ww - 90);
+    label(loc_line, wx + 12, wy + 33, 11, accent, ww - 24);
   } else if (busy) {
-    label("Clima", wx + 12, wy + 8, 13, textc, 120);
-    label("Carregando Open-Meteo...", wx + 12, wy + 29, 10, muted, ww - 24);
+    label("Clima", wx + 12, wy + 7, 14, textc, 120);
+    label("Carregando Open-Meteo...", wx + 12, wy + 29, 11, muted, ww - 24);
   } else if (wmode == WEATHER_MODE_UNSET) {
-    label("Clima & Local", wx + 12, wy + 8, 13, textc, 130);
-    label("X: IP ou buscar cidade", wx + 12, wy + 29, 10, muted, ww - 24);
+    label("Clima & Local", wx + 12, wy + 7, 14, textc, 130);
+    label("X: IP ou buscar cidade", wx + 12, wy + 29, 11, muted, ww - 24);
   } else {
-    label("Open-Meteo", wx + 12, wy + 8, 13, textc, 120);
-    label("Pressione X p/ atualizar", wx + 12, wy + 29, 10, muted, ww - 24);
+    label("Open-Meteo", wx + 12, wy + 7, 14, textc, 120);
+    label("X para atualizar clima", wx + 12, wy + 29, 11, muted, ww - 24);
+  }
+}
+
+/* Large bottom Open-Meteo weather card (v2.0.6 default Home layout). */
+static void draw_home_weather_large(void) {
+  pthread_mutex_lock(&weather_mutex);
+  WeatherState snap = weather_data;
+  bool busy = weather_busy;
+  int wmode = weather_mode;
+  pthread_mutex_unlock(&weather_mutex);
+
+  int x = 16, y = 334, w = 608, h = 132;
+  panel_card(x, y, w, h, 18);
+
+  rounded(x + w - 134, y + 14, 118, 24, 10, alpha(accent, 44));
+  centered("X • Clima completo", x + w - 134, y + 19, 118, 11, accent);
+
+  if (snap.valid) {
+    /* Left big temperature block */
+    char tbuf[28];
+    snprintf(tbuf, sizeof(tbuf), "%.15s°C", snap.temp);
+    label(tbuf, x + 20, y + 18, 38, accent, 150);
+    char mm[64];
+    snprintf(mm, sizeof(mm), "Mín %.15s°  •  Máx %.15s°", snap.tmin, snap.tmax);
+    label(mm, x + 20, y + 72, 13, muted, 180);
+    char feel[48];
+    snprintf(feel, sizeof(feel), "Sensação %.15s°C", snap.feels);
+    label(feel, x + 20, y + 96, 12, dim, 180);
+
+    /* Subtle vertical divider */
+    rect(x + 202, y + 18, 1, h - 36, hairline());
+
+    /* Right location + conditions + metrics */
+    char loc_line[128];
+    if (snap.city.region[0])
+      snprintf(loc_line, sizeof(loc_line), "%.63s, %.47s", snap.city.name, snap.city.region);
+    else
+      snprintf(loc_line, sizeof(loc_line), "%.63s", snap.city.name);
+    label("CLIMA & LOCALIZAÇÃO • OPEN-METEO", x + 220, y + 16, 10, accent, 256);
+    label(loc_line, x + 220, y + 36, 20, textc, 370);
+    label(snap.desc, x + 220, y + 66, 15, muted, 370);
+
+    char metrics[112];
+    snprintf(metrics, sizeof(metrics), "Umidade %d%%   •   Vento %.15s km/h   •   UV %.15s",
+             snap.humidity, snap.wind, snap.uv);
+    label(metrics, x + 220, y + 96, 12, textc, 372);
+  } else if (busy) {
+    label("CLIMA & LOCALIZAÇÃO • OPEN-METEO", x + 22, y + 18, 11, accent, 320);
+    label("Consultando previsão ao vivo...", x + 22, y + 46, 21, textc, 440);
+    label("Carregando temperatura, sensação térmica e próximos dias.",
+          x + 22, y + 82, 13, muted, 560);
+  } else if (wmode == WEATHER_MODE_UNSET) {
+    label("CLIMA & LOCALIZAÇÃO • OPEN-METEO", x + 22, y + 18, 11, accent, 320);
+    label("Defina sua cidade para ver o clima aqui", x + 22, y + 46, 20, textc, 450);
+    label("Pressione X para detectar automaticamente pelo IP ou pesquisar uma cidade.",
+          x + 22, y + 82, 13, muted, 564);
+  } else {
+    label("CLIMA & LOCALIZAÇÃO • OPEN-METEO", x + 22, y + 18, 11, accent, 320);
+    label("Previsão pronta para atualizar", x + 22, y + 46, 20, textc, 440);
+    label("Pressione X para abrir o clima completo e atualizar os dados.",
+          x + 22, y + 82, 13, muted, 564);
   }
 }
 

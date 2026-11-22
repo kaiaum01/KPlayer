@@ -1,4 +1,4 @@
 #ifndef KPLAYER_VERSION_H
 #define KPLAYER_VERSION_H
-#define KPLAYER_VERSION "2.0.5"
+#define KPLAYER_VERSION "2.0.6"
 #endif

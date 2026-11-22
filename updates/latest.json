@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "version": "2.0.5",
-  "nextVersion": "2.0.6",
+  "version": "2.0.6",
+  "nextVersion": "2.0.7",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.0.5",
+  "releaseTag": "v2.0.6",
   "releasePageUrl": "",
-  "releasedAt": "2026-11-22T07:20:00Z",
+  "releasedAt": "2026-11-22T14:00:00Z",
   "repository": "",
   "branch": "main",
   "updatesDir": "updates",
@@ -23,16 +23,15 @@
     "resume.cfg"
   ],
   "notes": [
-    "Núcleo nativo do R36S (C + SDL2 + libVLC) atualizado com TODOS os recursos das versões v2.0.2, v2.0.3, v2.0.4 e v2.0.5",
-    "Auto-Updater nativo no R36S com verificação no boot, aviso na barra superior, fallback para GitHub Releases, cache-busting, checagem SHA-256 e reinício automático preservando dados",
-    "App de Clima Open-Meteo nativo no botão X (perguntando IP ou pesquisa manual) + widget compacto ao lado de 'Seu som. Sua tela.'",
-    "Barra inferior removida no R36S + menu de Opções (SELECT) por seleção em ordem alfabética, com Atalhos, [A] Verificar atualizações em penúltimo e Sair por último",
-    "IPTV Brasil 2026 + guia de programação EPG ao vivo (AGORA / A SEGUIR) integrados diretamente na tela nativa de IPTV do R36S",
-    "Pipeline de Auto-Update e GitHub Release 100% focado no R36S (sem bloqueio por compilação Android)"
+    "Tela inicial redesenhada no R36S: Clima Open-Meteo ampliado na área inferior e Mini Player compacto no topo mostrando o que está tocando, com opção de inverter o layout nas Configurações",
+    "Tutorial de Comandos exibido automaticamente na primeira inicialização + opção 'Rever comandos' nas Configurações gerais (substituindo 'Atalhos')",
+    "Menus de Opções (SELECT) contextuais: opções de vídeo somente no player de vídeo, de músicas somente no player de músicas, de TV somente no IPTV e de rádio somente na Rádio",
+    "Gerenciador de Arquivos/Vídeos, Placar da Bola, IPTV e Rádio otimizados para aproveitar toda a altura da tela com fontes maiores e melhor legibilidade",
+    "Pesquisa digitando (teclado na tela / entrada direta) adicionada em Canais de TV, Filmes, Séries e Gerenciador de Vídeos/Arquivos"
   ],
   "r36s": {
-    "filename": "KPlayer-v2.0.5-R36S.zip",
-    "path": "updates/v2.0.5/KPlayer-v2.0.5-R36S.zip",
+    "filename": "KPlayer-v2.0.6-R36S.zip",
+    "path": "updates/v2.0.6/KPlayer-v2.0.6-R36S.zip",
     "url": "",
     "releaseUrl": "",
     "sha256Url": "",
@@ -40,7 +39,7 @@
     "sizeBytes": 0
   },
   "web": {
-    "version": "2.0.5",
+    "version": "2.0.6",
     "reloadRequired": true
   }
 }

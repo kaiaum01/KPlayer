@@ -2,21 +2,18 @@ name: KPlayer R36S - Auto-Update (updates/) e Release Automática
 
 on:
   workflow_dispatch:
+    inputs:
+      extra_notes:
+        description: 'Notas adicionais para a GitHub Release (opcional)'
+        required: false
+        default: ''
   push:
-    branches: [main]
-    paths:
-      - 'source/**'
-      - 'ports/**'
-      - 'tools/**'
-      - 'patches/**'
-      - 'tests/**'
-      - 'src/**'
-      - 'server.ts'
-      - 'package.json'
-      - 'releases/RELEASE_NOTES.md'
-      - '.github/workflows/auto-update.yml'
+    branches:
+      - main
+      - master
     paths-ignore:
       - 'updates/**'
+      - 'android/**'
 
 concurrency:
   group: kplayer-r36s-auto-update-${{ github.ref }}
@@ -28,57 +25,73 @@ permissions:
 jobs:
   build-and-publish-r36s:
     name: Compilar R36S, publicar updates/ e GitHub Release
+    if: github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore(updates):')
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
+
       - name: Compilar Golazo para R36S
         env:
           GOPATH: ${{ runner.temp }}/golazo-gopath
         run: |
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go install github.com/0xjuanma/golazo@latest
           cp "$GOPATH/bin/linux_arm64/golazo" ports/kplayer/golazo
+
       - name: Instalar compilador ARM64 e SDL2 para testes
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config patch xz-utils make flex bison file libsdl2-2.0-0
+
       - name: Cachear núcleo libVLC ARM64
         uses: actions/cache@v4
         with:
           path: ports/kplayer/lib
           key: libvlc-3.0.23-arm64-${{ hashFiles('patches/kplayer-vlc.patch', 'tools/build_libvlc_arm64.sh') }}
+
       - name: Compilar núcleo libVLC ARM64
         run: bash tools/build_libvlc_arm64.sh
+
       - name: Executar testes nativos R36S e scripts Python
         run: |
           mkdir -p output
           gcc -O1 -g -fsanitize=address,undefined -I source/include tests/test_native.c -o output/test-native -ldl -lpthread -lm
           gcc -O1 -g -fsanitize=address,undefined tests/test_tags.c -o output/test-tags
           ASAN_OPTIONS=detect_leaks=0 output/test-tags
-          (cd ports/kplayer && SDL_VIDEODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
+          (cd ports/kplayer && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
+          rm -f *.bmp
           python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py
           python3 -m unittest discover -s tests -p test_football.py -v
+
       - name: Compilar KPlayer ARM64 (R36S)
         run: |
           aarch64-linux-gnu-gcc -O2 -std=gnu11 -Wall -Wextra -Werror \
             -I source/include source/kplayer.c -o ports/kplayer/kplayer \
             -ldl -lpthread -lm
           file ports/kplayer/kplayer
+
       - name: Gravar repositório do canal de auto-update
         run: echo "${{ github.repository }}" > ports/kplayer/update-repo.txt
+
       - name: Empacotar R36S e gerar SHA-256
         run: python3 tools/package_release.py
+
       - name: Publicar manifesto e pacote R36S na pasta updates/
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          KPLAYER_UPDATE_BRANCH: main
+          KPLAYER_UPDATE_BRANCH: ${{ github.ref_name }}
         run: python3 tools/publish_update_manifest.py
+
       - name: Commitar pasta updates/ automaticamente
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -89,13 +102,21 @@ jobs:
           fi
           VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
           git commit -m "chore(updates): publicar auto-update R36S v${VERSION} [skip ci]"
-          git pull --rebase --autostash origin main || true
-          git push origin HEAD:main
+          git pull --rebase --autostash origin "${TARGET_BRANCH}" || true
+          if ! git push origin "HEAD:${TARGET_BRANCH}"; then
+            echo "::warning::Não foi possível enviar updates/ para ${TARGET_BRANCH} (branch protegida ou conflito). A GitHub Release será publicada normalmente."
+          fi
+
       - name: Montar notas da Release com modificações desta versão
+        env:
+          EXTRA_NOTES: ${{ github.event.inputs.extra_notes || '' }}
         run: |
           git fetch --tags --force || true
           VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
           TAG="v${VERSION}"
+          ZIP_FILE="releases/KPlayer-v${VERSION}-R36S.zip"
+          SHA_FILE="releases/KPlayer-v${VERSION}-R36S.zip.sha256"
+          SHA_VALUE="$(awk '{print $1}' "${SHA_FILE}" 2>/dev/null || echo 'indisponível')"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=${TAG}" >> "$GITHUB_ENV"
 
@@ -105,25 +126,34 @@ jobs:
             else
               echo "# KPlayer R36S ${TAG}"
             fi
+            if [ -n "$EXTRA_NOTES" ]; then
+              echo ""
+              echo "### Observações adicionais"
+              printf '%s\n' "$EXTRA_NOTES"
+            fi
             echo ""
             echo "---"
             echo ""
-            echo "## Modificações incluídas neste commit"
+            echo "## Modificações incluídas nesta atualização"
             PREV_TAG="$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -n 1 || true)"
             if [ -n "$PREV_TAG" ]; then
-              git log "${PREV_TAG}..HEAD" --no-merges --pretty=format:"- %s (%h)" | grep -v "\[skip ci\]" | head -n 25 || true
+              git log "${PREV_TAG}..HEAD" --no-merges --pretty=format:"- %s (%h)" | grep -v "\[skip ci\]" | head -n 30 || true
             else
-              git log -n 10 --no-merges --pretty=format:"- %s (%h)" | grep -v "\[skip ci\]" || true
+              git log -n 15 --no-merges --pretty=format:"- %s (%h)" | grep -v "\[skip ci\]" || true
             fi
             echo ""
             echo ""
-            echo "### Canal Auto-Update R36S"
-            echo "- Manifesto: \`updates/latest.json\`"
-            echo "- Pacote R36S: \`updates/${TAG}/KPlayer-${TAG}-R36S.zip\`"
+            echo "### Verificação e Canal Auto-Update R36S"
+            echo "- Versão: \`${TAG}\`"
+            echo "- Pacote R36S: \`KPlayer-${TAG}-R36S.zip\`"
+            echo "- SHA-256: \`${SHA_VALUE}\`"
+            echo "- Canal automático: \`updates/latest.json\` → \`updates/${TAG}/KPlayer-${TAG}-R36S.zip\`"
           } > /tmp/kplayer_release_notes.md
+
       - name: Criar ou atualizar GitHub Release R36S automaticamente
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ github.ref_name }}
         run: |
           ASSETS=(
             "releases/KPlayer-v${VERSION}-R36S.zip"
@@ -137,18 +167,29 @@ jobs:
             gh release edit "${RELEASE_TAG}" \
               --title "KPlayer ${RELEASE_TAG} — R36S" \
               --notes-file /tmp/kplayer_release_notes.md \
+              --draft=false \
+              --prerelease=false \
               --latest
             gh release upload "${RELEASE_TAG}" "${ASSETS[@]}" --clobber
           else
             gh release create "${RELEASE_TAG}" "${ASSETS[@]}" \
               --title "KPlayer ${RELEASE_TAG} — R36S" \
               --notes-file /tmp/kplayer_release_notes.md \
-              --target main \
+              --target "${TARGET_BRANCH}" \
               --latest
           fi
+
+          {
+            echo "### GitHub Release publicada: KPlayer ${RELEASE_TAG} — R36S"
+            echo "- URL: https://github.com/${{ github.repository }}/releases/tag/${RELEASE_TAG}"
+            echo "- Pacote: \`KPlayer-${RELEASE_TAG}-R36S.zip\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         with:
           name: KPlayer-R36S-v${{ env.VERSION }}
           path: |
             releases/KPlayer-v*-R36S.zip
             releases/KPlayer-v*-R36S.zip.sha256
+          if-no-files-found: error
+          retention-days: 30

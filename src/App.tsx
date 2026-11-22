@@ -8,6 +8,7 @@ import type {
   IptvChannel,
   LanguageCode,
   MediaTrack,
+  OptionsContext,
   PlaybackHistoryEntry,
   RadioStation,
   RepeatMode,
@@ -150,7 +151,20 @@ export default function App() {
   const [updateChecking, setUpdateChecking] = useState<boolean>(false);
   const [updateApplying, setUpdateApplying] = useState<boolean>(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
-  const [optionsInitialSection, setOptionsInitialSection] = useState<OptionSectionId>('root');
+  const [optionsInitialSection, setOptionsInitialSection] = useState<OptionSectionId | undefined>(undefined);
+  const [optionsContext, setOptionsContext] = useState<OptionsContext>('general');
+  const [homeLayoutInverted, setHomeLayoutInverted] = useState<boolean>(() =>
+    loadStorage('kp_home_layout_inverted', false)
+  );
+  const [tutorialDone, setTutorialDone] = useState<boolean>(() =>
+    loadStorage('kp_tutorial_done_v206', false)
+  );
+  const [tutorialFromOptions, setTutorialFromOptions] = useState<boolean>(false);
+  const tutorialDoneRef = useRef<boolean>(tutorialDone);
+  useEffect(() => {
+    tutorialDoneRef.current = tutorialDone;
+  }, [tutorialDone]);
+  const [libSearchQuery, setLibSearchQuery] = useState<string>('');
   const [showDeck, setShowDeck] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 820 : true
   );
@@ -339,6 +353,8 @@ export default function App() {
       localStorage.setItem('kp_history', JSON.stringify(playbackHistory));
       localStorage.setItem('kp_r36s_display', JSON.stringify(r36sDisplayMode));
       localStorage.setItem('kp_android_display', JSON.stringify(androidDisplayMode));
+      localStorage.setItem('kp_home_layout_inverted', JSON.stringify(homeLayoutInverted));
+      localStorage.setItem('kp_tutorial_done_v206', JSON.stringify(tutorialDone));
     } catch {
       // Ignore storage quota errors
     }
@@ -355,6 +371,8 @@ export default function App() {
     playbackHistory,
     r36sDisplayMode,
     androidDisplayMode,
+    homeLayoutInverted,
+    tutorialDone,
   ]);
 
   const recordHistory = useCallback(
@@ -438,7 +456,7 @@ export default function App() {
       if (d.ok) {
         setUpdateMessage(
           d.message ||
-            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? '2.0.5'} aplicada. Reiniciando...`
+            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? '2.0.6'} aplicada. Reiniciando...`
         );
         notify('Atualização concluída! Reiniciando KPlayer...');
         window.setTimeout(() => {
@@ -710,7 +728,9 @@ export default function App() {
       await sleep(280);
       if (cancelled) return;
 
-      setScreen(onboardedRef.current ? 'home' : 'welcome');
+      setScreen(
+        !onboardedRef.current ? 'welcome' : !tutorialDoneRef.current ? 'tutorial' : 'home'
+      );
       setBootFading(false);
     };
 
@@ -1105,15 +1125,20 @@ export default function App() {
     [activeTrack, language, notify]
   );
 
-  // Filtered library list
+  // Filtered library list (with live typing search for Vídeos & Arquivos)
   const filteredLibrary = useMemo(() => {
+    const q = libSearchQuery.trim().toLowerCase();
     return tracks.filter((t) => {
       if (libFavoritesOnly && !favoriteTrackIds.includes(t.id)) return false;
-      if (libFilter === 1) return t.kind === 'audio';
-      if (libFilter === 2) return t.kind === 'video';
+      if (libFilter === 1 && t.kind !== 'audio') return false;
+      if (libFilter === 2 && t.kind !== 'video') return false;
+      if (q) {
+        const hay = `${t.name} ${t.title} ${t.artist} ${t.folder}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-  }, [tracks, libFilter, libFavoritesOnly, favoriteTrackIds]);
+  }, [tracks, libFilter, libFavoritesOnly, favoriteTrackIds, libSearchQuery]);
 
   const toggleRadioFav = useCallback(
     (station: RadioStation | undefined) => {
@@ -1196,17 +1221,40 @@ export default function App() {
   );
 
   const openOptionsScreen = useCallback(
-    (initialSec: OptionSectionId = 'root') => {
+    (initialSec?: OptionSectionId) => {
+      const origin = screen === 'options' ? prevScreen : screen;
       if (screen !== 'options') {
-        setPrevScreen(screen === 'boot' || screen === 'welcome' ? 'home' : screen);
+        setPrevScreen(screen === 'boot' || screen === 'welcome' || screen === 'tutorial' ? 'home' : screen);
       }
-      setOptionsInitialSection(initialSec);
+      const ctx: OptionsContext =
+        origin === 'video'
+          ? 'video'
+          : origin === 'music'
+          ? 'music'
+          : origin === 'iptv'
+          ? 'iptv'
+          : origin === 'radio'
+          ? 'radio'
+          : 'general';
+      setOptionsContext(ctx);
+      const targetSec: OptionSectionId =
+        initialSec ??
+        (ctx === 'video'
+          ? 'video_opts'
+          : ctx === 'music'
+          ? 'music_opts'
+          : ctx === 'iptv'
+          ? 'iptv_opts'
+          : ctx === 'radio'
+          ? 'radio_opts'
+          : 'root');
+      setOptionsInitialSection(targetSec);
       setScreen('options');
       window.setTimeout(() => {
-        optionsRef.current?.openSection(initialSec);
+        optionsRef.current?.openSection(targetSec);
       }, 0);
     },
-    [screen]
+    [screen, prevScreen]
   );
 
   // Unified R36S physical / keyboard / on-screen button handler
@@ -1222,8 +1270,21 @@ export default function App() {
       if (btn === 'SELECT') {
         if (screen === 'options') {
           setScreen(prevScreen);
-        } else if (screen !== 'welcome' && screen !== 'terms' && screen !== 'notice') {
-          openOptionsScreen('root');
+        } else if (screen !== 'welcome' && screen !== 'terms' && screen !== 'notice' && screen !== 'tutorial') {
+          openOptionsScreen();
+        }
+        return;
+      }
+
+      if (screen === 'tutorial') {
+        if (btn === 'B' || btn === 'A' || btn === 'X' || btn === 'Y') {
+          if (tutorialFromOptions) {
+            setTutorialFromOptions(false);
+            openOptionsScreen('root');
+          } else {
+            setTutorialDone(true);
+            setScreen('home');
+          }
         }
         return;
       }
@@ -1245,7 +1306,12 @@ export default function App() {
           setThemeIndex((t) => (t + 1) % KP_THEMES.length);
         } else if (btn === 'B') {
           setOnboarded(true);
-          setScreen('home');
+          if (!tutorialDone) {
+            setTutorialFromOptions(false);
+            setScreen('tutorial');
+          } else {
+            setScreen('home');
+          }
         } else if (btn === 'Y') {
           setTermsReturn('welcome');
           setTermsPage(0);
@@ -1463,6 +1529,8 @@ export default function App() {
       noticeReturn,
       openStreamingScreen,
       notify,
+      tutorialDone,
+      tutorialFromOptions,
     ]
   );
 
@@ -1526,9 +1594,9 @@ export default function App() {
 
   const updateBannerValue = useMemo(
     () => ({
-      currentVersion: updateStatus?.currentVersion ?? '2.0.5',
+      currentVersion: updateStatus?.currentVersion ?? '2.0.6',
       updateAvailable: Boolean(updateStatus?.updateAvailable),
-      latestVersion: updateStatus?.latestVersion ?? '2.0.5',
+      latestVersion: updateStatus?.latestVersion ?? '2.0.6',
       onOpenUpdate: () => openOptionsScreen('update'),
     }),
     [updateStatus, openOptionsScreen]
@@ -1578,7 +1646,7 @@ export default function App() {
       <div className="min-h-10 px-3 py-1.5 bg-[#101319] border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2.5 text-xs flex-wrap">
           <span className="font-bold text-zinc-100 whitespace-nowrap">
-            KPlayer v{updateStatus?.currentVersion ?? '2.0.5'} • R36S
+            KPlayer v{updateStatus?.currentVersion ?? '2.0.6'} • R36S
           </span>
           {updateStatus?.updateAvailable ? (
             <button
@@ -1881,7 +1949,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.5 • R36S
+                      v2.0.6 • R36S
                     </div>
                   </div>
 
@@ -2029,12 +2097,103 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setOnboarded(true);
-                      setScreen('home');
+                      if (!tutorialDone) {
+                        setTutorialFromOptions(false);
+                        setScreen('tutorial');
+                      } else {
+                        setScreen('home');
+                      }
                     }}
                     style={{ color: theme.muted }}
                     className="mt-4 text-[11.5px] font-medium tracking-wide cursor-pointer hover:brightness-125 animate-pulse transition-colors"
                   >
                     {tr('Pressione B para continuar', language)}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ==================== FIRST-RUN COMMANDS TUTORIAL (AND "REVER COMANDOS") ==================== */}
+            {screen === 'tutorial' && (
+              <div className="w-full h-full relative overflow-hidden flex flex-col">
+                <ModernBackdrop theme={theme} />
+                <HeaderBar theme={theme} section="COMANDOS" location={locationLabel} />
+                <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-3.5 flex flex-col w-full max-w-[780px] mx-auto">
+                  <div className="shrink-0">
+                    <h2
+                      style={{ color: theme.text }}
+                      className="text-[20px] @min-[540px]:text-[24px] font-extrabold leading-tight"
+                    >
+                      {tutorialFromOptions ? 'Comandos do R36S' : 'Bem-vindo! Conheça os Comandos'}
+                    </h2>
+                    <p style={{ color: theme.muted }} className="text-[12px] mt-0.5">
+                      {tutorialFromOptions
+                        ? 'Lista completa de comandos do controle · Pressione B ou A para voltar'
+                        : 'Tutorial inicial · Você pode rever quando quiser em Opções › Rever comandos'}
+                    </p>
+                  </div>
+
+                  <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 grid grid-cols-1 @min-[680px]:grid-cols-2 gap-1.5 content-start">
+                    {[
+                      { btn: 'DIR', kb: 'Setas / WASD', desc: 'Navegar menus, listas e avançar/voltar 10s' },
+                      { btn: 'B', kb: 'Enter / Z', desc: 'Confirmar, abrir item ou pausar/retomar' },
+                      { btn: 'A', kb: 'Backspace / X', desc: 'Voltar à tela anterior ou fechar menu' },
+                      { btn: 'X', kb: 'Espaço / C', desc: 'Clima completo (Início), trocar abas ou ocultar OSD' },
+                      { btn: 'Y', kb: 'M / V', desc: 'Atualizar listas, trocar cidade ou Opções no início' },
+                      { btn: 'L1 / R1', kb: 'Q / E', desc: 'Pesquisar (TV/Séries/Vídeos) ou trocar faixa' },
+                      { btn: 'START', kb: 'P', desc: 'Pausar / retomar reprodução rapidamente' },
+                      { btn: 'SELECT', kb: 'Tab / O', desc: 'Abrir opções da tela atual e atualizações' },
+                    ].map((cmd) => (
+                      <div
+                        key={cmd.btn}
+                        style={{
+                          ...modernPanelStyle(theme, 11),
+                        }}
+                        className="px-3 py-2 flex items-center gap-2.5"
+                      >
+                        <span
+                          style={{
+                            backgroundColor: rgbToRgba(theme.accent, 0.18),
+                            color: theme.accent,
+                            border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
+                          }}
+                          className="px-2 py-1 rounded-lg text-[11.5px] font-extrabold min-w-[64px] text-center shrink-0"
+                        >
+                          {cmd.btn}
+                        </span>
+                        <div className="min-w-0">
+                          <div style={{ color: theme.text }} className="text-[13px] font-bold leading-snug">
+                            {cmd.desc}
+                          </div>
+                          <div style={{ color: theme.muted }} className="text-[10.5px]">
+                            Teclado: {cmd.kb}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (tutorialFromOptions) {
+                        setTutorialFromOptions(false);
+                        openOptionsScreen('root');
+                      } else {
+                        setTutorialDone(true);
+                        setScreen('home');
+                      }
+                    }}
+                    style={{
+                      backgroundColor: theme.accent,
+                      color: theme.bg,
+                      boxShadow: `0 0 18px ${rgbToRgba(theme.accent, 0.35)}`,
+                    }}
+                    className="mt-3 w-full py-2.5 rounded-xl text-[14px] font-extrabold cursor-pointer hover:brightness-110 transition-all shrink-0"
+                  >
+                    {tutorialFromOptions
+                      ? 'B ou A  •  Voltar às Opções'
+                      : 'B  •  Entendi, começar a usar o K PLAYER'}
                   </button>
                 </div>
               </div>
@@ -2220,8 +2379,25 @@ export default function App() {
               </div>
             )}
 
-            {/* ==================== DASHBOARD / HOME (ADAPTIVE MODERN SKIN) ==================== */}
-            {screen === 'home' && (
+            {/* ==================== DASHBOARD / HOME (v2.0.6: MINI PLAYER TOP + LARGE WEATHER BOTTOM, INVERTIBLE) ==================== */}
+            {screen === 'home' && (() => {
+              const wxInfo = weatherData
+                ? describeWeatherCode(weatherData.current.weatherCode, weatherData.current.isDay)
+                : null;
+              const cityShort = formatWeatherLocationShort(weatherData?.location ?? weatherLocation);
+              const todayDaily = weatherData?.daily?.[0];
+              const nowTitle = activeRadio
+                ? activeRadio.name
+                : activeTrack
+                ? activeTrack.title
+                : tr('Nada tocando', language);
+              const nowSub = activeRadio
+                ? `${activeRadio.country} • ${tr('AO VIVO', language)}`
+                : activeTrack
+                ? activeTrack.artist || tr('Reprodução local', language)
+                : tr('Pronto para dar o play', language);
+
+              return (
               <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
@@ -2230,88 +2406,126 @@ export default function App() {
                   location={locationLabel}
                 />
 
-                <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-3.5 flex flex-col justify-between gap-2.5 overflow-y-auto kp-scroll w-full max-w-[1120px] mx-auto">
-                  {/* Two-tone Hero Headline + Compact Right-Corner Location & Weather Widget (Open-Meteo · Button X) */}
+                <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-3 flex flex-col justify-between gap-2.5 overflow-y-auto kp-scroll w-full max-w-[1120px] mx-auto">
+                  {/* Top Row: Hero Headline + Right Widget (DEFAULT: Mini Player | INVERTED: Compact Weather) */}
                   <div className="shrink-0 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-baseline gap-x-2.5 leading-tight">
-                        <span style={{ color: theme.text }} className="text-[23px] @min-[520px]:text-[28px] @min-[840px]:text-[32px] font-extrabold tracking-tight">
+                        <span style={{ color: theme.text }} className="text-[24px] @min-[520px]:text-[29px] @min-[840px]:text-[33px] font-extrabold tracking-tight">
                           {tr('Seu som.', language)}
                         </span>
-                        <span style={{ color: theme.muted }} className="text-[23px] @min-[520px]:text-[28px] @min-[840px]:text-[32px] font-extrabold tracking-tight">
+                        <span style={{ color: theme.muted }} className="text-[24px] @min-[520px]:text-[29px] @min-[840px]:text-[33px] font-extrabold tracking-tight">
                           {tr('Sua tela.', language)}
                         </span>
                       </div>
-                      <p style={{ color: theme.muted }} className="text-[11.5px] @min-[520px]:text-[12.5px] mt-0.5 truncate">
+                      <p style={{ color: theme.muted }} className="text-[12px] @min-[520px]:text-[13px] mt-0.5 truncate">
                         {tr('Músicas, vídeos, rádios e TV ao vivo num player só.', language)}
                       </p>
                     </div>
 
-                    {(() => {
-                      const wxInfo = weatherData
-                        ? describeWeatherCode(weatherData.current.weatherCode, weatherData.current.isDay)
-                        : null;
-                      const cityShort = formatWeatherLocationShort(weatherData?.location ?? weatherLocation);
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => openWeatherScreen('auto')}
-                          style={{
-                            ...modernCardStyle(theme, false, 14, theme.panel),
-                          }}
-                          className="px-2.5 @min-[520px]:px-3 py-1.5 flex items-center gap-2 shrink-0 max-w-[46%] cursor-pointer transition-all hover:brightness-110 text-right"
-                          title="Abrir Clima (botão X)"
-                        >
-                          <div className="flex items-center justify-center shrink-0">
-                            <WeatherGlyph
-                              kind={wxInfo?.icon ?? 'partly-day'}
-                              size={20}
-                              color={theme.accent}
+                    {!homeLayoutInverted ? (
+                      /* DEFAULT v2.0.6 TOP-RIGHT: Compact Mini Player showing ONLY what's playing */
+                      <button
+                        type="button"
+                        onClick={() => setScreen(activeRadio ? 'radio' : 'music')}
+                        style={{
+                          ...modernCardStyle(theme, isPlaying && !isPaused, 14, theme.panel),
+                        }}
+                        className="px-3 py-1.5 flex items-center gap-2.5 shrink-0 max-w-[48%] cursor-pointer transition-all hover:brightness-110 text-left"
+                        title="Abrir Player"
+                      >
+                        <VinylArt
+                          theme={theme}
+                          size={34}
+                          coverUrl={activeTrack?.coverUrl}
+                          centerLogoUrl={activeRadio?.favicon || undefined}
+                          spinning={isPlaying && !isPaused}
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 leading-none">
+                            <span
+                              style={{ backgroundColor: isPlaying && !isPaused ? theme.accent : theme.dim }}
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${isPlaying && !isPaused ? 'animate-pulse' : ''}`}
                             />
+                            <span
+                              style={{ color: isPlaying ? theme.accent : theme.dim }}
+                              className="text-[9.5px] font-extrabold tracking-wider uppercase whitespace-nowrap"
+                            >
+                              {isPlaying
+                                ? !isPaused
+                                  ? 'Reproduzindo'
+                                  : tr('PAUSADO', language)
+                                : 'Mini Player'}
+                            </span>
                           </div>
-                          <div className="min-w-0">
-                            {weatherData ? (
-                              <>
-                                <div className="flex items-baseline justify-end gap-1.5 leading-none">
-                                  <span
-                                    style={{ color: theme.text }}
-                                    className="text-[15px] @min-[520px]:text-[17px] font-extrabold tabular-nums"
-                                  >
-                                    {Math.round(weatherData.current.temp)}°C
-                                  </span>
-                                  <span style={{ color: theme.accent }} className="text-[9.5px] font-extrabold shrink-0">
-                                    X
-                                  </span>
-                                </div>
-                                <div
-                                  style={{ color: theme.muted }}
-                                  className="text-[10px] @min-[520px]:text-[10.5px] truncate max-w-[120px] @min-[520px]:max-w-[165px] mt-0.5"
+                          <div
+                            style={{ color: theme.text }}
+                            className="text-[12.5px] @min-[520px]:text-[13.5px] font-extrabold truncate max-w-[135px] @min-[520px]:max-w-[185px] mt-0.5"
+                          >
+                            {nowTitle}
+                          </div>
+                        </div>
+                      </button>
+                    ) : (
+                      /* INVERTED TOP-RIGHT: Compact Open-Meteo Weather Widget (Button X) */
+                      <button
+                        type="button"
+                        onClick={() => openWeatherScreen('auto')}
+                        style={{
+                          ...modernCardStyle(theme, false, 14, theme.panel),
+                        }}
+                        className="px-3 py-1.5 flex items-center gap-2 shrink-0 max-w-[46%] cursor-pointer transition-all hover:brightness-110 text-right"
+                        title="Abrir Clima (botão X)"
+                      >
+                        <div className="flex items-center justify-center shrink-0">
+                          <WeatherGlyph
+                            kind={wxInfo?.icon ?? 'partly-day'}
+                            size={22}
+                            color={theme.accent}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          {weatherData ? (
+                            <>
+                              <div className="flex items-baseline justify-end gap-1.5 leading-none">
+                                <span
+                                  style={{ color: theme.text }}
+                                  className="text-[16px] @min-[520px]:text-[18px] font-extrabold tabular-nums"
                                 >
-                                  {cityShort || wxInfo?.label}
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="flex items-center justify-end gap-1 leading-none">
-                                  <span style={{ color: theme.text }} className="text-[11.5px] font-bold whitespace-nowrap">
-                                    Clima
-                                  </span>
-                                  <span style={{ color: theme.accent }} className="text-[9.5px] font-extrabold">
-                                    X
-                                  </span>
-                                </div>
-                                <div style={{ color: theme.muted }} className="text-[9.5px] truncate mt-0.5">
-                                  {weatherLoading ? 'Carregando...' : 'Definir local'}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })()}
+                                  {Math.round(weatherData.current.temp)}°C
+                                </span>
+                                <span style={{ color: theme.accent }} className="text-[10px] font-extrabold shrink-0">
+                                  X
+                                </span>
+                              </div>
+                              <div
+                                style={{ color: theme.muted }}
+                                className="text-[10.5px] @min-[520px]:text-[11px] truncate max-w-[125px] @min-[520px]:max-w-[165px] mt-0.5"
+                              >
+                                {cityShort || wxInfo?.label}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-end gap-1 leading-none">
+                                <span style={{ color: theme.text }} className="text-[12px] font-bold whitespace-nowrap">
+                                  Clima
+                                </span>
+                                <span style={{ color: theme.accent }} className="text-[10px] font-extrabold">
+                                  X
+                                </span>
+                              </div>
+                              <div style={{ color: theme.muted }} className="text-[10px] truncate mt-0.5">
+                                {weatherLoading ? 'Carregando...' : 'Definir local'}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </button>
+                    )}
                   </div>
 
-                  {/* Adaptive Category Card Grid (2x3 on compact portrait, 3x2 on 4:3 / landscape / desktop) */}
+                  {/* Adaptive Category Card Grid */}
                   <div className="grid grid-cols-2 @min-[520px]:grid-cols-3 gap-2.5 @min-[520px]:gap-3.5 flex-1 content-center">
                     {(
                       [
@@ -2377,7 +2591,7 @@ export default function App() {
                               ? `0 0 18px ${rgbToRgba(theme.accent, 0.36)}`
                               : undefined,
                           }}
-                          className="relative text-left p-2.5 @min-[520px]:p-3 min-h-[86px] @min-[520px]:min-h-[94px] @min-[820px]:min-h-[112px] flex flex-col justify-between cursor-pointer transition-all"
+                          className="relative text-left p-2.5 @min-[520px]:p-3 min-h-[86px] @min-[520px]:min-h-[96px] @min-[820px]:min-h-[112px] flex flex-col justify-between cursor-pointer transition-all"
                         >
                           <div className="flex items-start gap-2 @min-[520px]:gap-2.5">
                             <div
@@ -2400,7 +2614,7 @@ export default function App() {
                             <div className="min-w-0 flex-1 pt-0.5">
                               <div
                                 style={{ color: theme.accent }}
-                                className="text-[9.5px] @min-[520px]:text-[10px] font-bold leading-tight truncate pr-4"
+                                className="text-[10px] @min-[520px]:text-[10.5px] font-bold leading-tight truncate pr-4"
                               >
                                 {cardItem.tag}
                               </div>
@@ -2413,11 +2627,11 @@ export default function App() {
                           <div className="mt-2">
                             <div
                               style={{ color: theme.text }}
-                              className="text-[14.5px] @min-[520px]:text-[16px] font-extrabold leading-tight truncate"
+                              className="text-[15.5px] @min-[520px]:text-[17px] font-extrabold leading-tight truncate"
                             >
                               {cardItem.name}
                             </div>
-                            <div style={{ color: theme.muted }} className="text-[10px] truncate mt-0.5">
+                            <div style={{ color: theme.muted }} className="text-[10.5px] truncate mt-0.5">
                               {cardItem.desc}
                             </div>
                           </div>
@@ -2426,107 +2640,193 @@ export default function App() {
                     })}
                   </div>
 
-                  {/* Adaptive Bottom Now Playing Card */}
-                  <div
-                    style={{
-                      ...modernPanelStyle(theme, 18),
-                    }}
-                    className="w-full min-h-[92px] @min-[520px]:min-h-[106px] px-3 @min-[520px]:px-4 py-2 flex items-center justify-between gap-2 shrink-0"
-                  >
+                  {/* Bottom Large Area: DEFAULT = Large Open-Meteo Weather Card | INVERTED = Full Now Playing Player */}
+                  {!homeLayoutInverted ? (
                     <button
                       type="button"
-                      onClick={() => setScreen(activeRadio ? 'radio' : 'music')}
-                      className="flex items-center gap-3 @min-[520px]:gap-4 min-w-0 flex-1 text-left cursor-pointer"
+                      onClick={() => openWeatherScreen('auto')}
+                      style={{
+                        ...modernPanelStyle(theme, 18),
+                      }}
+                      className="w-full min-h-[106px] @min-[520px]:min-h-[120px] px-4 @min-[520px]:px-5 py-3 flex items-center justify-between gap-4 shrink-0 text-left cursor-pointer transition-all hover:brightness-105"
+                      title="Abrir aplicativo completo de Clima (botão X)"
                     >
-                      <VinylArt
-                        theme={theme}
-                        size={72}
-                        coverUrl={activeTrack?.coverUrl}
-                        centerLogoUrl={activeRadio?.favicon || undefined}
-                        spinning={isPlaying && !isPaused}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div
-                          style={{ color: isPlaying ? theme.accent : theme.dim }}
-                          className="text-[9.5px] @min-[520px]:text-[10px] font-bold tracking-wider uppercase"
-                        >
-                          {isPlaying
-                            ? !isPaused
-                              ? tr('TOCANDO AGORA', language)
-                              : tr('PAUSADO', language)
-                            : tr('NADA TOCANDO', language)}
-                        </div>
-                        <div
-                          style={{ color: theme.text }}
-                          className="text-[15px] @min-[520px]:text-[17px] font-extrabold truncate leading-snug mt-0.5"
-                        >
-                          {activeRadio
-                            ? activeRadio.name
-                            : activeTrack
-                            ? activeTrack.title
-                            : tr('Pronto para dar o play', language)}
-                        </div>
-                        <div style={{ color: theme.muted }} className="text-[11.5px] @min-[520px]:text-[12px] truncate">
-                          {activeRadio
-                            ? `${activeRadio.country} • ${tr('AO VIVO', language)}`
-                            : activeTrack
-                            ? activeTrack.artist || tr('Reprodução local', language)
-                            : tr('Abra Músicas ou Vídeos para começar', language)}
-                        </div>
-                        <div className="mt-1.5 hidden @min-[440px]:block overflow-hidden max-w-full">
-                          <AudioVisualizer
-                            theme={theme}
-                            bars={28}
-                            width={180}
-                            height={13}
-                            active={isPlaying && !isPaused}
-                          />
-                        </div>
-                      </div>
-                    </button>
+                      {weatherData ? (
+                        <>
+                          <div className="flex items-center gap-3.5 @min-[520px]:gap-4 min-w-0">
+                            <div
+                              style={{
+                                backgroundColor: rgbToRgba(theme.accent, 0.14),
+                                border: `1px solid ${rgbToRgba(theme.accent, 0.3)}`,
+                              }}
+                              className="w-[54px] h-[54px] @min-[520px]:w-[62px] @min-[520px]:h-[62px] rounded-2xl flex items-center justify-center shrink-0"
+                            >
+                              <WeatherGlyph
+                                kind={wxInfo?.icon ?? 'partly-day'}
+                                size={36}
+                                color={theme.accent}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-baseline gap-2.5">
+                                <span
+                                  style={{ color: theme.text }}
+                                  className="text-[32px] @min-[520px]:text-[38px] font-black leading-none tabular-nums"
+                                >
+                                  {Math.round(weatherData.current.temp)}°C
+                                </span>
+                                {todayDaily && (
+                                  <span style={{ color: theme.muted }} className="text-[12px] font-bold tabular-nums">
+                                    ↑{Math.round(todayDaily.tempMax)}° ↓{Math.round(todayDaily.tempMin)}°
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                style={{ color: theme.text }}
+                                className="text-[14.5px] @min-[520px]:text-[16px] font-extrabold truncate mt-1"
+                              >
+                                {cityShort || 'Clima Atual'}
+                              </div>
+                              <div style={{ color: theme.muted }} className="text-[12px] truncate">
+                                {wxInfo?.label} · Sensação {Math.round(weatherData.current.apparentTemp)}°C
+                              </div>
+                            </div>
+                          </div>
 
-                    <div className="flex items-center justify-center gap-2 @min-[520px]:gap-3 pl-2 pr-0.5 shrink-0">
-                      <TransportSkipButton
-                        theme={theme}
-                        direction="prev"
-                        size={28}
-                        onClick={() => stepTrack(-1)}
-                        title="Anterior"
-                      />
-                      <PlayDisc
-                        theme={theme}
-                        size={42}
-                        playing={isPlaying && !isPaused}
-                        onClick={togglePlayPause}
-                        title="Reproduzir / Pausar"
-                      />
-                      <TransportSkipButton
-                        theme={theme}
-                        direction="next"
-                        size={28}
-                        onClick={() => stepTrack(1)}
-                        title="Próxima"
-                      />
+                          <div className="flex flex-col items-end justify-between gap-2 shrink-0 text-right">
+                            <span
+                              style={{
+                                backgroundColor: rgbToRgba(theme.accent, 0.18),
+                                color: theme.accent,
+                                border: `1px solid ${rgbToRgba(theme.accent, 0.4)}`,
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-extrabold whitespace-nowrap"
+                            >
+                              X • Clima completo
+                            </span>
+                            <div style={{ color: theme.muted }} className="text-[11.5px] tabular-nums hidden @min-[480px]:block">
+                              Umid. {Math.round(weatherData.current.humidity)}% · Vento {Math.round(weatherData.current.windSpeed)} km/h
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between gap-4 w-full">
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div
+                              style={{
+                                backgroundColor: rgbToRgba(theme.accent, 0.14),
+                                border: `1px solid ${rgbToRgba(theme.accent, 0.3)}`,
+                              }}
+                              className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center shrink-0"
+                            >
+                              <WeatherGlyph kind="partly-day" size={32} color={theme.accent} />
+                            </div>
+                            <div className="min-w-0">
+                              <div style={{ color: theme.accent }} className="text-[10.5px] font-extrabold uppercase tracking-wider">
+                                OPEN-METEO • CLIMA
+                              </div>
+                              <div style={{ color: theme.text }} className="text-[16px] @min-[520px]:text-[18px] font-extrabold truncate mt-0.5">
+                                {weatherLoading ? 'Carregando previsão do tempo...' : 'Configure sua localização do clima'}
+                              </div>
+                              <div style={{ color: theme.muted }} className="text-[12px] truncate">
+                                Pressione X para usar localização por IP ou pesquisar cidade manualmente
+                              </div>
+                            </div>
+                          </div>
+                          <span
+                            style={{ backgroundColor: theme.accent, color: theme.bg }}
+                            className="px-3 py-1.5 rounded-xl text-[11.5px] font-extrabold shrink-0"
+                          >
+                            X • Configurar
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  ) : (
+                    /* INVERTED BOTTOM: Full Now Playing Card */
+                    <div
+                      style={{
+                        ...modernPanelStyle(theme, 18),
+                      }}
+                      className="w-full min-h-[100px] @min-[520px]:min-h-[112px] px-3.5 @min-[520px]:px-4 py-2 flex items-center justify-between gap-2 shrink-0"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setScreen(activeRadio ? 'radio' : 'music')}
+                        className="flex items-center gap-3 @min-[520px]:gap-4 min-w-0 flex-1 text-left cursor-pointer"
+                      >
+                        <VinylArt
+                          theme={theme}
+                          size={72}
+                          coverUrl={activeTrack?.coverUrl}
+                          centerLogoUrl={activeRadio?.favicon || undefined}
+                          spinning={isPlaying && !isPaused}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div
+                            style={{ color: isPlaying ? theme.accent : theme.dim }}
+                            className="text-[10px] @min-[520px]:text-[10.5px] font-bold tracking-wider uppercase"
+                          >
+                            {isPlaying
+                              ? !isPaused
+                                ? tr('TOCANDO AGORA', language)
+                                : tr('PAUSADO', language)
+                              : tr('NADA TOCANDO', language)}
+                          </div>
+                          <div
+                            style={{ color: theme.text }}
+                            className="text-[15.5px] @min-[520px]:text-[18px] font-extrabold truncate leading-snug mt-0.5"
+                          >
+                            {nowTitle}
+                          </div>
+                          <div style={{ color: theme.muted }} className="text-[12px] truncate">
+                            {nowSub}
+                          </div>
+                          <div className="mt-1.5 hidden @min-[440px]:block overflow-hidden max-w-full">
+                            <AudioVisualizer
+                              theme={theme}
+                              bars={28}
+                              width={180}
+                              height={13}
+                              active={isPlaying && !isPaused}
+                            />
+                          </div>
+                        </div>
+                      </button>
+
+                      <div className="flex items-center justify-center gap-2 @min-[520px]:gap-3 pl-2 pr-0.5 shrink-0">
+                        <TransportSkipButton
+                          theme={theme}
+                          direction="prev"
+                          size={28}
+                          onClick={() => stepTrack(-1)}
+                          title="Anterior"
+                        />
+                        <PlayDisc
+                          theme={theme}
+                          size={42}
+                          playing={isPlaying && !isPaused}
+                          onClick={togglePlayPause}
+                          title="Reproduzir / Pausar"
+                        />
+                        <TransportSkipButton
+                          theme={theme}
+                          direction="next"
+                          size={28}
+                          onClick={() => stepTrack(1)}
+                          title="Próxima"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                <FooterBar
-                  theme={theme}
-                  themeIndex={themeIndex}
-                  toast={toast}
-                  hints={[
-                    { key: 'DIR', label: tr('Navegar', language) },
-                    { key: 'B', label: tr('Abrir', language) },
-                    { key: 'X', label: tr('Player', language) },
-                    { key: 'Y', label: tr('Opções', language) },
-                    { key: 'START', label: tr('Pausa', language) },
-                  ]}
-                />
+                <FooterBar theme={theme} themeIndex={themeIndex} toast={toast} />
               </div>
-            )}
+              );
+            })()}
 
-            {/* ==================== LIBRARY / FILE BROWSER ==================== */}
+            {/* ==================== LIBRARY / FILE BROWSER (v2.0.6: FULL-SCREEN, LARGER FONTS, TYPING SEARCH) ==================== */}
             {screen === 'library' && (
               <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <ModernBackdrop theme={theme} />
@@ -2536,22 +2836,65 @@ export default function App() {
                   location={locationLabel}
                 />
 
-                <div className="relative z-10 flex-1 min-h-0 px-3.5 pt-3 pb-[52px] flex flex-col w-full max-w-[1040px] mx-auto">
-                  {/* Top Library Filter Banner */}
+                <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-3 flex flex-col w-full max-w-[1040px] mx-auto">
+                  {/* Top Library Filter + Typing Search Banner */}
                   <div
                     style={{ ...modernPanelStyle(theme, 14) }}
                     className="px-3.5 py-2.5 flex flex-col gap-2 shrink-0"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <KpSprite sheet="categorias" col={2} themeIndex={themeIndex} size={22} />
-                      <span style={{ color: theme.text }} className="text-[13.5px] @min-[520px]:text-[14px] font-bold truncate">
-                        {libFavoritesOnly
-                          ? tr('Minhas favoritas', language)
-                          : libLocationsView
-                          ? tr('Escolha o local das suas mídias', language)
-                          : tr('Pastas: /roms(2)/bgmusic e /roms(2)/videos', language)}
-                      </span>
+                    <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <KpSprite sheet="categorias" col={2} themeIndex={themeIndex} size={24} />
+                        <span style={{ color: theme.text }} className="text-[15px] @min-[520px]:text-[16px] font-extrabold truncate">
+                          {libFavoritesOnly
+                            ? tr('Minhas favoritas', language)
+                            : libLocationsView
+                            ? tr('Escolha o local das suas mídias', language)
+                            : libFilter === 2
+                            ? 'Meus Vídeos'
+                            : tr('Pastas: /roms(2)/bgmusic e /roms(2)/videos', language)}
+                        </span>
+                      </div>
+
+                      {!libLocationsView && (
+                        <div className="flex items-center gap-1.5 w-full @min-[520px]:w-auto">
+                          <input
+                            type="text"
+                            value={libSearchQuery}
+                            onChange={(e) => {
+                              setLibSearchQuery(e.target.value);
+                              setLibSelected(0);
+                            }}
+                            placeholder={
+                              libFilter === 2
+                                ? 'Pesquisar vídeo digitando...'
+                                : 'Pesquisar arquivo ou música...'
+                            }
+                            style={{
+                              backgroundColor: rgbToRgba(theme.elevated, 0.95),
+                              color: theme.text,
+                              border: `1px solid ${libSearchQuery ? theme.accent : themeHairline(theme)}`,
+                            }}
+                            className="flex-1 @min-[520px]:w-[220px] px-3 py-1 rounded-lg text-[12.5px] outline-none"
+                          />
+                          {libSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setLibSearchQuery('')}
+                              style={{
+                                backgroundColor: rgbToRgba(theme.elevated, 0.9),
+                                color: theme.muted,
+                                border: `1px solid ${themeHairline(theme)}`,
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-[12px] font-bold cursor-pointer"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
+
                     <div className="flex flex-wrap items-center gap-1.5 @min-[520px]:gap-2">
                       {(['Todos', 'Músicas', 'Vídeos'] as const).map((tab, i) => {
                         const activeTab = i === libFilter;
@@ -2565,9 +2908,9 @@ export default function App() {
                             }}
                             style={{
                               ...modernPillStyle(theme, activeTab),
-                              height: 22,
+                              height: 26,
                             }}
-                            className="px-3 @min-[520px]:min-w-[88px] text-[11.5px] font-semibold cursor-pointer transition-all"
+                            className="px-3.5 @min-[520px]:min-w-[92px] text-[12.5px] font-bold cursor-pointer transition-all"
                           >
                             {tr(tab, language)}
                           </button>
@@ -2577,7 +2920,7 @@ export default function App() {
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         style={{ backgroundColor: theme.elevated, color: theme.accent }}
-                        className="ml-auto px-2.5 h-[22px] rounded-full text-[11px] font-semibold cursor-pointer hover:brightness-110 whitespace-nowrap"
+                        className="ml-auto px-3 h-[26px] rounded-full text-[12px] font-bold cursor-pointer hover:brightness-110 whitespace-nowrap"
                       >
                         + {tr('Importar do dispositivo', language)}
                       </button>
@@ -2585,7 +2928,7 @@ export default function App() {
                   </div>
 
                   {/* Locations View OR Full Scrollable Files List */}
-                  <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-1.5">
+                  <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-2">
                     {libLocationsView ? (
                       [
                         {
@@ -2629,23 +2972,23 @@ export default function App() {
                             onMouseEnter={() => setLibLocationSelected(idx)}
                             onClick={loc.action}
                             style={{
-                              ...modernCardStyle(theme, focus, 10, theme.panel),
-                              height: 58,
+                              ...modernCardStyle(theme, focus, 11, theme.panel),
+                              height: 66,
                             }}
-                            className="w-full px-3.5 flex items-center justify-between cursor-pointer text-left transition-all"
+                            className="w-full px-4 flex items-center justify-between cursor-pointer text-left transition-all"
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <KpSprite sheet="categorias" col={2} themeIndex={themeIndex} size={26} />
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <KpSprite sheet="categorias" col={2} themeIndex={themeIndex} size={28} />
                               <div className="min-w-0">
-                                <div style={{ color: theme.text }} className="text-[15px] @min-[520px]:text-[16px] font-bold truncate">
+                                <div style={{ color: theme.text }} className="text-[16.5px] @min-[520px]:text-[18px] font-extrabold truncate">
                                   {loc.name}
                                 </div>
-                                <div style={{ color: theme.muted }} className="text-[11.5px] truncate">
+                                <div style={{ color: theme.muted }} className="text-[12.5px] truncate">
                                   {loc.path}
                                 </div>
                               </div>
                             </div>
-                            <span style={{ color: theme.accent }} className="text-[13px] font-semibold shrink-0 pl-2">
+                            <span style={{ color: theme.accent }} className="text-[14px] font-bold shrink-0 pl-2">
                               {tr('Abrir', language)}
                             </span>
                           </button>
@@ -2653,23 +2996,27 @@ export default function App() {
                       })
                     ) : filteredLibrary.length === 0 ? (
                       <div className="py-12 text-center px-6">
-                        <div style={{ color: theme.text }} className="text-[19px] font-bold">
-                          {tr('Nenhuma mídia neste filtro', language)}
+                        <div style={{ color: theme.text }} className="text-[20px] font-bold">
+                          {libSearchQuery
+                            ? 'Nenhum arquivo encontrado para a pesquisa'
+                            : tr('Nenhuma mídia neste filtro', language)}
                         </div>
-                        <div style={{ color: theme.muted }} className="text-[13px] mt-2">
-                          {tr('A volta. Esquerda/direita muda o filtro. Y atualiza.', language)}
+                        <div style={{ color: theme.muted }} className="text-[13.5px] mt-2">
+                          {libSearchQuery
+                            ? 'Tente digitar outro termo ou limpe a busca acima.'
+                            : tr('A volta. Esquerda/direita muda o filtro. Y atualiza.', language)}
                         </div>
                         <button
                           type="button"
-                          onClick={() => fileInputRef.current?.click()}
+                          onClick={() => (libSearchQuery ? setLibSearchQuery('') : fileInputRef.current?.click())}
                           style={{
                             backgroundColor: theme.accent,
                             color: theme.bg,
                             boxShadow: `0 0 16px ${rgbToRgba(theme.accent, 0.4)}`,
                           }}
-                          className="mt-4 px-5 py-2 rounded-full text-[13px] font-bold cursor-pointer"
+                          className="mt-4 px-5 py-2 rounded-full text-[13.5px] font-bold cursor-pointer"
                         >
-                          + {tr('Importar do dispositivo', language)}
+                          {libSearchQuery ? 'Limpar pesquisa' : `+ ${tr('Importar do dispositivo', language)}`}
                         </button>
                       </div>
                     ) : (
@@ -2685,29 +3032,29 @@ export default function App() {
                               if (item.kind === 'audio') setScreen('music');
                             }}
                             style={{
-                              ...modernCardStyle(theme, focus, 9, theme.panel),
-                              height: 46,
+                              ...modernCardStyle(theme, focus, 10, theme.panel),
+                              height: 54,
                             }}
-                            className="w-full px-3 flex items-center justify-between text-left cursor-pointer transition-all"
+                            className="w-full px-3.5 flex items-center justify-between text-left cursor-pointer transition-all"
                           >
-                            <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center gap-3.5 min-w-0">
                               <KpSprite
                                 sheet="categorias"
                                 col={item.kind === 'audio' ? 0 : 1}
                                 themeIndex={themeIndex}
-                                size={24}
+                                size={26}
                               />
                               <div className="min-w-0">
-                                <div style={{ color: theme.text }} className="text-[14.5px] font-semibold truncate">
+                                <div style={{ color: theme.text }} className="text-[16px] font-bold truncate">
                                   {item.name}
                                 </div>
-                                <div style={{ color: theme.dim }} className="text-[10px]">
+                                <div style={{ color: theme.dim }} className="text-[11.5px]">
                                   {item.kind === 'audio' ? tr('Áudio', language) : tr('Vídeo', language)}
                                   {item.lyrics ? ' • LRC' : ''}
                                 </div>
                               </div>
                             </div>
-                            <span style={{ color: theme.muted }} className="text-[12px] shrink-0 pl-2">
+                            <span style={{ color: theme.muted }} className="text-[13px] font-semibold shrink-0 pl-2">
                               {formatBytes(item.sizeBytes)}
                             </span>
                           </button>
@@ -2717,25 +3064,13 @@ export default function App() {
                   </div>
 
                   {!libLocationsView && (
-                    <div style={{ color: theme.dim }} className="pt-1.5 text-[11px] shrink-0">
+                    <div style={{ color: theme.dim }} className="pt-1.5 text-[12px] font-semibold shrink-0">
                       {filteredLibrary.length ? libSelected + 1 : 0} / {filteredLibrary.length}
                     </div>
                   )}
                 </div>
 
-                <FooterBar
-                  theme={theme}
-                  themeIndex={themeIndex}
-                  toast={toast}
-                  hints={[
-                    { key: 'B', label: tr('Abrir', language) },
-                    { key: 'A', label: tr('Voltar', language) },
-                    { key: 'DIR', label: tr('Categorias', language) },
-                    { key: 'X', label: tr('Player', language) },
-                    { key: 'Y', label: tr('Atualizar', language) },
-                    { key: 'SELECT', label: tr('Opções', language) },
-                  ]}
-                />
+                <FooterBar theme={theme} themeIndex={themeIndex} toast={toast} />
               </div>
             )}
 
@@ -3412,7 +3747,7 @@ export default function App() {
               />
             )}
 
-            {/* ==================== ALPHABETICAL SELECTION-FIRST OPTIONS MENU (OPENED VIA SELECT) ==================== */}
+            {/* ==================== CONTEXTUAL SELECTION-FIRST OPTIONS MENU (OPENED VIA SELECT) ==================== */}
             {screen === 'options' && (
               <OptionsMenu
                 ref={optionsRef}
@@ -3421,7 +3756,9 @@ export default function App() {
                 language={language}
                 locationLabel={locationLabel}
                 toast={toast}
+                context={optionsContext}
                 initialSection={optionsInitialSection}
+                homeLayoutInverted={homeLayoutInverted}
                 playbackRate={playbackRate}
                 videoFit={videoFit}
                 repeatMode={repeatMode}
@@ -3438,6 +3775,7 @@ export default function App() {
                 activeTrack={activeTrack}
                 favoriteTrackIds={favoriteTrackIds}
                 history={playbackHistory}
+                radioCategoryLabel={tr(RADIO_CATEGORIES[radioCategory] ?? 'Brasil', language)}
                 updateStatus={updateStatus}
                 updateChecking={updateChecking}
                 updateApplying={updateApplying}
@@ -3445,6 +3783,21 @@ export default function App() {
                 onSetThemeIndex={setThemeIndex}
                 onSetLanguage={setLanguage}
                 onSetDisplayMode={setR36sDisplayMode}
+                onToggleHomeLayout={() => {
+                  setHomeLayoutInverted((inv) => {
+                    const next = !inv;
+                    notify(
+                      next
+                        ? 'Início invertido: Clima no topo e Player embaixo'
+                        : 'Início padrão: Mini player no topo e Clima grande embaixo'
+                    );
+                    return next;
+                  });
+                }}
+                onOpenCommandsTutorial={() => {
+                  setTutorialFromOptions(true);
+                  setScreen('tutorial');
+                }}
                 onSetPlaybackRate={setPlaybackRate}
                 onSetVideoFit={setVideoFit}
                 onSetRepeatMode={setRepeatMode}
@@ -3471,8 +3824,30 @@ export default function App() {
                     notify(tr('Abra uma mídia', language));
                   }
                 }}
-                onOpenIptv={() => openStreamingScreen('iptv', 'options')}
-                onOpenFootball={() => setScreen('football')}
+                onIptvSearch={() => {
+                  window.setTimeout(() => iptvRef.current?.focusSearch(), 40);
+                }}
+                onIptvCycleSource={() => {
+                  window.setTimeout(() => iptvRef.current?.cycleSource(), 40);
+                }}
+                onIptvRefresh={() => {
+                  window.setTimeout(() => iptvRef.current?.refreshCurrent(), 40);
+                }}
+                onIptvAddUrl={() => {
+                  window.setTimeout(() => iptvRef.current?.openAddUrl(), 40);
+                }}
+                onRadioToggleFav={() => {
+                  const st = activeRadio ?? radioStations[radioSelected];
+                  if (st) toggleRadioFav(st);
+                  else notify('Nenhuma estação selecionada');
+                }}
+                onRadioCycleCategory={() => {
+                  setRadioCategory((c) => (c + 1) % RADIO_CATEGORIES.length);
+                }}
+                onRadioRefresh={() => {
+                  if (radioCategory === 5) fetchUserRadios().then(() => loadRadioCategory(5, true));
+                  else loadRadioCategory(radioCategory, true);
+                }}
                 onOpenTerms={() => {
                   setTermsReturn('options');
                   setTermsPage(0);
@@ -3640,7 +4015,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.5 — Edição R36S
+                  KPlayer v2.0.6 — Edição R36S
                 </h2>
               </div>
               <button
@@ -3656,7 +4031,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
                   src={portCoverImg}
-                  alt="Capa do Port KPlayer v2.0.5 para R36S dArkOS"
+                  alt="Capa do Port KPlayer v2.0.6 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -3665,7 +4040,7 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.5-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.6-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -3698,7 +4073,7 @@ export default function App() {
             <div className="mt-4 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.5-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.6-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code>,{' '}
                   <code className="text-zinc-100">kplayer/</code>,{' '}
@@ -3715,22 +4090,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.0.5 com Clima Open-Meteo (X), menu Opções A–Z (SELECT), Auto-Update nativo via pasta updates/ + GitHub Releases, EPG ao vivo no IPTV Brasil 2026, <strong>Placar da Bola</strong>, libVLC ARM64 e rádios <code className="text-zinc-300">.pls</code>.
+                Inclui binário ARM64 nativo v2.0.6 com Clima grande embaixo + Mini Player no topo (invertível), tutorial de Comandos na 1ª execução, Opções contextuais (Vídeo, Música, TV, Rádio), pesquisa digitada em TV/Séries/Vídeos, fontes maiores e Auto-Update pela pasta updates/.
               </p>
             </div>
 
             <div className="mt-5 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.5-R36S.zip"
+                download="KPlayer-v2.0.6-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.5-R36S.zip
+                ⬇ Baixar KPlayer-v2.0.6-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.5-R36S.zip.sha256"
+                download="KPlayer-v2.0.6-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

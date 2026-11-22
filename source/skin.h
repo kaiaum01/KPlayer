@@ -40,6 +40,11 @@ static void art(int x, int y, int size) {
 }
 static bool updater_is_available(char *latest_out, size_t latest_cap);
 static void draw_home_weather_widget(void);
+static void draw_home_weather_large(void);
+static bool home_layout_inverted;
+static char menu_search[64];
+static bool menu_search_kb;
+static void draw_menu_search_keyboard(void);
 static void draw_header(const char *section) {
   update_status();
   rect(0, 0, 640, 32, alpha(panel, 215));
@@ -134,23 +139,66 @@ static void tile_arrow(int x, int y, SDL_Color c) {
     SDL_RenderDrawLine(renderer, x + 9 - k, y, x + 9 - k, y + 6);
   }
 }
+/* Compact top-right Mini Player showing only what is currently playing (v2.0.6 default). */
+static void draw_home_mini_player(void) {
+  int mx = 414, my = 40, mw = 210, mh = 54;
+  bool on = active && !paused;
+  panel_card(mx, my, mw, mh, 12);
+  if (active) {
+    art(mx + 8, my + 9, 36);
+    rounded(mx + mw - 58, my + 6, 50, 16, 8, alpha(accent, on ? 56 : 30));
+    centered(on ? "TOCANDO" : "PAUSADO", mx + mw - 58, my + 8, 50, 9, accent);
+    label(title[0] ? title : media_name, mx + 52, my + 12, 13, textc, 96);
+    label(artist[0] ? artist : (playing_radio ? "Rádio Online" : (playing_iptv ? "IPTV" : "Reproduzindo")),
+          mx + 52, my + 31, 10, muted, 146);
+  } else {
+    fill_circle(mx + 26, my + 27, 15, mix(elevated, accent, 0.14f));
+    triangle(mx + 22, my + 21, 12, muted);
+    label("Mini Player", mx + 50, my + 10, 13, textc, 146);
+    label("Nada reproduzindo", mx + 50, my + 30, 10, muted, 146);
+  }
+}
+
+/* Full Now Playing bottom card (used when Home layout is inverted in Settings). */
+static void draw_home_player_large(void) {
+  panel_card(16, 334, 608, 132, 18);
+  bool on = active && !paused;
+  art(30, 356, 88);
+  label(active ? (on ? tr("TOCANDO AGORA") : tr("PAUSADO")) : tr("NADA TOCANDO"),
+        134, 356, 11, active ? accent : dim, 300);
+  label(active ? (title[0] ? title : media_name) : tr("Pronto para dar o play"),
+        134, 376, 19, textc, 330);
+  label(active ? (artist[0] ? artist : tr("Reprodução local"))
+               : tr("Abra Músicas ou Vídeos para começar"),
+        134, 405, 13, muted, 330);
+  visualizer(134, 430, 200, 14, 34, on);
+  fill_circle(500, 400, 14, mix(elevated, textc, 0.05f));
+  media_ui_skip(500, 400, false);
+  play_button(524, 378, 44);
+  fill_circle(592, 400, 14, mix(elevated, textc, 0.05f));
+  media_ui_skip(592, 400, true);
+}
+
 static void draw_home(void) {
   backdrop();
   draw_header(tr("DASHBOARD"));
-  /* Hero: two-tone headline on left + compact Open-Meteo weather widget on right. */
+  /* Hero: two-tone headline on left + Mini Player (default) or compact Weather (inverted) on right. */
   const char *h1 = tr("Seu som."), *h2 = tr("Sua tela.");
   label(h1, 18, 42, 26, textc, 220);
   label(h2, 18 + (int)measure(h1, 26) + 8, 42, 26, muted, 220);
-  label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 77, 11,
+  label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 77, 12,
         muted, 386);
-  draw_home_weather_widget();
+  if (home_layout_inverted)
+    draw_home_weather_widget();
+  else
+    draw_home_mini_player();
   const char *names[] = {tr("Músicas"), tr("Vídeos"), tr("Arquivos"),
                          tr("Rádio Online"), tr("IPTV"), tr("Placar da Bola")},
-             *desc[] = {tr("Sua trilha sonora,"), tr("Cinema na palma"),
+             *desc[] = {tr("Sua trilha sonora"), tr("Cinema na palma"),
                         tr("Explore as pastas"), tr("Estações do mundo"),
                         tr("Canais ao vivo"), tr("Jogos e estatísticas")},
-             *tags[] = {tr("LRC Sync"), tr("Ocultar auto."), tr("Mídias locais"),
-                        tr("Radio Browser"), tr("TV Online"), tr("Placar ao vivo")};
+             *tags[] = {tr("LRC Sync"), tr("Pesquisa"), tr("Mídias locais"),
+                        tr("Radio Browser"), tr("TV & EPG"), tr("Ao vivo")};
   for (int i = 0; i < 6; i++) {
     int x = 16 + (i % 3) * 208, y = 104 + (i / 3) * 112;
     bool focus = i == dash_focus;
@@ -166,103 +214,102 @@ static void draw_home(void) {
     rounded(x + 13, y + 13, 36, 36, 11, alpha(bg, 165));
     if (!kp_sprite(KP_SPR_CATEGORIES, i, x + 18, y + 18, 26, 26))
       icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 19, y + 19, 24, accent);
-    label(tags[i], x + 60, y + 14, 10, accent, 104);
+    label(tags[i], x + 60, y + 15, 11, accent, 104);
     tile_arrow(x + 170, y + 14, focus ? accent : dim);
-    label(names[i], x + 14, y + 58, 17, textc, 168);
-    label(desc[i], x + 14, y + 80, 10, muted, 168);
+    label(names[i], x + 14, y + 56, 18, textc, 168);
+    label(desc[i], x + 14, y + 80, 11, muted, 168);
   }
-  /* Now playing card (uses freed bottom space smoothly). */
-  panel_card(16, 336, 608, 124, 18);
-  bool on = active && !paused;
-  art(30, 354, 88);
-  label(active ? (on ? tr("TOCANDO AGORA") : tr("PAUSADO")) : tr("NADA TOCANDO"),
-        134, 356, 10, active ? accent : dim, 300);
-  label(active ? title : tr("Pronto para dar o play"), 134, 374, 18, textc, 330);
-  label(active ? (artist[0] ? artist : tr("Reprodução local"))
-               : tr("Abra Músicas ou Vídeos para começar"),
-        134, 402, 12, muted, 330);
-  visualizer(134, 424, 200, 14, 34, on);
-  fill_circle(500, 398, 14, mix(elevated, textc, 0.05f));
-  media_ui_skip(500, 398, false);
-  play_button(524, 376, 44);
-  fill_circle(592, 398, 14, mix(elevated, textc, 0.05f));
-  media_ui_skip(592, 398, true);
+  /* Bottom large section: Weather (v2.0.6 default) or Full Player (inverted). */
+  if (home_layout_inverted)
+    draw_home_player_large();
+  else
+    draw_home_weather_large();
   footer_hints(NULL, 0);
 }
 static void draw_menu(void) {
+  if (menu_search_kb) {
+    draw_menu_search_keyboard();
+    return;
+  }
   backdrop();
-  draw_header(tr("BIBLIOTECA"));
-  panel_card(14, 46, 612, 68, 14);
-  icon(2, 28, 59, 22, accent);
+  draw_header(category == 2 ? tr("VÍDEOS") : tr("ARQUIVOS"));
+  panel_card(14, 38, 612, 66, 14);
+  icon(2, 26, 48, 22, accent);
   label(favorites_view   ? tr("Minhas favoritas")
         : locations_view   ? tr("Escolha o local das suas mídias")
         : automatic_view ? tr("Pastas: /roms(2)/bgmusic e /roms(2)/videos")
                          : folder,
-        62, 59, 15, textc, 548);
+        58, 47, 16, textc, 430);
+  if (!locations_view) {
+    char count[80];
+    snprintf(count, sizeof(count), tr("%d / %d itens"), total ? selected + 1 : 0, total);
+    label(count, 496, 50, 12, muted, 118);
+  }
   const char *tabs[] = {tr("Todos"), tr("Músicas"), tr("Vídeos")};
   for (int i = 0; i < 3; i++) {
-    pill(28 + i * 100, 86, 92, 21, i == category);
-    centered(tabs[i], 28 + i * 100, 90, 92, 12, i == category ? bg : muted);
+    pill(26 + i * 96, 75, 88, 23, i == category);
+    centered(tabs[i], 26 + i * 96, 80, 88, 13, i == category ? bg : muted);
+  }
+  if (!locations_view) {
+    char sbadge[96];
+    if (menu_search[0])
+      snprintf(sbadge, sizeof(sbadge), "Busca: %.24s  (L1 / R1 limpa)", menu_search);
+    else
+      snprintf(sbadge, sizeof(sbadge), "L1 • Pesquisar digitando");
+    rounded(322, 75, 290, 23, 10, menu_search[0] ? alpha(accent, 42) : elevated);
+    centered(sbadge, 326, 80, 282, 11, menu_search[0] ? accent : muted);
   }
   if (locations_view) {
     for (int i = 0; i < LOCATION_COUNT; i++) {
-      int y = 116 + i * 58;
+      int y = 112 + i * 59;
       bool focus = i == location_selected;
-      card(14, y, 612, 52, 10, focus, panel);
-      icon(2, 28, y + 14, 24, focus ? accent : muted);
-      label(tr(location_names[i]), 68, y + 8, 17, textc, 400);
-      label(location_paths[i], 68, y + 33, 11, muted, 400);
-      label(location_available[i] ? tr("Abrir") : tr("Indisponível"), 500,
-            y + 20, 12, location_available[i] ? accent : dim, 110);
+      card(14, y, 612, 53, 11, focus, panel);
+      icon(2, 28, y + 14, 26, focus ? accent : muted);
+      label(tr(location_names[i]), 68, y + 7, 19, textc, 410);
+      label(location_paths[i], 68, y + 32, 12, muted, 410);
+      label(location_available[i] ? tr("Abrir") : tr("Indisponível"), 494,
+            y + 18, 13, location_available[i] ? accent : dim, 118);
     }
-    label(tr("Selecione um local. Y verifica novamente os cartões."), 18, 418,
-          12, muted, 604);
-    const FooterHint hints[] = {{"B", "Abrir"}, {"A", "Início"}, {"DIR", "Filtro"},
-                                {"X", "Player"}, {"Y", "Atualizar"}, {"SELECT", "Opções"}};
-    footer_hints(hints, 6);
+    footer_hints(NULL, 0);
     return;
   }
   if (selected < offset)
     offset = selected;
-  if (selected >= offset + 6)
-    offset = selected - 5;
-  for (int row = 0; row < 6 && offset + row < total; row++) {
-    int i = offset + row, y = 126 + row * 49;
+  if (selected >= offset + 7)
+    offset = selected - 6;
+  for (int row = 0; row < 7 && offset + row < total; row++) {
+    int i = offset + row, y = 112 + row * 51;
     Item *it = &items[i];
     bool focus = i == selected;
-    card(14, y, 612, 44, 9, focus, panel);
+    card(14, y, 612, 46, 10, focus, panel);
     icon(it->dir                ? 2
          : audio_file(it->name) ? 0
                                 : 1,
-         28, y + 10, 24,
+         28, y + 11, 24,
          it->dir ? accent
          : focus ? accent
                  : muted);
-    label(it->name, 66, y + 7, 16, textc, 442);
+    label(it->name, 64, y + 6, 18, textc, 444);
     char s[48];
     if (it->dir)
       snprintf(s, sizeof(s), "%s", tr("Pasta"));
     else
       size_string(it->size, s, sizeof(s));
-    label(s, 527, y + 14, 12, muted, 87);
+    label(s, 520, y + 14, 13, muted, 94);
     label(it->dir                ? tr("Explorar pasta")
           : audio_file(it->name) ? tr("Áudio")
                                  : tr("Vídeo"),
-          66, y + 27, 10, dim, 400);
+          64, y + 28, 12, dim, 400);
   }
   if (!total) {
-    centered(folder_error[0] ? folder_error : tr("Nenhuma mídia neste filtro"),
-             14, 220, 612, 22, textc);
-    centered(tr("A volta. Esquerda/direita muda o filtro. Y atualiza."), 14,
-             259, 612, 14, muted);
+    centered(menu_search[0] ? "Nenhum item encontrado para a pesquisa"
+             : folder_error[0] ? folder_error : tr("Nenhuma mídia neste filtro"),
+             14, 224, 612, 22, textc);
+    centered(menu_search[0] ? "Pressione R1 para limpar a busca ou L1 para editar."
+                            : tr("A volta. Esquerda/direita muda o filtro. Y atualiza."),
+             14, 264, 612, 14, muted);
   }
-  char count[80];
-  snprintf(count, sizeof(count), tr("%d / %d itens"), total ? selected + 1 : 0,
-           total);
-  label(count, 18, 420, 11, dim, 200);
-  const FooterHint hints[] = {{"B", "Abrir"}, {"A", "Voltar"}, {"DIR", "Filtro"},
-                              {"X", "Player"}, {"Y", "Atualizar"}, {"SELECT", "Opções"}};
-  footer_hints(hints, 6);
+  footer_hints(NULL, 0);
 }
 /* Aligned audio screen: one album card, one switchable pane, one transport. */
 static void music_lines(const char *text, int x, int y, int width, int size,

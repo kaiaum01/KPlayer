@@ -31,6 +31,10 @@ import type { R36SButton } from './R36SControls';
 
 export interface IptvScreenHandle {
   handleButton: (btn: R36SButton) => void;
+  focusSearch: () => void;
+  cycleSource: () => void;
+  refreshCurrent: () => void;
+  openAddUrl: () => void;
 }
 
 interface IptvScreenProps {
@@ -93,7 +97,10 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
   const [itemSelected, setItemSelected] = useState<number>(0);
   const [itemsLoading, setItemsLoading] = useState<boolean>(false);
   const [itemQuery, setItemQuery] = useState<string>('');
+  const [catSearchQuery, setCatSearchQuery] = useState<string>('');
   const [visibleChunk, setVisibleChunk] = useState<number>(120);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const catSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Active series episodes (loaded on demand from shard, ALL seasons & ALL episodes)
   const [activeSeries, setActiveSeries] = useState<IptvChannel | null>(null);
@@ -176,15 +183,16 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
     setActiveCategory(null);
     setActiveSeries(null);
     setItemQuery('');
+    setCatSearchQuery('');
     loadCategories(activeSource.key, activeSource.key === 'usuario');
   }, [activeSource.key, loadCategories]);
 
   const openCategory = useCallback(
-    async (cat: IptvCategory, force = false) => {
+    async (cat: IptvCategory, force = false, initialQuery = '') => {
       const cacheKey = `${activeSource.key}:${cat.id}`;
       setActiveCategory(cat);
       setItemSelected(0);
-      setItemQuery('');
+      setItemQuery(initialQuery);
       setVisibleChunk(120);
       setView('items');
 
@@ -371,10 +379,42 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
     [language, loadCategories, notify]
   );
 
-  // R36S D-pad / button navigation handler
+  // R36S D-pad / button navigation handler + contextual Options hooks
   useImperativeHandle(
     ref,
     () => ({
+      focusSearch: () => {
+        if (view === 'items') {
+          window.setTimeout(() => searchInputRef.current?.focus(), 60);
+        } else {
+          const allCat = categories.find((c) => c.id === 'all') ?? categories[0];
+          if (allCat) {
+            void openCategory(allCat, false, catSearchQuery).then(() => {
+              window.setTimeout(() => searchInputRef.current?.focus(), 80);
+            });
+          } else {
+            window.setTimeout(() => catSearchInputRef.current?.focus(), 60);
+          }
+        }
+      },
+      cycleSource: () => {
+        setSourceIdx((s) => (s + 1) % SOURCES.length);
+      },
+      refreshCurrent: () => {
+        if (view === 'episodes' && activeSeries) {
+          void openSeriesEpisodes(activeSeries, true);
+        } else if (view === 'items' && activeCategory) {
+          void openCategory(activeCategory, true, itemQuery);
+        } else {
+          itemsCacheRef.current.clear();
+          void loadCategories(activeSource.key, true);
+        }
+      },
+      openAddUrl: () => {
+        setSourceIdx(3);
+        setKbError(null);
+        setShowKbModal(true);
+      },
       handleButton: (btn: R36SButton) => {
         if (epgModalChannel) {
           if (btn === 'A') setEpgModalChannel(null);
@@ -542,7 +582,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
 
       {/* ==================== STEP 1: CATEGORIES VIEW ==================== */}
       {view === 'categories' && (
-        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col">
+        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-3 flex flex-col">
           {/* User IPTV actions bar (Keyboard URL + Local folder upload) */}
           {activeSource.key === 'usuario' ? (
             <div className="mb-2 space-y-1.5 shrink-0">
@@ -613,14 +653,47 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
               )}
             </div>
           ) : (
-            <div className="flex items-center justify-between mb-1.5 shrink-0 gap-2">
-              <span style={{ color: theme.muted }} className="text-[12px] font-semibold truncate">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const q = catSearchQuery.trim();
+                const allCat = categories.find((c) => c.id === 'all') ?? categories[0];
+                if (allCat) void openCategory(allCat, false, q);
+              }}
+              className="flex flex-wrap items-center justify-between mb-2 shrink-0 gap-2"
+            >
+              <span style={{ color: theme.muted }} className="text-[13px] font-bold truncate">
                 {tr('Escolha a categoria', language)} ({categories.length})
               </span>
-              <span style={{ color: theme.dim }} className="text-[10px] shrink-0 hidden @min-[480px]:inline">
-                Carregamento sob demanda • Sem limite
-              </span>
-            </div>
+              <div className="flex items-center gap-1.5 w-full @min-[480px]:w-auto">
+                <input
+                  ref={catSearchInputRef}
+                  type="text"
+                  value={catSearchQuery}
+                  onChange={(e) => setCatSearchQuery(e.target.value)}
+                  placeholder={
+                    activeSource.key === 'series'
+                      ? 'Pesquisar série digitando...'
+                      : activeSource.key === 'filmes'
+                      ? 'Pesquisar filme digitando...'
+                      : 'Pesquisar canal de TV digitando...'
+                  }
+                  style={{
+                    backgroundColor: rgbToRgba(theme.elevated, 0.95),
+                    color: theme.text,
+                    border: `1px solid ${catSearchQuery ? theme.accent : themeHairline(theme)}`,
+                  }}
+                  className="flex-1 @min-[480px]:w-[220px] @min-[760px]:w-[260px] px-3 py-1.5 rounded-lg text-[12.5px] outline-none"
+                />
+                <button
+                  type="submit"
+                  style={{ ...modernPillStyle(theme, true), height: 32, paddingLeft: 12, paddingRight: 12 }}
+                  className="text-[11.5px] font-extrabold cursor-pointer shrink-0"
+                >
+                  Buscar
+                </button>
+              </div>
+            </form>
           )}
 
           {catLoading ? (
@@ -653,19 +726,19 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                     onMouseEnter={() => setCatSelected(idx)}
                     onClick={() => openCategory(cat, false)}
                     style={{
-                      ...modernCardStyle(theme, focus, 10),
-                      height: 44,
+                      ...modernCardStyle(theme, focus, 11),
+                      height: 50,
                     }}
-                    className="w-full px-3 flex items-center justify-between text-left cursor-pointer transition-all"
+                    className="w-full px-3.5 flex items-center justify-between text-left cursor-pointer transition-all"
                   >
                     <div className="min-w-0 pr-2">
                       <div
                         style={{ color: focus ? theme.accent : theme.text }}
-                        className="text-[13px] font-bold truncate"
+                        className="text-[14.5px] font-extrabold truncate"
                       >
                         {cat.name}
                       </div>
-                      <div style={{ color: theme.muted }} className="text-[9.5px] truncate">
+                      <div style={{ color: theme.muted }} className="text-[10.5px] truncate">
                         {cat.section}
                       </div>
                     </div>
@@ -674,7 +747,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                         color: focus ? theme.bg : theme.accent,
                         backgroundColor: focus ? theme.accent : rgbToRgba(theme.accent, 0.14),
                       }}
-                      className="text-[11px] font-extrabold px-2 py-0.5 rounded-md shrink-0"
+                      className="text-[12px] font-extrabold px-2.5 py-0.5 rounded-md shrink-0"
                     >
                       {cat.count.toLocaleString('pt-BR')}
                     </span>
@@ -688,7 +761,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
 
       {/* ==================== STEP 2: ITEMS IN CATEGORY ==================== */}
       {view === 'items' && (
-        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col">
+        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-3 flex flex-col">
           {/* Breadcrumb + Search bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
@@ -700,33 +773,57 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                   color: theme.text,
                   border: `1px solid ${themeHairline(theme)}`,
                 }}
-                className="px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer shrink-0"
+                className="px-2.5 py-1 rounded-lg text-[12px] font-bold cursor-pointer shrink-0"
               >
                 ← {tr('Categorias', language)}
               </button>
-              <span style={{ color: theme.accent }} className="text-[13px] font-extrabold truncate">
+              <span style={{ color: theme.accent }} className="text-[14px] font-extrabold truncate">
                 {activeCategory?.name}
               </span>
-              <span style={{ color: theme.muted }} className="text-[11px] shrink-0">
+              <span style={{ color: theme.muted }} className="text-[12px] shrink-0">
                 ({filteredItems.length.toLocaleString('pt-BR')})
               </span>
             </div>
-            <input
-              type="text"
-              value={itemQuery}
-              onChange={(e) => {
-                setItemQuery(e.target.value);
-                setItemSelected(0);
-                setVisibleChunk(120);
-              }}
-              placeholder={tr('Buscar nesta categoria...', language)}
-              style={{
-                backgroundColor: rgbToRgba(theme.elevated, 0.95),
-                color: theme.text,
-                border: `1px solid ${themeHairline(theme)}`,
-              }}
-              className="w-full @min-[480px]:w-[196px] @min-[760px]:w-[240px] px-2.5 py-1 rounded-md text-[11px] outline-none"
-            />
+            <div className="flex items-center gap-1.5 w-full @min-[480px]:w-auto">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={itemQuery}
+                onChange={(e) => {
+                  setItemQuery(e.target.value);
+                  setItemSelected(0);
+                  setVisibleChunk(120);
+                }}
+                placeholder={
+                  activeSource.key === 'series'
+                    ? 'Digite o nome da série...'
+                    : activeSource.key === 'filmes'
+                    ? 'Digite o nome do filme...'
+                    : 'Digite o nome do canal...'
+                }
+                style={{
+                  backgroundColor: rgbToRgba(theme.elevated, 0.95),
+                  color: theme.text,
+                  border: `1px solid ${itemQuery ? theme.accent : themeHairline(theme)}`,
+                }}
+                className="flex-1 @min-[480px]:w-[210px] @min-[760px]:w-[260px] px-3 py-1.5 rounded-lg text-[12.5px] outline-none"
+              />
+              {itemQuery && (
+                <button
+                  type="button"
+                  onClick={() => setItemQuery('')}
+                  style={{
+                    backgroundColor: rgbToRgba(theme.elevated, 0.9),
+                    color: theme.muted,
+                    border: `1px solid ${themeHairline(theme)}`,
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-[12px] font-bold cursor-pointer"
+                  title="Limpar pesquisa"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
 
           {itemsLoading ? (
@@ -996,7 +1093,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
 
       {/* ==================== STEP 3: SERIES EPISODES VIEW ==================== */}
       {view === 'episodes' && (
-        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-[52px] flex flex-col">
+        <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-3 flex flex-col">
           <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <button

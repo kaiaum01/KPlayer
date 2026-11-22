@@ -1,7 +1,21 @@
 {
   "schemaVersion": 2,
-  "latest": "2.0.5",
+  "latest": "2.0.6",
   "releases": [
+    {
+      "version": "2.0.6",
+      "releaseTag": "v2.0.6",
+      "releasedAt": "2026-11-22T14:00:00Z",
+      "r36s": "updates/v2.0.6/KPlayer-v2.0.6-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Clima Open-Meteo em destaque na parte inferior da tela inicial + Mini Player no topo (com opção de inverter nas Configurações)",
+        "Tutorial de Comandos na primeira inicialização + 'Rever comandos' nas Opções",
+        "Opções contextuais separadas por tela (Vídeo, Músicas, TV/IPTV e Rádio) e Opções gerais em ordem A–Z",
+        "Gerenciador de Arquivos, Placar da Bola, IPTV e Rádio otimizados com maior aproveitamento de tela e fontes ampliadas",
+        "Pesquisa digitando em Canais de TV, Séries, Filmes e Vídeos"
+      ]
+    },
     {
       "version": "2.0.5",
       "releaseTag": "v2.0.5",
@@ -12,7 +26,7 @@
         "Todos os updates das versões 2.0.2, 2.0.3 e 2.0.4 aplicados no binário nativo do R36S (C + SDL2)",
         "Reajustes finos no auto-updater R36S (cache-busting, retries, espelho GitHub Releases, SHA-256 e auto-reload do KPlayer.sh)",
         "Clima Open-Meteo nativo no botão X + widget no canto direito da Home",
-        "Opções em ordem alfabética (sem abas laterais), barra inferior removida + guia de Atalhos, EPG ao vivo no IPTV",
+        "Opções em ordem alfabética (sem abas laterais), barra inferior removida + guia de Comandos, EPG ao vivo no IPTV",
         "Workflow de updates/ e GitHub Releases 100% focado no R36S"
       ]
     },
@@ -24,7 +38,7 @@
       "sha256": "",
       "notes": [
         "App de Clima Open-Meteo no botão X + widget compacto na tela inicial",
-        "Barra inferior removida + lista de Atalhos nas Opções",
+        "Barra inferior removida + lista de comandos nas Opções",
         "Opções em ordem alfabética com Verificar atualizações (A) em penúltimo e Sair por último"
       ]
     },

@@ -13,6 +13,7 @@
 #define IPTV_VIEW_ITEMS 1
 #define IPTV_VIEW_EPISODES 2
 #define IPTV_VIEW_KEYBOARD 3
+#define IPTV_VIEW_SEARCH_KB 4
 
 #define IPTV_JOB_NONE 0
 #define IPTV_JOB_CATS 1
@@ -58,6 +59,41 @@ static char iptv_active_series_shard[32] = "";
 static char iptv_kb_url[512] = "https://";
 static int iptv_kb_row = 2;
 static int iptv_kb_col = 0;
+
+/* Typing search state for Canais de TV, Filmes e Séries (v2.0.6) */
+static char iptv_search_query[64] = "";
+static int iptv_search_return_view = IPTV_VIEW_CATS;
+static int iptv_skb_row = 1;
+static int iptv_skb_col = 0;
+
+static const char *iptv_skb_rows[5][10] = {
+    {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
+    {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
+    {"a", "s", "d", "f", "g", "h", "j", "k", "l", "-"},
+    {"z", "x", "c", "v", "b", "n", "m", " ", NULL, NULL},
+    {"BUSCAR", "APAGAR", "LIMPAR", "VOLTAR", NULL, NULL, NULL, NULL, NULL, NULL},
+};
+
+static bool iptv_contains_ci(const char *hay, const char *needle) {
+  if (!needle || !needle[0]) return true;
+  if (!hay || !hay[0]) return false;
+  size_t nlen = strlen(needle);
+  for (const char *p = hay; *p; p++) {
+    size_t j = 0;
+    while (j < nlen && p[j] &&
+           tolower((unsigned char)p[j]) == tolower((unsigned char)needle[j]))
+      j++;
+    if (j == nlen) return true;
+  }
+  return false;
+}
+
+static int iptv_skb_row_len(int row) {
+  if (row < 0 || row >= 5) return 0;
+  int n = 0;
+  while (n < 10 && iptv_skb_rows[row][n]) n++;
+  return n;
+}
 
 /* Off-thread worker synchronization */
 typedef struct {
@@ -649,7 +685,120 @@ static int iptv_cat_total_rows(void) {
   return iptv_cat_count + (iptv_source == 3 ? 1 : 0);
 }
 
+static int iptv_filtered_count(const IptvChannel *list, int total_n) {
+  if (!iptv_search_query[0]) return total_n;
+  int cnt = 0;
+  for (int i = 0; i < total_n; i++) {
+    if (iptv_contains_ci(list[i].name, iptv_search_query) ||
+        iptv_contains_ci(list[i].group, iptv_search_query))
+      cnt++;
+  }
+  return cnt;
+}
+
+static int iptv_filtered_index(const IptvChannel *list, int total_n, int pos) {
+  if (!iptv_search_query[0]) return (pos >= 0 && pos < total_n) ? pos : -1;
+  int cur = 0;
+  for (int i = 0; i < total_n; i++) {
+    if (iptv_contains_ci(list[i].name, iptv_search_query) ||
+        iptv_contains_ci(list[i].group, iptv_search_query)) {
+      if (cur == pos) return i;
+      cur++;
+    }
+  }
+  return -1;
+}
+
+static void iptv_open_search_kb(void) {
+  if (iptv_view != IPTV_VIEW_SEARCH_KB && iptv_view != IPTV_VIEW_KEYBOARD)
+    iptv_search_return_view = iptv_view;
+  iptv_skb_row = 1;
+  iptv_skb_col = 0;
+  iptv_view = IPTV_VIEW_SEARCH_KB;
+}
+
+static void iptv_clear_search(void) {
+  iptv_search_query[0] = 0;
+  iptv_selected = iptv_offset = 0;
+  iptv_ep_selected = iptv_ep_offset = 0;
+}
+
+static void iptv_open_add_url_kb(void) {
+  iptv_source = 3;
+  snprintf(iptv_kb_url, sizeof(iptv_kb_url), "https://");
+  iptv_kb_row = 2;
+  iptv_kb_col = 0;
+  iptv_view = IPTV_VIEW_KEYBOARD;
+}
+
+static void iptv_refresh_current(void) {
+  if (iptv_view == IPTV_VIEW_EPISODES && iptv_active_series_title[0]) {
+    iptv_fetch_episodes_start(iptv_active_series_letter, iptv_active_series_shard,
+                              iptv_active_series_title, true);
+  } else if (iptv_view == IPTV_VIEW_ITEMS && iptv_active_cat_id[0]) {
+    iptv_fetch_items_start(iptv_active_cat_id, iptv_active_cat_name, true);
+  } else {
+    iptv_fetch_categories_start(true);
+  }
+}
+
+static void iptv_apply_search_submit(void) {
+  iptv_selected = iptv_offset = 0;
+  iptv_ep_selected = iptv_ep_offset = 0;
+  if (iptv_search_return_view == IPTV_VIEW_CATS && iptv_search_query[0] && iptv_cat_count > 0) {
+    /* Prefer opening "all" / first category so user immediately sees matching channels/series */
+    int pick = 0;
+    for (int i = 0; i < iptv_cat_count; i++) {
+      if (!strcmp(iptv_cats[i].id, "all")) { pick = i; break; }
+    }
+    iptv_fetch_items_start(iptv_cats[pick].id, iptv_cats[pick].name, false);
+    return;
+  }
+  iptv_view = iptv_search_return_view;
+}
+
 static void iptv_key(SDL_Keycode k) {
+  if (iptv_view == IPTV_VIEW_SEARCH_KB) {
+    int rlen = iptv_skb_row_len(iptv_skb_row);
+    if (k == SDLK_UP) {
+      iptv_skb_row = (iptv_skb_row + 4) % 5;
+      int nl = iptv_skb_row_len(iptv_skb_row);
+      if (iptv_skb_col >= nl) iptv_skb_col = nl - 1;
+    } else if (k == SDLK_DOWN) {
+      iptv_skb_row = (iptv_skb_row + 1) % 5;
+      int nl = iptv_skb_row_len(iptv_skb_row);
+      if (iptv_skb_col >= nl) iptv_skb_col = nl - 1;
+    } else if (k == SDLK_LEFT && rlen > 0) {
+      iptv_skb_col = (iptv_skb_col + rlen - 1) % rlen;
+    } else if (k == SDLK_RIGHT && rlen > 0) {
+      iptv_skb_col = (iptv_skb_col + 1) % rlen;
+    } else if (k == SDLK_SPACE) {
+      size_t len = strlen(iptv_search_query);
+      if (len > 0) iptv_search_query[len - 1] = 0;
+    } else if (k == SDLK_BACKSPACE) {
+      iptv_view = iptv_search_return_view;
+    } else if (k == SDLK_RETURN) {
+      const char *tok = iptv_skb_rows[iptv_skb_row][iptv_skb_col];
+      if (!tok) return;
+      if (!strcmp(tok, "APAGAR")) {
+        size_t len = strlen(iptv_search_query);
+        if (len > 0) iptv_search_query[len - 1] = 0;
+      } else if (!strcmp(tok, "LIMPAR")) {
+        iptv_search_query[0] = 0;
+      } else if (!strcmp(tok, "BUSCAR")) {
+        iptv_apply_search_submit();
+      } else if (!strcmp(tok, "VOLTAR")) {
+        iptv_view = iptv_search_return_view;
+      } else {
+        size_t len = strlen(iptv_search_query);
+        size_t add = strlen(tok);
+        if (len + add + 1 < sizeof(iptv_search_query))
+          memcpy(iptv_search_query + len, tok, add + 1);
+      }
+    }
+    return;
+  }
+
   if (iptv_view == IPTV_VIEW_KEYBOARD) {
     int rlen = iptv_kb_row_len(iptv_kb_row);
     if (k == SDLK_UP) {
@@ -688,18 +837,22 @@ static void iptv_key(SDL_Keycode k) {
       iptv_cat_selected = (iptv_cat_selected + 1) % total;
     else if (k == SDLK_RETURN) {
       if (iptv_source == 3 && iptv_cat_selected == 0) {
-        snprintf(iptv_kb_url, sizeof(iptv_kb_url), "https://");
-        iptv_kb_row = 2;
-        iptv_kb_col = 0;
-        iptv_view = IPTV_VIEW_KEYBOARD;
+        iptv_open_add_url_kb();
       } else {
         int idx = iptv_source == 3 ? iptv_cat_selected - 1 : iptv_cat_selected;
         if (idx >= 0 && idx < iptv_cat_count)
           iptv_fetch_items_start(iptv_cats[idx].id, iptv_cats[idx].name, false);
       }
+    } else if (k == SDLK_q) {
+      iptv_open_search_kb();
+    } else if (k == SDLK_e && iptv_search_query[0]) {
+      iptv_clear_search();
+      notify("Pesquisa limpa");
     } else if (k == SDLK_LEFT && !radio_play_is_busy()) {
+      iptv_clear_search();
       iptv_switch_source(-1);
     } else if ((k == SDLK_RIGHT || k == SDLK_SPACE) && !radio_play_is_busy()) {
+      iptv_clear_search();
       iptv_switch_source(1);
     } else if (k == SDLK_m && !radio_play_is_busy()) {
       iptv_fetch_categories_start(true);
@@ -710,23 +863,39 @@ static void iptv_key(SDL_Keycode k) {
   }
 
   if (iptv_view == IPTV_VIEW_ITEMS) {
-    if (k == SDLK_UP && iptv_count > 0)
-      iptv_selected = (iptv_selected + iptv_count - 1) % iptv_count;
-    else if (k == SDLK_DOWN && iptv_count > 0)
-      iptv_selected = (iptv_selected + 1) % iptv_count;
-    else if (k == SDLK_RETURN && iptv_count > 0 && iptv_selected < iptv_count) {
-      IptvChannel *ch = &iptv_channels[iptv_selected];
-      char ltr[16] = "", sh[32] = "";
-      if (iptv_parse_series_id(ch, ltr, sizeof(ltr), sh, sizeof(sh))) {
-        iptv_fetch_episodes_start(ltr, sh, ch->name, false);
-      } else {
-        iptv_play_channel(ch);
+    int vis_n = iptv_filtered_count(iptv_channels, iptv_count);
+    if (k == SDLK_UP && vis_n > 0)
+      iptv_selected = (iptv_selected + vis_n - 1) % vis_n;
+    else if (k == SDLK_DOWN && vis_n > 0)
+      iptv_selected = (iptv_selected + 1) % vis_n;
+    else if (k == SDLK_RETURN && vis_n > 0) {
+      int real_idx = iptv_filtered_index(iptv_channels, iptv_count, iptv_selected);
+      if (real_idx >= 0 && real_idx < iptv_count) {
+        IptvChannel *ch = &iptv_channels[real_idx];
+        char ltr[16] = "", sh[32] = "";
+        if (iptv_parse_series_id(ch, ltr, sizeof(ltr), sh, sizeof(sh))) {
+          iptv_clear_search();
+          iptv_fetch_episodes_start(ltr, sh, ch->name, false);
+        } else {
+          iptv_play_channel(ch);
+        }
       }
+    } else if (k == SDLK_q) {
+      iptv_open_search_kb();
+    } else if (k == SDLK_e && iptv_search_query[0]) {
+      iptv_clear_search();
+      notify("Pesquisa limpa");
     } else if (k == SDLK_BACKSPACE && !radio_play_is_busy()) {
-      iptv_view = IPTV_VIEW_CATS;
+      if (iptv_search_query[0]) {
+        iptv_clear_search();
+      } else {
+        iptv_view = IPTV_VIEW_CATS;
+      }
     } else if (k == SDLK_LEFT && !radio_play_is_busy()) {
+      iptv_clear_search();
       iptv_switch_source(-1);
     } else if ((k == SDLK_RIGHT || k == SDLK_SPACE) && !radio_play_is_busy()) {
+      iptv_clear_search();
       iptv_switch_source(1);
     } else if (k == SDLK_m && !radio_play_is_busy() && iptv_active_cat_id[0]) {
       iptv_fetch_items_start(iptv_active_cat_id, iptv_active_cat_name, true);
@@ -735,15 +904,24 @@ static void iptv_key(SDL_Keycode k) {
   }
 
   /* IPTV_VIEW_EPISODES */
-  if (k == SDLK_UP && iptv_ep_count > 0)
-    iptv_ep_selected = (iptv_ep_selected + iptv_ep_count - 1) % iptv_ep_count;
-  else if (k == SDLK_DOWN && iptv_ep_count > 0)
-    iptv_ep_selected = (iptv_ep_selected + 1) % iptv_ep_count;
-  else if (k == SDLK_RETURN && iptv_ep_count > 0 && iptv_ep_selected < iptv_ep_count)
-    iptv_play_channel(&iptv_episodes[iptv_ep_selected]);
-  else if (k == SDLK_BACKSPACE && !radio_play_is_busy())
-    iptv_view = IPTV_VIEW_ITEMS;
-  else if (k == SDLK_m && !radio_play_is_busy() && iptv_active_series_title[0])
+  int vis_ep = iptv_filtered_count(iptv_episodes, iptv_ep_count);
+  if (k == SDLK_UP && vis_ep > 0)
+    iptv_ep_selected = (iptv_ep_selected + vis_ep - 1) % vis_ep;
+  else if (k == SDLK_DOWN && vis_ep > 0)
+    iptv_ep_selected = (iptv_ep_selected + 1) % vis_ep;
+  else if (k == SDLK_RETURN && vis_ep > 0) {
+    int real_idx = iptv_filtered_index(iptv_episodes, iptv_ep_count, iptv_ep_selected);
+    if (real_idx >= 0 && real_idx < iptv_ep_count)
+      iptv_play_channel(&iptv_episodes[real_idx]);
+  } else if (k == SDLK_q) {
+    iptv_open_search_kb();
+  } else if (k == SDLK_e && iptv_search_query[0]) {
+    iptv_clear_search();
+    notify("Pesquisa limpa");
+  } else if (k == SDLK_BACKSPACE && !radio_play_is_busy()) {
+    if (iptv_search_query[0]) iptv_clear_search();
+    else iptv_view = IPTV_VIEW_ITEMS;
+  } else if (k == SDLK_m && !radio_play_is_busy() && iptv_active_series_title[0])
     iptv_fetch_episodes_start(iptv_active_series_letter, iptv_active_series_shard,
                               iptv_active_series_title, true);
 }
@@ -827,6 +1005,44 @@ static void draw_iptv_keyboard(void) {
   footer_hints(hints, 4);
 }
 
+static void draw_iptv_search_keyboard(void) {
+  backdrop();
+  draw_header(tr("PESQUISAR IPTV"));
+  char ttl[96];
+  snprintf(ttl, sizeof(ttl), "Pesquisar em %s", iptv_source_label(iptv_source));
+  label(ttl, 24, 42, 22, textc, 420);
+  label("Digite o nome do canal, filme ou série e selecione BUSCAR", 24, 70, 12, muted, 580);
+
+  card(24, 94, 592, 42, 10, true, elevated);
+  char shown[96];
+  snprintf(shown, sizeof(shown), "Busca: %.63s_", iptv_search_query);
+  label(shown, 38, 105, 16, accent, 560);
+
+  for (int r = 0; r < 5; r++) {
+    int cols = iptv_skb_row_len(r);
+    int y = 152 + r * 54;
+    if (r == 4) {
+      int w = 142;
+      for (int c = 0; c < cols; c++) {
+        int x = 24 + c * 150;
+        bool focus = (r == iptv_skb_row && c == iptv_skb_col);
+        card(x, y, w, 42, 10, focus, panel);
+        centered(iptv_skb_rows[r][c], x + 4, y + 12, w - 8, 14, focus ? accent : textc);
+      }
+    } else {
+      int w = 55;
+      for (int c = 0; c < cols; c++) {
+        int x = 24 + c * 59;
+        bool focus = (r == iptv_skb_row && c == iptv_skb_col);
+        card(x, y, w, 42, 9, focus, panel);
+        const char *lbl = !strcmp(iptv_skb_rows[r][c], " ") ? "ESP" : iptv_skb_rows[r][c];
+        centered(lbl, x + 2, y + 11, w - 4, strlen(lbl) > 2 ? 12 : 16, focus ? accent : textc);
+      }
+    }
+  }
+  footer_hints(NULL, 0);
+}
+
 static void draw_iptv(void) {
   iptv_poll_worker_result();
   pthread_mutex_lock(&iptv_fetch_mutex);
@@ -838,149 +1054,162 @@ static void draw_iptv(void) {
     draw_iptv_keyboard();
     return;
   }
+  if (iptv_view == IPTV_VIEW_SEARCH_KB) {
+    draw_iptv_search_keyboard();
+    return;
+  }
 
   backdrop();
   draw_header(tr("IPTV"));
-  label(iptv_source_label(iptv_source), 24, 42, 20, textc, 220);
-  label(iptv_source_subtitle(iptv_source), 24, 66, 10, dim, 250);
+  label(iptv_source_label(iptv_source), 18, 40, 22, textc, 220);
+  label(iptv_source_subtitle(iptv_source), 18, 66, 11, dim, 250);
 
   /* Four source tabs: Canais | Filmes | Séries | Usuário */
-  const int tab_x[4] = {276, 360, 444, 528};
-  const int tab_w = 80;
+  const int tab_x[4] = {276, 362, 448, 534};
+  const int tab_w = 82;
   for (int s = 0; s < 4; s++) {
-    pill(tab_x[s], 46, tab_w, 24, iptv_source == s);
-    centered(iptv_source_label(s), tab_x[s] + 2, 52, tab_w - 4, 11,
+    pill(tab_x[s], 44, tab_w, 26, iptv_source == s);
+    centered(iptv_source_label(s), tab_x[s] + 2, 50, tab_w - 4, 12,
              iptv_source == s ? bg : muted);
   }
 
   if (iptv_view == IPTV_VIEW_CATS) {
-    label(iptv_source == 3 ? tr("Coloque arquivos .m3u/.m3u8 em iptv_usuario/")
+    label(iptv_source == 3 ? tr("Coloque .m3u/.m3u8 em iptv_usuario/")
                            : tr("Escolha a categoria"),
-          24, 88, 13, muted, 560);
+          18, 84, 14, muted, 330);
+    rounded(366, 80, 254, 24, 10, iptv_search_query[0] ? alpha(accent, 42) : elevated);
+    char sbtn[88];
+    if (iptv_search_query[0]) snprintf(sbtn, sizeof(sbtn), "Busca: %.18s (L1/R1)", iptv_search_query);
+    else snprintf(sbtn, sizeof(sbtn), "L1 • Pesquisar digitando");
+    centered(sbtn, 370, 86, 246, 11, iptv_search_query[0] ? accent : muted);
+
     int total = iptv_cat_total_rows();
     if (iptv_cat_selected >= total && total > 0) iptv_cat_selected = total - 1;
     if (iptv_cat_selected < iptv_cat_offset) iptv_cat_offset = iptv_cat_selected;
-    if (iptv_cat_selected >= iptv_cat_offset + 6) iptv_cat_offset = iptv_cat_selected - 5;
+    if (iptv_cat_selected >= iptv_cat_offset + 7) iptv_cat_offset = iptv_cat_selected - 6;
 
     if (total == 0) {
       centered(busy ? tr("Carregando categorias...") : tr("Nenhum item encontrado"),
-               25, 210, 590, 20, muted);
-      centered(tr("Pressione Y para atualizar"), 25, 247, 590, 14, muted);
+               25, 220, 590, 21, muted);
+      centered(tr("Pressione Y para atualizar"), 25, 258, 590, 15, muted);
     } else {
-      for (int row = 0; row < 6 && iptv_cat_offset + row < total; row++) {
-        int pos = iptv_cat_offset + row, y = 114 + row * 48;
+      for (int row = 0; row < 7 && iptv_cat_offset + row < total; row++) {
+        int pos = iptv_cat_offset + row, y = 112 + row * 51;
         bool focus = pos == iptv_cat_selected;
-        card(24, y, 592, 42, 9, focus, panel);
+        card(18, y, 604, 46, 10, focus, panel);
         if (iptv_source == 3 && pos == 0) {
-          label(tr("+ Adicionar URL pelo teclado"), 42, y + 10, 15, accent, 480);
-          label(tr("Teclado"), 520, y + 12, 12, focus ? accent : muted, 84);
+          label(tr("+ Adicionar URL pelo teclado"), 36, y + 12, 17, accent, 470);
+          label(tr("Teclado"), 520, y + 14, 13, focus ? accent : muted, 88);
         } else {
           int ci = iptv_source == 3 ? pos - 1 : pos;
-          label(iptv_cats[ci].name, 42, y + 10, 15, focus ? accent : textc, 468);
+          label(iptv_cats[ci].name, 36, y + 12, 17, focus ? accent : textc, 476);
           char n[32];
           snprintf(n, sizeof(n), "%d", iptv_cats[ci].count);
-          label(n, 526, y + 11, 13, muted, 78);
+          label(n, 530, y + 13, 14, muted, 78);
         }
       }
     }
-    if (radio_play_is_busy()) label(tr("Conectando canal..."), 24, 417, 13, accent, 500);
+    if (radio_play_is_busy()) label(tr("Conectando canal..."), 18, 463, 12, accent, 500);
     else if (busy && fetching_source == iptv_source)
-      label(tr("Carregando categorias..."), 24, 417, 13, accent, 500);
-    const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Abrir"}, {"X", "Alternar"},
-                                {"Y", "Atualizar"}, {"A", "Voltar"}};
-    footer_hints(hints, 5);
+      label(tr("Carregando categorias..."), 18, 463, 12, accent, 500);
+    footer_hints(NULL, 0);
     return;
   }
 
   /* Shared list renderer for IPTV_VIEW_ITEMS and IPTV_VIEW_EPISODES */
   bool is_ep_view = (iptv_view == IPTV_VIEW_EPISODES);
   IptvChannel *list = is_ep_view ? iptv_episodes : iptv_channels;
-  int list_count = is_ep_view ? iptv_ep_count : iptv_count;
+  int raw_count = is_ep_view ? iptv_ep_count : iptv_count;
+  int list_count = iptv_filtered_count(list, raw_count);
   int *sel = is_ep_view ? &iptv_ep_selected : &iptv_selected;
   int *off = is_ep_view ? &iptv_ep_offset : &iptv_offset;
 
-  char subhdr[200];
-  snprintf(subhdr, sizeof(subhdr), "%s (%d)",
+  char subhdr[220];
+  snprintf(subhdr, sizeof(subhdr), "%.140s (%d)",
            is_ep_view ? iptv_active_series_title : iptv_active_cat_name, list_count);
-  label(subhdr, 24, 88, 14, accent, 580);
+  label(subhdr, 18, 84, 15, accent, 340);
+
+  rounded(366, 80, 254, 24, 10, iptv_search_query[0] ? alpha(accent, 42) : elevated);
+  char sbtn[88];
+  if (iptv_search_query[0]) snprintf(sbtn, sizeof(sbtn), "Busca: %.18s (R1 limpa)", iptv_search_query);
+  else snprintf(sbtn, sizeof(sbtn), "L1 • Pesquisar digitando");
+  centered(sbtn, 370, 86, 246, 11, iptv_search_query[0] ? accent : muted);
 
   if (list_count == 0) {
     centered(busy ? (is_ep_view ? tr("Carregando episódios...") : tr("Carregando lista..."))
-                  : (is_ep_view ? tr("Nenhum episódio encontrado") : tr("Nenhum canal nesta categoria")),
-             25, 210, 590, 19, muted);
-    centered(tr("Pressione Y para atualizar"), 25, 247, 590, 14, muted);
+                  : (iptv_search_query[0] ? "Nenhum resultado encontrado na busca"
+                                          : (is_ep_view ? tr("Nenhum episódio encontrado") : tr("Nenhum canal nesta categoria"))),
+             25, 220, 590, 20, muted);
+    centered(iptv_search_query[0] ? "Pressione R1 para limpar a busca ou L1 para editar"
+                                  : tr("Pressione Y para atualizar"),
+             25, 258, 590, 14, muted);
   } else {
     if (*sel >= list_count) *sel = list_count - 1;
     if (*sel < *off) *off = *sel;
-    if (*sel >= *off + 6) *off = *sel - 5;
-    IptvChannel *channel = &list[*sel];
+    if (*sel >= *off + 7) *off = *sel - 6;
+    int real_sel = iptv_filtered_index(list, raw_count, *sel);
+    IptvChannel *channel = &list[real_sel >= 0 ? real_sel : 0];
     if (!is_ep_view && iptv_source == 0) iptv_epg_maybe_fetch(channel);
-    panel_card(24, 114, 200, 336, 16);
-    rounded(47, 128, 154, 102, 8, elevated);
+    panel_card(18, 112, 206, 354, 16);
+    rounded(40, 124, 162, 104, 8, elevated);
     radio_update_art(channel->logo);
     if (radio_art_texture && channel->logo[0] && !strcmp(radio_art_display_url, channel->logo)) {
-      SDL_Rect dst = {52, 133, 144, 92};
+      SDL_Rect dst = {45, 129, 152, 94};
       SDL_RenderCopy(renderer, radio_art_texture, NULL, &dst);
     } else {
-      centered(tr("Sem imagem"), 52, 168, 144, 14, muted);
+      centered(tr("Sem imagem"), 45, 166, 152, 14, muted);
     }
-    centered(channel->name, 35, 238, 178, 14, textc);
-    label(is_ep_view ? tr("Temporada") : tr("Categoria"), 36, 266, 11, muted, 170);
-    label(channel->group[0] ? channel->group : "--", 36, 282, 12, textc, 170);
+    centered(channel->name, 28, 236, 186, 15, textc);
+    label(is_ep_view ? tr("Temporada") : tr("Categoria"), 30, 266, 11, muted, 180);
+    label(channel->group[0] ? channel->group : "--", 30, 283, 13, textc, 180);
     if (!is_ep_view && iptv_source == 0) {
       pthread_mutex_lock(&iptv_epg_mutex);
       char e_nt[24], e_np[128], e_xt[24], e_xp[128];
       bool e_busy = iptv_epg_busy;
-      snprintf(e_nt, sizeof(e_nt), "%s", iptv_epg_now_time);
-      snprintf(e_np, sizeof(e_np), "%s", iptv_epg_now_title);
-      snprintf(e_xt, sizeof(e_xt), "%s", iptv_epg_next_time);
-      snprintf(e_xp, sizeof(e_xp), "%s", iptv_epg_next_title);
+      snprintf(e_nt, sizeof(e_nt), "%.23s", iptv_epg_now_time);
+      snprintf(e_np, sizeof(e_np), "%.127s", iptv_epg_now_title);
+      snprintf(e_xt, sizeof(e_xt), "%.23s", iptv_epg_next_time);
+      snprintf(e_xp, sizeof(e_xp), "%.127s", iptv_epg_next_title);
       pthread_mutex_unlock(&iptv_epg_mutex);
-      label("EPG • AGORA", 36, 308, 10, accent, 170);
+      label("EPG • AGORA", 30, 312, 11, accent, 180);
       if (e_np[0]) {
-        label(e_np, 36, 324, 12, textc, 174);
-        if (e_nt[0]) label(e_nt, 36, 341, 10, muted, 174);
+        label(e_np, 30, 329, 13, textc, 182);
+        if (e_nt[0]) label(e_nt, 30, 348, 11, muted, 182);
       } else {
-        label(e_busy ? "Carregando guia..." : "Guia indisponível", 36, 324, 11, muted, 174);
+        label(e_busy ? "Carregando guia..." : "Guia indisponível", 30, 329, 12, muted, 182);
       }
       if (e_xp[0]) {
-        label("A SEGUIR", 36, 366, 10, dim, 170);
-        label(e_xp, 36, 381, 11, muted, 174);
-        if (e_xt[0]) label(e_xt, 36, 397, 10, dim, 174);
+        label("A SEGUIR", 30, 376, 11, dim, 180);
+        label(e_xp, 30, 393, 12, muted, 182);
+        if (e_xt[0]) label(e_xt, 30, 411, 11, dim, 182);
       }
     } else {
-      label(tr("Detalhes"), 36, 312, 12, muted, 170);
-      /* Display clean details (strip internal series:<L>:<shard>: prefix if present) */
+      label(tr("Detalhes"), 30, 316, 12, muted, 180);
       const char *detail = channel->id;
       if (!strncmp(detail, "series:", 7)) {
         const char *c1 = strchr(detail + 7, ':');
         const char *c2 = c1 ? strchr(c1 + 1, ':') : NULL;
         if (c2 && c2[1]) detail = c2 + 1;
       }
-      label(detail[0] ? detail : "--", 36, 331, 12, accent, 170);
+      label(detail[0] ? detail : "--", 30, 336, 13, accent, 182);
     }
 
     for (int row = 0; row < 7 && *off + row < list_count; row++) {
-      int idx = *off + row, y = 114 + row * 48;
-      bool focus = idx == *sel;
-      card(238, y, 378, 41, 10, focus, panel);
+      int pos = *off + row, y = 112 + row * 51;
+      int idx = iptv_filtered_index(list, raw_count, pos);
+      if (idx < 0) continue;
+      bool focus = pos == *sel;
+      card(236, y, 386, 46, 10, focus, panel);
       char number[24];
-      snprintf(number, sizeof(number), "%d", idx + 1);
-      label(number, 249, y + 12, 13, focus ? accent : muted, 44);
-      label(list[idx].name, 296, y + 6, 14, textc, 308);
-      if (list[idx].group[0]) label(list[idx].group, 296, y + 25, 10, muted, 308);
+      snprintf(number, sizeof(number), "%d", pos + 1);
+      label(number, 248, y + 13, 14, focus ? accent : muted, 44);
+      label(list[idx].name, 294, y + 6, 16, textc, 318);
+      if (list[idx].group[0]) label(list[idx].group, 294, y + 27, 11, muted, 318);
     }
   }
 
-  if (radio_play_is_busy()) label(tr("Conectando canal..."), 24, 417, 13, accent, 500);
+  if (radio_play_is_busy()) label(tr("Conectando canal..."), 18, 464, 12, accent, 500);
   else if (busy) label(is_ep_view ? tr("Carregando episódios...") : tr("Carregando lista..."),
-                       24, 417, 13, accent, 500);
-  const FooterHint hints[] = {
-      {"DIR", "Navegar"},
-      {"B", (!is_ep_view && iptv_source == 2) ? "Episódios" : "Assistir"},
-      {"X", "Alternar"},
-      {"Y", "Atualizar"},
-      {"A", is_ep_view ? "Séries" : "Categorias"},
-  };
-  footer_hints(hints, 5);
+                       18, 464, 12, accent, 500);
+  footer_hints(NULL, 0);
 }

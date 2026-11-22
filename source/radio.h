@@ -737,10 +737,9 @@ static void draw_radio(void) {
   }
   pthread_mutex_unlock(&radio_mutex);
 
-  /* Player on the left, station browser on the right. */
+  /* Player on the left, station browser on the right (full-height optimized). */
   radio_update_art(featured.favicon);
-  panel_card(16, 46, 224, 384, 16);
-  /* Tuner: vinyl with live pulse; station logo on the label when known. */
+  panel_card(16, 42, 224, 424, 16);
   bool on_air = playing_radio && active && !paused;
   pulse(128, 128, 62, on_air);
   vinyl(128, 128, 62, on_air);
@@ -749,33 +748,33 @@ static void draw_radio(void) {
     SDL_Rect logo = {108, 108, 40, 40};
     SDL_RenderCopy(renderer, radio_art_texture, NULL, &logo);
   }
-  rounded(78, 198, 100, 18, 9, on_air ? accent : elevated);
-  centered(playing_radio ? tr("AO VIVO") : tr("RÁDIO ONLINE"), 78, 201,
-           100, 10, on_air ? bg : muted);
+  rounded(74, 200, 108, 20, 10, on_air ? accent : elevated);
+  centered(playing_radio ? tr("AO VIVO") : tr("RÁDIO ONLINE"), 74, 203,
+           108, 11, on_air ? bg : muted);
   if (featured.name[0]) {
-    centered(featured.name, 28, 226, 200, 17, textc);
+    centered(featured.name, 26, 230, 204, 18, textc);
     centered(playing_radio && radio_nowplaying[0] ? radio_nowplaying :
-             (featured.tags[0] ? featured.tags : tr("Estação online")), 28,
-             252, 200, 11, muted);
-    centered(featured.country[0] ? featured.country : tr("Internet"), 28, 272,
-             200, 11, muted);
+             (featured.tags[0] ? featured.tags : tr("Estação online")), 26,
+             258, 204, 12, muted);
+    centered(featured.country[0] ? featured.country : tr("Internet"), 26, 280,
+             204, 12, muted);
     char technical[96];
-    snprintf(technical, sizeof(technical), "%s  •  %d kbps",
+    snprintf(technical, sizeof(technical), "%.31s  •  %d kbps",
              featured.codec[0] ? featured.codec : "STREAM", featured.bitrate);
-    rounded(48, 292, 160, 23, 11, mix(elevated, accent, 0.15f));
-    centered(technical, 52, 298, 152, 11, accent);
-    visualizer(40, 322, 176, 12, 30, on_air);
+    rounded(46, 304, 164, 25, 12, mix(elevated, accent, 0.15f));
+    centered(technical, 50, 310, 156, 12, accent);
+    visualizer(40, 340, 176, 14, 30, on_air);
   } else
     centered(loading ? tr("Buscando estações...")
                      : tr("Nenhuma estação encontrada"),
-             28, 246, 200, 13, muted);
-  int control_y = 356;
-  fill_circle(82, control_y, 13, mix(elevated, textc, 0.05f));
+             26, 256, 204, 14, muted);
+  int control_y = 382;
+  fill_circle(82, control_y, 14, mix(elevated, textc, 0.05f));
   media_ui_skip(82, control_y, false);
-  play_disc(128, control_y, 20, playing_radio && active && !paused);
-  fill_circle(174, control_y, 13, mix(elevated, textc, 0.05f));
+  play_disc(128, control_y, 21, playing_radio && active && !paused);
+  fill_circle(174, control_y, 14, mix(elevated, textc, 0.05f));
   media_ui_skip(174, control_y, true);
-  rounded(48, 390, 160, 22, 11, elevated);
+  rounded(44, 420, 168, 26, 12, elevated);
   const char *play_status = tr("B  Ouvir estação");
   if (radio_retry_waiting) play_status = tr("Reconectando...");
   if (radio_play_is_busy()) play_status = "Conectando...";
@@ -783,55 +782,78 @@ static void draw_radio(void) {
     libvlc_state_t state = libvlc_media_player_get_state(player);
     play_status = state == libvlc_Playing ? tr("Transmitindo agora") : "Conectando...";
   }
-  centered(play_status, 52, 396, 152, 10, playing_radio ? accent : muted);
+  centered(play_status, 48, 426, 160, 11, playing_radio ? accent : muted);
 
-  panel_card(252, 46, 372, 384, 16);
-  label(tr(radio_filter == 5 ? "Rádio do Usuário" : radio_filter == 6 ? "Favoritas" : "Estações"), 264, 57, 16, textc, 235);
+  panel_card(252, 42, 372, 424, 16);
+  label(tr(radio_filter == 5 ? "Rádio do Usuário" : radio_filter == 6 ? "Favoritas" : "Estações"), 264, 52, 18, textc, 235);
   char station_count[48];
   snprintf(station_count, sizeof(station_count), "%d %s", count,
            tr("estações"));
-  label(station_count, 516, 62, 11, muted, 96);
+  label(station_count, 510, 57, 12, muted, 102);
   for (int i = 0; i < 7; i++) {
     int x = 264 + i * 49;
-    pill(x, 82, 46, 23, i == radio_filter);
-    centered(tr(radio_filter_names[i]), x + 1, 88, 44, i == 5 ? 6 : 8,
+    pill(x, 80, 46, 24, i == radio_filter);
+    centered(tr(radio_filter_names[i]), x + 1, 86, 44, i == 5 ? 7 : 9,
              i == radio_filter ? bg : muted);
   }
   if (loading) {
-    centered(tr("Buscando estações..."), 264, 240, 348, 17, accent);
+    centered(tr("Buscando estações..."), 264, 250, 348, 18, accent);
   } else if (!count) {
     centered(tr(error[0] ? error : "Nenhuma estação encontrada"), 264,
-             220, 348, 14, textc);
-    centered(tr("Pressione Y para tentar novamente"), 264, 250, 348, 11,
+             230, 348, 15, textc);
+    centered(tr("Pressione Y para tentar novamente"), 264, 262, 348, 12,
              muted);
     if (radio_filter == 5)
-      centered("ports/kplayer/radios_usuario", 264, 275, 348, 11, muted);
+      centered("ports/kplayer/radios_usuario", 264, 288, 348, 12, muted);
   } else {
-    for (int row = 0; row < visible_count && row < 5; row++) {
-      int actual = offset_station + row, y = 115 + row * 56;
+    for (int row = 0; row < visible_count && row < 6; row++) {
+      int actual = offset_station + row, y = 112 + row * 57;
       bool focus = actual == selected_station;
-      card(264, y, 348, 49, 10, focus, elevated);
-      rounded(274, y + 13, 22, 22, 11,
+      card(264, y, 348, 51, 10, focus, elevated);
+      rounded(274, y + 14, 22, 22, 11,
               (playing_radio && !strcmp(current_path, visible[row].url))
                   ? accent
                   : elevated);
       label((playing_radio && !strcmp(current_path, visible[row].url)) ? ">"
                                                                        : "~",
-            281, y + 16, 12, focus ? accent : muted, 12);
-      label(visible[row].name, 305, y + 5, 14, textc, 190);
+            281, y + 17, 13, focus ? accent : muted, 12);
+      label(visible[row].name, 304, y + 6, 15, textc, 198);
       label(visible[row].tags[0] ? visible[row].tags : visible[row].country,
-            305, y + 27, 10, muted, 190);
-      label(visible[row].codec[0] ? visible[row].codec : "STREAM", 526, y + 7,
-            10, focus ? accent : muted, 76);
+            304, y + 29, 11, muted, 198);
+      label(visible[row].codec[0] ? visible[row].codec : "STREAM", 522, y + 8,
+            11, focus ? accent : muted, 80);
       char bitrate[32];
       snprintf(bitrate, sizeof(bitrate), "%d kbps", visible[row].bitrate);
-      label(bitrate, 526, y + 27, 10, muted, 76);
+      label(bitrate, 522, y + 29, 11, muted, 80);
     }
   }
-  const FooterHint hints[] = {{"DIR", "Navegar"}, {"B", "Ouvir"},
-      {"X", "Favorita"}, {"Y", "Atualizar"}, {"A", "Início"},
-      {"SELECT", "Opções"}};
-  footer_hints(hints, 6);
+  footer_hints(NULL, 0);
+}
+
+static void radio_cycle_filter(int dir) {
+  pthread_mutex_lock(&radio_mutex);
+  radio_filter = (radio_filter + (dir < 0 ? 6 : 1)) % 7;
+  radio_count = radio_selected = 0;
+  pthread_mutex_unlock(&radio_mutex);
+  radio_refresh();
+}
+
+static void radio_toggle_current_favorite(void) {
+  pthread_mutex_lock(&radio_mutex);
+  int count = radio_count;
+  RadioStation station = {0};
+  if (count > 0 && radio_selected < count) station = radio_stations[radio_selected];
+  pthread_mutex_unlock(&radio_mutex);
+  if (!count || !station.url[0]) {
+    notify("Selecione uma estação primeiro");
+    return;
+  }
+  if (radio_toggle_favorite(&station)) {
+    notify(tr("Favorita atualizada"));
+    if (radio_filter == 6) radio_refresh();
+  } else {
+    notify(tr("Não foi possível salvar. Verifique o cartão."));
+  }
 }
 
 static void radio_key(SDL_Keycode key, bool repeat) {
@@ -848,19 +870,9 @@ static void radio_key(SDL_Keycode key, bool repeat) {
     radio_selected = (radio_selected + 1) % count;
   pthread_mutex_unlock(&radio_mutex);
   if ((key == SDLK_LEFT || key == SDLK_RIGHT) && !repeat) {
-    pthread_mutex_lock(&radio_mutex);
-    radio_filter = (radio_filter + (key == SDLK_LEFT ? 6 : 1)) % 7;
-    radio_count = radio_selected = 0;
-    pthread_mutex_unlock(&radio_mutex);
-    radio_refresh();
+    radio_cycle_filter(key == SDLK_LEFT ? -1 : 1);
   } else if (key == SDLK_SPACE && !repeat && count) {
-    pthread_mutex_lock(&radio_mutex);
-    RadioStation station = radio_stations[radio_selected];
-    pthread_mutex_unlock(&radio_mutex);
-    if (radio_toggle_favorite(&station)) {
-      notify(tr("Favorita atualizada"));
-      if (radio_filter == 6) radio_refresh();
-    } else notify(tr("Não foi possível salvar. Verifique o cartão."));
+    radio_toggle_current_favorite();
   } else if (key == SDLK_RETURN && !repeat)
     radio_play_selected();
   else if (key == SDLK_m && !repeat)

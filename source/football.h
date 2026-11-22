@@ -247,88 +247,87 @@ static void football_key(SDL_Keycode k) {
 }
 
 static void draw_football_detail(FootballMatch *m, bool busy) {
-  panel_card(20, 44, 600, 100, 14);
-  label(m->league, 34, 52, 11, accent, 360);
+  panel_card(16, 40, 608, 106, 14);
+  label(m->league, 30, 48, 12, accent, 370);
   bool live = !strcmp(m->state, "in");
-  pill(494, 50, 112, 20, live);
-  centered(m->status[0] ? m->status : tr("AO VIVO"), 496, 54, 108, 10, live ? bg : muted);
+  pill(496, 46, 114, 22, live);
+  centered(m->status[0] ? m->status : tr("AO VIVO"), 498, 51, 110, 11, live ? bg : muted);
 
-  label(m->home, 34, 78, 17, textc, 220);
-  rounded(264, 74, 112, 32, 10, live ? accent : elevated);
-  centered(m->score, 266, 80, 108, 19, live ? bg : textc);
-  label(m->away, 386, 78, 17, textc, 220);
+  label(m->home, 30, 76, 18, textc, 224);
+  rounded(262, 72, 116, 36, 10, live ? accent : elevated);
+  centered(m->score, 264, 79, 112, 21, live ? bg : textc);
+  label(m->away, 388, 76, 18, textc, 224);
 
   char sub[192];
-  snprintf(sub, sizeof(sub), "%s%s%s%s%s",
+  snprintf(sub, sizeof(sub), "%.80s%s%.32s%s%.32s",
            fb_venue[0] ? fb_venue : (m->venue[0] ? m->venue : "Placar da Bola"),
            fb_home_tact[0] ? "  •  " : "", fb_home_tact,
            fb_away_tact[0] ? " vs " : "", fb_away_tact);
-  label(sub, 34, 118, 11, muted, 570);
+  label(sub, 30, 120, 12, muted, 580);
 
   const char *tabs[] = {tr("Estatísticas"), tr("Eventos"), tr("Escalações")};
   for (int i = 0; i < 3; i++) {
-    int x = 20 + i * 204;
-    pill(x, 154, 192, 26, i == football_detail_tab);
-    centered(tabs[i], x + 4, 160, 184, 13, i == football_detail_tab ? bg : muted);
+    int x = 16 + i * 206;
+    pill(x, 154, 196, 28, i == football_detail_tab);
+    centered(tabs[i], x + 4, 160, 188, 14, i == football_detail_tab ? bg : muted);
   }
 
-  panel_card(20, 188, 600, 238, 14);
+  panel_card(16, 190, 608, 280, 14);
   if (busy) {
-    centered(tr("Carregando estatísticas..."), 24, 290, 592, 16, accent);
+    centered(tr("Carregando estatísticas..."), 24, 314, 592, 18, accent);
   } else if (football_detail_tab == 0) {
     if (!fb_stat_count) {
-      centered(tr("Estatísticas disponíveis quando a partida iniciar"), 30, 290, 580, 14, muted);
+      centered(tr("Estatísticas disponíveis quando a partida iniciar"), 30, 314, 580, 16, muted);
     } else {
-      for (int row = 0; row < 6 && football_detail_scroll + row < fb_stat_count; row++) {
+      for (int row = 0; row < 7 && football_detail_scroll + row < fb_stat_count; row++) {
         FootballStat *s = &fb_stats[football_detail_scroll + row];
-        int y = 200 + row * 36;
-        label(s->home, 36, y, 13, accent, 80);
-        centered(s->label, 120, y, 400, 12, textc);
-        label(s->away, 540, y, 13, muted, 64);
+        int y = 202 + row * 37;
+        label(s->home, 32, y, 14, accent, 84);
+        centered(s->label, 120, y, 400, 14, textc);
+        label(s->away, 540, y, 14, muted, 68);
         double hv = atof(s->home), av = atof(s->away), tot = hv + av;
         double ratio = tot > 0.01 ? hv / tot : 0.5;
-        int bar_w = 560, left_w = (int)(bar_w * ratio);
-        rounded(40, y + 20, bar_w, 6, 3, track_color());
-        if (left_w > 3) rounded(40, y + 20, left_w, 6, 3, accent);
+        int bar_w = 572, left_w = (int)(bar_w * ratio);
+        rounded(34, y + 22, bar_w, 7, 3, track_color());
+        if (left_w > 3) rounded(34, y + 22, left_w, 7, 3, accent);
       }
     }
   } else if (football_detail_tab == 1) {
     if (!fb_event_count) {
-      centered(tr("Nenhum evento registrado ainda"), 30, 290, 580, 14, muted);
+      centered(tr("Nenhum evento registrado ainda"), 30, 314, 580, 16, muted);
     } else {
-      for (int row = 0; row < 6 && football_detail_scroll + row < fb_event_count; row++) {
+      for (int row = 0; row < 7 && football_detail_scroll + row < fb_event_count; row++) {
         FootballEvent *e = &fb_events[football_detail_scroll + row];
-        int y = 198 + row * 36;
-        rounded(32, y + 3, 46, 22, 8, !strcmp(e->kind, "GOL") ? accent : elevated);
-        centered(e->minute, 34, y + 8, 42, 10, !strcmp(e->kind, "GOL") ? bg : textc);
-        rounded(84, y + 3, 40, 22, 8, elevated);
-        centered(e->kind, 86, y + 8, 36, 10, !strcmp(e->kind, "GOL") ? accent : muted);
-        label(e->desc, 132, y + 2, 12, textc, 476);
-        label(e->team, 132, y + 18, 10, muted, 476);
+        int y = 200 + row * 37;
+        rounded(28, y + 3, 50, 24, 8, !strcmp(e->kind, "GOL") ? accent : elevated);
+        centered(e->minute, 30, y + 8, 46, 11, !strcmp(e->kind, "GOL") ? bg : textc);
+        rounded(84, y + 3, 44, 24, 8, elevated);
+        centered(e->kind, 86, y + 8, 40, 11, !strcmp(e->kind, "GOL") ? accent : muted);
+        label(e->desc, 136, y + 1, 14, textc, 476);
+        label(e->team, 136, y + 19, 11, muted, 476);
       }
     }
   } else {
     int max_xi = fb_home_xi_count > fb_away_xi_count ? fb_home_xi_count : fb_away_xi_count;
     if (!max_xi) {
-      centered(tr("Escalações ainda não divulgadas"), 30, 290, 580, 14, muted);
+      centered(tr("Escalações ainda não divulgadas"), 30, 314, 580, 16, muted);
     } else {
-      for (int row = 0; row < 6 && football_detail_scroll + row < max_xi; row++) {
-        int idx = football_detail_scroll + row, y = 200 + row * 36;
+      for (int row = 0; row < 7 && football_detail_scroll + row < max_xi; row++) {
+        int idx = football_detail_scroll + row, y = 202 + row * 37;
         if (idx < fb_home_xi_count) {
-          char line[80];
-          snprintf(line, sizeof(line), "#%s %s (%s)", fb_home_xi[idx].jersey, fb_home_xi[idx].name, fb_home_xi[idx].pos);
-          label(line, 34, y + 6, 12, textc, 276);
+          char line[96];
+          snprintf(line, sizeof(line), "#%.7s %.47s (%.15s)", fb_home_xi[idx].jersey, fb_home_xi[idx].name, fb_home_xi[idx].pos);
+          label(line, 30, y + 6, 14, textc, 284);
         }
         if (idx < fb_away_xi_count) {
-          char line[80];
-          snprintf(line, sizeof(line), "#%s %s (%s)", fb_away_xi[idx].jersey, fb_away_xi[idx].name, fb_away_xi[idx].pos);
-          label(line, 330, y + 6, 12, muted, 276);
+          char line[96];
+          snprintf(line, sizeof(line), "#%.7s %.47s (%.15s)", fb_away_xi[idx].jersey, fb_away_xi[idx].name, fb_away_xi[idx].pos);
+          label(line, 326, y + 6, 14, muted, 284);
         }
       }
     }
   }
-  const FooterHint hints[] = {{"DIR", "Abas / Rolar"}, {"Y", "Atualizar"}, {"A", "Voltar"}};
-  footer_hints(hints, 3);
+  footer_hints(NULL, 0);
 }
 
 static void draw_football(void) {
@@ -358,48 +357,45 @@ static void draw_football(void) {
     return;
   }
 
-  label("Placar da Bola", 24, 42, 22, textc, 240);
+  label("Placar da Bola", 18, 40, 23, textc, 250);
   const char *fnames[] = {tr("Todos"), tr("Ao vivo"), "Brasil", "Europa"};
   for (int i = 0; i < 4; i++) {
-    int x = 286 + i * 84;
-    pill(x, 45, 78, 22, i == football_filter);
-    centered(fnames[i], x + 2, 50, 74, 11, i == football_filter ? bg : muted);
+    int x = 280 + i * 86;
+    pill(x, 42, 80, 25, i == football_filter);
+    centered(fnames[i], x + 2, 48, 76, 12, i == football_filter ? bg : muted);
   }
 
   if (!n) {
     centered(busy ? tr("Carregando placares...") : football_stale ? tr("Sem dados atualizados") : tr("Nenhum jogo ao vivo"),
-             24, 200, 592, 18, muted);
+             24, 220, 592, 20, muted);
   } else {
     if (football_selected >= n) football_selected = n - 1;
     if (football_selected < football_offset) football_offset = football_selected;
     if (football_selected >= football_offset + 5) football_offset = football_selected - 4;
     for (int row = 0; row < 5 && football_offset + row < n; row++) {
       int actual = football_offset + row;
-      int y = 78 + row * 66;
+      int y = 76 + row * 77;
       FootballMatch *m = &football_matches[vis[actual]];
       bool focus = actual == football_selected;
       bool live = !strcmp(m->state, "in");
-      card(20, y, 600, 60, 12, focus, panel);
-      label(m->league, 32, y + 5, 10, accent, 270);
-      if (m->venue[0]) label(m->venue, 310, y + 5, 9, dim, 175);
-      rounded(502, y + 4, 106, 17, 8, live ? accent : elevated);
-      centered(m->status, 504, y + 7, 102, 9, live ? bg : muted);
+      card(16, y, 608, 71, 13, focus, panel);
+      label(m->league, 30, y + 6, 12, accent, 270);
+      if (m->venue[0]) label(m->venue, 306, y + 6, 11, dim, 182);
+      rounded(498, y + 5, 114, 20, 9, live ? accent : elevated);
+      centered(m->status, 500, y + 9, 110, 11, live ? bg : muted);
 
-      label(m->home, 32, y + 23, 14, textc, 206);
-      rounded(248, y + 20, 96, 22, 8, live ? mix(elevated, accent, 0.25f) : elevated);
-      centered(m->score, 250, y + 24, 92, 14, live ? accent : textc);
-      label(m->away, 356, y + 23, 14, textc, 240);
+      label(m->home, 30, y + 27, 16, textc, 212);
+      rounded(248, y + 23, 102, 26, 9, live ? mix(elevated, accent, 0.25f) : elevated);
+      centered(m->score, 250, y + 27, 98, 17, live ? accent : textc);
+      label(m->away, 358, y + 27, 16, textc, 254);
 
       label(m->preview[0] ? m->preview : tr("B para estatísticas, eventos e escalações"),
-            32, y + 44, 9, muted, 574);
+            30, y + 52, 11, muted, 580);
     }
   }
 
-  if (busy) label(tr("Carregando placares..."), 24, 412, 11, accent, 400);
-  else if (football_stale && n) label(tr("Dados salvos; podem estar desatualizados"), 24, 412, 11, accent, 500);
+  if (busy) label(tr("Atualizando placares..."), 18, 463, 11, accent, 380);
+  else if (football_stale && n) label(tr("Dados salvos; pressione Y para atualizar"), 18, 463, 11, accent, 460);
 
-  const FooterHint hints[] = {
-      {"DIR", "Navegar"}, {"B", "Detalhes"}, {"X", "Filtro"},
-      {"Y", "Atualizar"}, {"A", "Voltar"}};
-  footer_hints(hints, 5);
+  footer_hints(NULL, 0);
 }

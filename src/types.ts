@@ -3,6 +3,7 @@ export type LanguageCode = 0 | 1 | 2; // 0 = pt-BR, 1 = en, 2 = es
 export type ScreenMode =
   | 'boot'
   | 'welcome'
+  | 'tutorial'
   | 'terms'
   | 'notice'
   | 'home'
@@ -14,6 +15,8 @@ export type ScreenMode =
   | 'football'
   | 'weather'
   | 'options';
+
+export type OptionsContext = 'general' | 'video' | 'music' | 'iptv' | 'radio';
 
 export interface LyricLine {
   timeMs: number;

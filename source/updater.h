@@ -12,7 +12,7 @@ static bool kp_upd_checked_once = false;
 static int kp_upd_exit_code = 0;
 static char kp_upd_current[32] = KPLAYER_VERSION;
 static char kp_upd_latest[32] = KPLAYER_VERSION;
-static char kp_upd_next[32] = "2.0.6";
+static char kp_upd_next[32] = "2.0.7";
 static char kp_upd_source[32] = "local";
 static char kp_upd_repo[128] = "";
 static char kp_upd_message[192] = "";
@@ -52,7 +52,7 @@ static void kp_upd_parse_tsv(const char *path, bool notify_user) {
   }
 
   char line[512];
-  char cur[32] = KPLAYER_VERSION, lat[32] = KPLAYER_VERSION, nxt[32] = "2.0.6";
+  char cur[32] = KPLAYER_VERSION, lat[32] = KPLAYER_VERSION, nxt[32] = "2.0.7";
   char src[32] = "local", repo[128] = "", err[160] = "";
   bool avail = false;
   char notes[4][160];

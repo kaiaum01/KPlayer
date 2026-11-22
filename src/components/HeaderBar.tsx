@@ -10,9 +10,9 @@ export interface UpdateBannerContextValue {
 }
 
 export const UpdateBannerContext = createContext<UpdateBannerContextValue>({
-  currentVersion: '2.0.5',
+  currentVersion: '2.0.6',
   updateAvailable: false,
-  latestVersion: '2.0.5',
+  latestVersion: '2.0.6',
 });
 
 export function HeaderBar({

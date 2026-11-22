@@ -302,8 +302,13 @@ int main(void) {
   key(SDLK_RETURN, false);
   assert(mode == 5 && !onboarding_done);
   preferences_path = prefpath;
+  tutorial_done = false;
   key(SDLK_RETURN, false);
-  assert(mode == 3 && onboarding_done);
+  /* First run opens Comandos tutorial (mode 12) before Home */
+  assert(mode == 12 && onboarding_done && !tutorial_done);
+  draw_tutorial();
+  key(SDLK_RETURN, false);
+  assert(mode == 3 && tutorial_done);
   language = 0;
   onboarding_done = false;
   load_preferences();
@@ -497,15 +502,52 @@ int main(void) {
   assert(audio_panel == 0);
   key(SDLK_SPACE, false);
   assert(audio_panel == 1);
+  /* Contextual Options: Music (mode 4) opens OPT_SEC_MUSIC */
   open_options();
-  assert(opt_section == OPT_SEC_ROOT && option == 18);
-  key(SDLK_DOWN, false);
-  assert(option == 20); /* Atalhos */
-  key(SDLK_RETURN, false);
-  assert(opt_section == OPT_SEC_SHORTCUTS);
+  assert(opt_section == OPT_SEC_MUSIC && option == 12);
   draw_options();
   key(SDLK_BACKSPACE, false);
-  assert(opt_section == OPT_SEC_ROOT);
+  assert(mode == 4);
+  /* Contextual Options: Video (mode 1) opens OPT_SEC_VIDEO */
+  mode = 1;
+  open_options();
+  assert(opt_section == OPT_SEC_VIDEO && option == 0);
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 1);
+  /* Contextual Options: IPTV (mode 8) opens OPT_SEC_IPTV */
+  mode = 8;
+  open_options();
+  assert(opt_section == OPT_SEC_IPTV && option == 50);
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 8);
+  /* Contextual Options: Radio (mode 7) opens OPT_SEC_RADIO */
+  mode = 7;
+  open_options();
+  assert(opt_section == OPT_SEC_RADIO && option == 60);
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 7);
+  /* General Options from Home (mode 3) opens OPT_SEC_ROOT */
+  mode = 3;
+  open_options();
+  assert(opt_section == OPT_SEC_ROOT && option == 18);
+  /* Navigate to Layout da tela inicial (24) and toggle */
+  opt_cursor = 3;
+  opt_sync_option_id();
+  assert(option == 24);
+  bool prev_inv = home_layout_inverted;
+  key(SDLK_RIGHT, false);
+  assert(home_layout_inverted != prev_inv);
+  draw_home();
+  home_layout_inverted = false;
+  /* Navigate to Rever comandos (20) -> opens mode 12 tutorial */
+  opt_cursor = 4;
+  opt_sync_option_id();
+  assert(option == 20);
+  key(SDLK_RETURN, false);
+  assert(mode == 12 && tutorial_from_options);
+  draw_tutorial();
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 2 && opt_section == OPT_SEC_ROOT);
   /* Verify penultimate is Verificar atualizacoes (19) and last is Sair (8) */
   assert(opt_root_ids[OPT_ROOT_COUNT - 2] == 19);
   assert(opt_root_ids[OPT_ROOT_COUNT - 1] == 8);

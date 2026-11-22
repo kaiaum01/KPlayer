@@ -194,6 +194,11 @@ static void finish_onboarding(void) {
     return;
   }
   onboarding_done = true;
-  mode = 3;
+  if (!tutorial_done) {
+    tutorial_from_options = false;
+    mode = 12;
+  } else {
+    mode = 3;
+  }
   status_next = 0;
 }

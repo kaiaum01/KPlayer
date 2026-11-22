@@ -65,6 +65,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: false
+          prerelease: false
+          make_latest: true
           name: KPlayer ${{ github.ref_name }} — R36S
           body_path: releases/RELEASE_NOTES.md
           fail_on_unmatched_files: true
