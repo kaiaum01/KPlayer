@@ -422,6 +422,7 @@ static bool playlist_file(const char *s) {
 static bool home_layout_inverted = false;
 static bool tutorial_done = false;
 static bool tutorial_from_options = false;
+static char seen_version[32] = "";
 static char menu_search[64] = "";
 static bool menu_search_kb = false;
 static int menu_skb_row = 1, menu_skb_col = 0;
@@ -903,6 +904,7 @@ extern char **environ;
 #include "football.h"
 #include "updater.h"
 #include "weather.h"
+#include "screensaver.h"
 #include "splash.h"
 // First-run screens use the skin drawing helpers.
 #include "onboarding.h"
@@ -1029,7 +1031,8 @@ enum {
   OPT_SEC_VIDEO = 3,
   OPT_SEC_MUSIC = 4,
   OPT_SEC_IPTV = 5,
-  OPT_SEC_RADIO = 6
+  OPT_SEC_RADIO = 6,
+  OPT_SEC_SCREENSAVER = 7
 };
 
 static int opt_section = OPT_SEC_ROOT;
@@ -1039,9 +1042,9 @@ static int opt_scroll = 0;
 
 /* General Root order (strict A-Z, then penultimate [A] Verificar atualizacoes, then last Sair):
  * 18=Adaptacao de tela, 22=Clima e Localizacao, 5=Idioma, 24=Layout da tela inicial,
- * 20=Rever comandos, 9=Tema, 6=Termos de uso, 15=Timer de sono,
+ * 25=Protetor de tela, 20=Rever comandos, 9=Tema, 6=Termos de uso, 15=Timer de sono,
  * 19=[A] Verificar atualizacoes (penultimate), 8=Sair (last). */
-static const int opt_root_ids[] = {18, 22, 5, 24, 20, 9, 6, 15, 19, 8};
+static const int opt_root_ids[] = {18, 22, 5, 24, 25, 20, 9, 6, 15, 19, 8};
 #define OPT_ROOT_COUNT ((int)(sizeof(opt_root_ids) / sizeof(opt_root_ids[0])))
 
 static const int opt_weather_ids[] = {30, 31, 32, 11, 33, -99};
@@ -1050,21 +1053,24 @@ static const int opt_weather_ids[] = {30, 31, 32, 11, 33, -99};
 static const int opt_update_ids[] = {40, 41, -99};
 #define OPT_UPDATE_COUNT 3
 
+static const int opt_screensaver_ids[] = {70, 71, 72, 73, 74, -99};
+#define OPT_SCREENSAVER_COUNT 6
+
 /* Video player contextual options ONLY */
 static const int opt_video_ids[] = {0, 1, 2, 3, 4, 14, -98};
 #define OPT_VIDEO_COUNT 7
 
 /* Music player contextual options ONLY */
-static const int opt_music_ids[] = {12, 16, 7, 13, 4, 14, 0, 15, -98};
-#define OPT_MUSIC_COUNT 9
+static const int opt_music_ids[] = {12, 16, 7, 13, 4, 14, 0, 25, 15, -98};
+#define OPT_MUSIC_COUNT 10
 
 /* TV / IPTV contextual options ONLY */
 static const int opt_iptv_ids[] = {50, 51, 52, 53, 54, 6, -98};
 #define OPT_IPTV_COUNT 7
 
 /* Radio contextual options ONLY */
-static const int opt_radio_ids[] = {60, 61, 62, 15, 6, -98};
-#define OPT_RADIO_COUNT 6
+static const int opt_radio_ids[] = {60, 61, 62, 25, 15, 6, -98};
+#define OPT_RADIO_COUNT 7
 
 typedef struct {
   const char *btn;
@@ -1120,8 +1126,79 @@ static void tutorial_key(SDL_Keycode k) {
     } else {
       tutorial_done = true;
       save_settings();
-      mode = 3;
+      mode = strcmp(seen_version, KPLAYER_VERSION) != 0 ? 14 : 3;
     }
+    menu_dirty = true;
+  }
+}
+
+/* One-time Post-Update Changelog Screen (mode 14) — shown once per new version. */
+static char changelog_items[6][160];
+static int changelog_count = 0;
+static bool changelog_loaded = false;
+
+static void changelog_ensure_loaded(void) {
+  if (changelog_loaded) return;
+  changelog_loaded = true;
+  changelog_count = 0;
+  FILE *f = fopen("changelog.txt", "r");
+  if (f) {
+    char line[256];
+    while (changelog_count < 6 && fgets(line, sizeof(line), f)) {
+      size_t len = strlen(line);
+      while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' || line[len - 1] == ' '))
+        line[--len] = 0;
+      char *p = line;
+      while (*p == ' ' || *p == '\t' || *p == '-') p++;
+      if (*p)
+        snprintf(changelog_items[changelog_count++], sizeof(changelog_items[0]), "%.159s", p);
+    }
+    fclose(f);
+  }
+  if (changelog_count == 0) {
+    static const char *const builtin[] = {
+        "Changelog pós-atualização: exibido uma única vez ao atualizar de versão.",
+        "Protetor de tela com visualizadores (30s) ativado por padrão em Músicas e Rádio.",
+        "Tela inicial inteligente: saudação do clima + sugestões aleatórias descontraídas.",
+        "Quando o clima estiver desligado, a tela inicial mantém o texto padrão.",
+        "Barra de carregamento ao vivo (0% a 100%) ao verificar e instalar atualizações.",
+    };
+    int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
+    for (int i = 0; i < n && changelog_count < 6; i++)
+      snprintf(changelog_items[changelog_count++], sizeof(changelog_items[0]), "%.159s", builtin[i]);
+  }
+}
+
+static void draw_changelog(void) {
+  changelog_ensure_loaded();
+  backdrop();
+  draw_header("NOVIDADES");
+  char heading[96];
+  snprintf(heading, sizeof(heading), "Novidades da versão v%s", KPLAYER_VERSION);
+  label(heading, 24, 42, 24, textc, 592);
+  label("O que mudou nesta atualização • exibido apenas uma vez", 24, 72, 13, muted, 592);
+
+  int count = changelog_count;
+  int row_h = count <= 5 ? 54 : 46;
+  int gap = count <= 5 ? 8 : 6;
+  int y = 100;
+  for (int i = 0; i < count; i++) {
+    panel_card(20, y, 600, row_h, 12);
+    fill_circle(38, y + row_h / 2, 5, accent);
+    wrapped(changelog_items[i], 54, y + (row_h > 48 ? 11 : 8), 550, 14, 17, 2, textc);
+    y += row_h + gap;
+  }
+
+  rounded(20, 416, 600, 48, 12, accent);
+  centered("B  •  Continuar para o K PLAYER", 20, 430, 600, 16, bg);
+  footer_hints(NULL, 0);
+}
+
+static void changelog_key(SDL_Keycode k) {
+  if (k == SDLK_RETURN || k == SDLK_BACKSPACE || k == SDLK_SPACE || k == SDLK_m) {
+    snprintf(seen_version, sizeof(seen_version), "%s", KPLAYER_VERSION);
+    save_settings();
+    mode = 3;
     menu_dirty = true;
   }
 }
@@ -1146,6 +1223,9 @@ static int opt_current_list(const int **out_ids) {
   case OPT_SEC_RADIO:
     *out_ids = opt_radio_ids;
     return OPT_RADIO_COUNT;
+  case OPT_SEC_SCREENSAVER:
+    *out_ids = opt_screensaver_ids;
+    return OPT_SCREENSAVER_COUNT;
   default:
     *out_ids = opt_root_ids;
     return OPT_ROOT_COUNT;
@@ -1191,6 +1271,7 @@ static const char *opt_label_for(int id) {
   case 20: return "Rever comandos";
   case 22: return "Clima e Localização";
   case 24: return "Layout da tela inicial";
+  case 25: return "Protetor de tela";
   case 30: return "Abrir aplicativo de Clima";
   case 31: return "Usar localização do meu IP";
   case 32: return "Pesquisar cidade manualmente";
@@ -1205,6 +1286,11 @@ static const char *opt_label_for(int id) {
   case 60: return "Favoritar estação atual";
   case 61: return "Categoria de rádio";
   case 62: return "Atualizar estações";
+  case 70: return "Tempo para ativar";
+  case 71: return "Visualizador (WMP)";
+  case 72: return "Relógio, data e clima";
+  case 73: return "Letras sobre visualizador";
+  case 74: return "Iniciar protetor agora";
   case -98: return "Configurações gerais ›";
   case -99: return "← Voltar às Opções";
   default: return "";
@@ -1305,6 +1391,9 @@ static void opt_value_for(int id, char *value, size_t cap) {
   case 24:
     snprintf(value, cap, "%s", home_layout_inverted ? "Invertido (Clima topo)" : "Clima grande embaixo");
     break;
+  case 25:
+    snprintf(value, cap, "%s ›", ss_timeout_labels[ss_timeout_idx % SS_TIMEOUT_COUNT]);
+    break;
   case 30:
     snprintf(value, cap, "Open-Meteo ›");
     break;
@@ -1357,6 +1446,21 @@ static void opt_value_for(int id, char *value, size_t cap) {
   case 62:
     snprintf(value, cap, "Recarregar");
     break;
+  case 70:
+    snprintf(value, cap, "%s", ss_timeout_labels[ss_timeout_idx % SS_TIMEOUT_COUNT]);
+    break;
+  case 71:
+    snprintf(value, cap, "%s", ss_viz_labels[ss_viz_style % SS_VIZ_COUNT]);
+    break;
+  case 72:
+    snprintf(value, cap, "%s", tr(ss_show_clock ? "Ativada" : "Desativada"));
+    break;
+  case 73:
+    snprintf(value, cap, "%s", tr(ss_show_lyrics ? "Ativada" : "Desativada"));
+    break;
+  case 74:
+    snprintf(value, cap, "Testar ›");
+    break;
   case -98:
     snprintf(value, cap, "Tema, Clima, Update");
     break;
@@ -1391,7 +1495,10 @@ static void draw_options(void) {
     sec_sub = "Pesquisa digitada, abas, atualização e links M3U";
   } else if (opt_section == OPT_SEC_RADIO) {
     sec_title = "Opções de Rádio Online";
-    sec_sub = "Favoritas, categorias de estações e timer de sono";
+    sec_sub = "Favoritas, categorias, protetor de tela e timer de sono";
+  } else if (opt_section == OPT_SEC_SCREENSAVER) {
+    sec_title = "Protetor de Tela";
+    sec_sub = "Visualizadores estilo WMP, relógio/data/clima e letras (.LRC) ao tocar música/rádio";
   }
   label(sec_title, 24, 42, 23, textc, 580);
   label(sec_sub, 24, 71, 12, muted, 592);
@@ -1404,7 +1511,9 @@ static void draw_options(void) {
     bool avail = kp_upd_available;
     bool checking = kp_upd_checking;
     bool applying = kp_upd_applying;
+    int prog = kp_upd_progress;
     char cur[32], lat[32], nxt[32], src[32], msg[192], repo[128];
+    char stage[96], detail[128];
     int ncnt = kp_upd_note_count;
     if (ncnt < 0) ncnt = 0;
     if (ncnt > 4) ncnt = 4;
@@ -1415,39 +1524,75 @@ static void draw_options(void) {
     snprintf(src, sizeof(src), "%.31s", kp_upd_source);
     snprintf(msg, sizeof(msg), "%.191s", kp_upd_message);
     snprintf(repo, sizeof(repo), "%.127s", kp_upd_repo);
+    snprintf(stage, sizeof(stage), "%.95s", kp_upd_stage);
+    snprintf(detail, sizeof(detail), "%.127s", kp_upd_detail);
     for (int i = 0; i < ncnt; i++)
       snprintf(notes[i], sizeof(notes[i]), "%.159s", kp_upd_notes[i]);
     pthread_mutex_unlock(&kp_upd_mutex);
 
-    panel_card(24, 94, 592, 168, 12);
+    panel_card(24, 94, 592, 188, 12);
     char hdr[128];
     if (avail) snprintf(hdr, sizeof(hdr), "Nova versão disponível: v%.31s", lat);
     else snprintf(hdr, sizeof(hdr), "Versão instalada: v%.31s (monitorando v%.31s+)", cur, nxt);
-    label(hdr, 40, 104, 15, avail ? accent : textc, 430);
+    label(hdr, 40, 102, 15, avail ? accent : textc, 430);
     label(!strcmp(src, "github") || !strcmp(src, "github-release") ? "GitHub Online" : "Canal Local",
-          480, 106, 11, avail ? accent : muted, 124);
+          480, 104, 11, avail ? accent : muted, 124);
 
     if (repo[0]) {
       char rline[192];
       snprintf(rline, sizeof(rline), "Repositório: %.127s (updates/latest.json)", repo);
-      label(rline, 40, 126, 11, muted, 560);
+      label(rline, 40, 123, 11, muted, 560);
     } else {
       label("Repositório: configurado automaticamente na build do GitHub (update-repo.txt)",
-            40, 126, 11, muted, 560);
+            40, 123, 11, muted, 560);
     }
 
-    if (msg[0]) label(msg, 40, 146, 12, (checking || applying || avail) ? accent : textc, 560);
+    /* Live KPlayer Update Loading Bar */
+    int bx = 40, by = 144, bw = 560, bh = 16;
+    if (prog < 0) prog = 0;
+    if (prog > 100) prog = 100;
+    const char *bar_stage = stage[0]
+                                ? stage
+                                : (applying ? "Atualizando KPlayer..."
+                                   : checking ? "Verificando atualizações..."
+                                   : avail ? "Atualização pronta para baixar"
+                                           : "Sistema pronto para atualizar");
+    char pct_txt[16];
+    snprintf(pct_txt, sizeof(pct_txt), "%d%%", prog);
+    label(bar_stage, bx, by, 12, (checking || applying || avail) ? accent : textc, 480);
+    label(pct_txt, bx + bw - 48, by, 12, (checking || applying || prog == 100) ? accent : muted, 48);
 
-    for (int i = 0; i < ncnt && i < 3; i++) {
+    int ty = by + 18;
+    rounded(bx, ty, bw, bh, 8, track_color());
+    int fill_w = (bw * prog) / 100;
+    if ((checking || applying) && fill_w < 24) fill_w = 24;
+    if (fill_w > bw) fill_w = bw;
+    if (fill_w > 0) {
+      rounded(bx, ty, fill_w, bh, 8, accent);
+      if (checking || applying) {
+        /* Animated shimmer highlight sliding along the progress bar */
+        uint32_t tk = SDL_GetTicks();
+        int sw = 48;
+        int sx = bx + (int)((tk / 8u) % (uint32_t)(fill_w + sw)) - sw;
+        int clip_x = sx < bx ? bx : sx;
+        int clip_r = (sx + sw) > (bx + fill_w) ? (bx + fill_w) : (sx + sw);
+        if (clip_r > clip_x + 4)
+          rounded(clip_x, ty + 2, clip_r - clip_x, bh - 4, 6, alpha(textc, 95));
+      }
+    }
+    const char *bar_detail = detail[0] ? detail : (msg[0] ? msg : "Preserva favoritos, histórico, listas e ajustes.");
+    label(bar_detail, bx, ty + 21, 11, (checking || applying) ? textc : muted, bw);
+
+    for (int i = 0; i < ncnt && i < 2; i++) {
       char nb[176];
       snprintf(nb, sizeof(nb), "• %.159s", notes[i]);
-      label(nb, 40, 170 + i * 18, 11, muted, 560);
+      label(nb, 40, 206 + i * 17, 11, muted, 560);
     }
     label("Preservados no update: favoritos, histórico, listas IPTV/Rádio, clima e ajustes.",
-          40, 236, 10, dim, 560);
+          40, 258, 10, dim, 560);
 
-    list_top = 276;
-    visible_rows = 4;
+    list_top = 294;
+    visible_rows = 3;
   }
 
   const int *ids = NULL;
@@ -1610,6 +1755,9 @@ static void change_option(int dir) {
                ? "Início invertido: Clima no topo e Player embaixo"
                : "Início padrão: Mini player no topo e Clima grande embaixo");
     break;
+  case 25:
+    opt_enter_section(OPT_SEC_SCREENSAVER);
+    break;
   case 30:
     weather_open(2);
     break;
@@ -1661,11 +1809,35 @@ static void change_option(int dir) {
     notify("Estações de rádio atualizadas");
     mode = 7;
     break;
+  case 70:
+    ss_timeout_idx = (ss_timeout_idx + dir + SS_TIMEOUT_COUNT) % SS_TIMEOUT_COUNT;
+    ss_touch_activity();
+    save_settings();
+    break;
+  case 71:
+    ss_viz_style = (ss_viz_style + dir + SS_VIZ_COUNT) % SS_VIZ_COUNT;
+    save_settings();
+    break;
+  case 72:
+    ss_show_clock = !ss_show_clock;
+    save_settings();
+    break;
+  case 73:
+    ss_show_lyrics = !ss_show_lyrics;
+    save_settings();
+    break;
+  case 74:
+    ss_open(return_mode);
+    break;
   case -98:
     opt_enter_section(OPT_SEC_ROOT);
     break;
   case -99:
-    opt_enter_section(OPT_SEC_ROOT);
+    if (opt_section == OPT_SEC_SCREENSAVER &&
+        (opt_entry_section == OPT_SEC_MUSIC || opt_entry_section == OPT_SEC_RADIO))
+      opt_enter_section(opt_entry_section);
+    else
+      opt_enter_section(OPT_SEC_ROOT);
     break;
   }
   menu_dirty = true;
@@ -1772,6 +1944,11 @@ static void key(SDL_Keycode k, bool repeat) {
     return;
   }
   osd_until = SDL_GetTicks() + 3000;
+  ss_touch_activity();
+  if (mode == 13) {
+    if (!repeat) screensaver_key(k);
+    return;
+  }
   if (k == SDLK_TAB && !repeat) {
     toggle_pause();
     show_osd = true;
@@ -1781,13 +1958,21 @@ static void key(SDL_Keycode k, bool repeat) {
     if (!repeat) tutorial_key(k);
     return;
   }
+  if (mode == 14) {
+    if (!repeat) changelog_key(k);
+    return;
+  }
   if (mode == 2) {
     const int *ids = NULL;
     int cnt = opt_current_list(&ids);
     if ((k == SDLK_BACKSPACE || k == SDLK_m) && !repeat) {
       if (opt_section == opt_entry_section)
         mode = return_mode;
-      else if (opt_section == OPT_SEC_WEATHER || opt_section == OPT_SEC_UPDATE)
+      else if (opt_section == OPT_SEC_SCREENSAVER &&
+               (opt_entry_section == OPT_SEC_MUSIC || opt_entry_section == OPT_SEC_RADIO))
+        opt_enter_section(opt_entry_section);
+      else if (opt_section == OPT_SEC_WEATHER || opt_section == OPT_SEC_UPDATE ||
+               opt_section == OPT_SEC_SCREENSAVER)
         opt_enter_section(OPT_SEC_ROOT);
       else
         opt_enter_section(opt_entry_section);
@@ -1801,13 +1986,15 @@ static void key(SDL_Keycode k, bool repeat) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
-          option == 24 || option == 52 || option == 61)
+          option == 24 || option == 52 || option == 61 ||
+          option == 70 || option == 71 || option == 72 || option == 73)
         change_option(-1);
     } else if (k == SDLK_RIGHT) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
-          option == 24 || option == 52 || option == 61)
+          option == 24 || option == 52 || option == 61 ||
+          option == 70 || option == 71 || option == 72 || option == 73)
         change_option(1);
     } else if (k == SDLK_RETURN && !repeat) {
       change_option(1);
@@ -2034,11 +2221,14 @@ static void save_settings(void) {
   fprintf(f,
           "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\n"
           "location %d\nrepeat %d\nshuffle %d\ndisplay %d\n"
-          "home_inv %d\ntutorial %d\n",
+          "home_inv %d\ntutorial %d\nss_sec %d\nss_viz %d\nss_clock %d\nss_lyrics %d\n"
+          "seen_ver %s\n",
           fit, loop_video, rate, theme_index,
           network_location_enabled ? 1 : 0, repeat_mode,
           shuffle_enabled ? 1 : 0, display_mode,
-          home_layout_inverted ? 1 : 0, tutorial_done ? 1 : 0);
+          home_layout_inverted ? 1 : 0, tutorial_done ? 1 : 0,
+          ss_timeout_idx, ss_viz_style, ss_show_clock ? 1 : 0, ss_show_lyrics ? 1 : 0,
+          seen_version[0] ? seen_version : "-");
   if (fclose(f) == 0)
     rename("settings.tmp", "settings.cfg");
 }
@@ -2047,10 +2237,13 @@ static void load_settings(void) {
   if (!f)
     return;
   char line[160];
+  char saved_seen[32] = "";
   int legacy_setting, ft, loop, saved_theme = 0, saved_location = 0,
                                 saved_repeat = -1, saved_shuffle = 0,
                                 saved_display = 0, saved_home_inv = 0,
-                                saved_tutorial = 0;
+                                saved_tutorial = 0, saved_ss_sec = 1,
+                                saved_ss_viz = 0, saved_ss_clock = 1,
+                                saved_ss_lyrics = 1;
   float r;
   bool valid = false;
   if (fgets(line, sizeof(line), f)) {
@@ -2063,6 +2256,11 @@ static void load_settings(void) {
       if (valid && fscanf(f, "\ndisplay %d", &saved_display) != 1) saved_display = 0;
       if (valid && fscanf(f, "\nhome_inv %d", &saved_home_inv) != 1) saved_home_inv = 0;
       if (valid && fscanf(f, "\ntutorial %d", &saved_tutorial) != 1) saved_tutorial = 0;
+      if (valid && fscanf(f, "\nss_sec %d", &saved_ss_sec) != 1) saved_ss_sec = 1;
+      if (valid && fscanf(f, "\nss_viz %d", &saved_ss_viz) != 1) saved_ss_viz = 0;
+      if (valid && fscanf(f, "\nss_clock %d", &saved_ss_clock) != 1) saved_ss_clock = 1;
+      if (valid && fscanf(f, "\nss_lyrics %d", &saved_ss_lyrics) != 1) saved_ss_lyrics = 1;
+      if (valid && fscanf(f, "\nseen_ver %31s", saved_seen) != 1) saved_seen[0] = 0;
     } else
       valid = sscanf(line, "%d %d %d %f", &legacy_setting, &ft, &loop, &r) == 4;
   }
@@ -2076,6 +2274,14 @@ static void load_settings(void) {
     display_mode = saved_display >= 0 && saved_display <= 2 ? saved_display : 0;
     home_layout_inverted = saved_home_inv == 1;
     tutorial_done = saved_tutorial == 1;
+    ss_timeout_idx = (saved_ss_sec >= 0 && saved_ss_sec < SS_TIMEOUT_COUNT) ? saved_ss_sec : 1;
+    ss_viz_style = (saved_ss_viz >= 0 && saved_ss_viz < SS_VIZ_COUNT) ? saved_ss_viz : 0;
+    ss_show_clock = saved_ss_clock != 0;
+    ss_show_lyrics = saved_ss_lyrics != 0;
+    if (saved_seen[0] && strcmp(saved_seen, "-") != 0)
+      snprintf(seen_version, sizeof(seen_version), "%.31s", saved_seen);
+    else
+      seen_version[0] = 0;
     rate = r;
     apply_theme(saved_theme);
     network_location_enabled = saved_location == 1;
@@ -2261,6 +2467,18 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[1], "--preview-tutorial")) {
       tutorial_from_options = false;
       draw_tutorial();
+    } else if (!strcmp(argv[1], "--preview-changelog")) {
+      draw_changelog();
+    } else if (!strcmp(argv[1], "--preview-screensaver")) {
+      active = true;
+      playing_audio = true;
+      snprintf(title, sizeof(title), "Noite tranquila");
+      snprintf(artist, sizeof(artist), "K PLAYER R36S");
+      lyrics[0] = (Lyric){0, "O dia vai ficando para trás"};
+      lyrics[1] = (Lyric){30000, "E a música encontra seu lugar"};
+      lyrics[2] = (Lyric){60000, "Um novo caminho para seguir"};
+      lyric_count = 3;
+      draw_screensaver();
     } else if (!strcmp(argv[1], "--preview-locations")) {
       show_locations();
       draw_menu();
@@ -2294,15 +2512,19 @@ int main(int argc, char **argv) {
   libvlc_video_set_format_callbacks(player, format_video, cleanup_video);
   load_preferences();
   load_settings();
-  mode = !onboarding_done ? 5 : (!tutorial_done ? 12 : 3);
+  mode = !onboarding_done ? 5
+       : (!tutorial_done ? 12
+       : (strcmp(seen_version, KPLAYER_VERSION) != 0 ? 14 : 3));
   load_favorites();
   run_boot_splash();
   weather_boot_refresh();
   updater_start_check(false);
+  ss_touch_activity();
   while (running) {
     uint32_t frame = SDL_GetTicks();
     updater_poll_main_thread();
     if (!running) break;
+    ss_check_idle(frame);
     if (sleep_choice && (int32_t)(frame - sleep_end) >= 0) {
       sleep_choice = 0;
       sleep_end = 0;
@@ -2392,12 +2614,20 @@ int main(int argc, char **argv) {
       draw_weather();
     else if (mode == 12)
       draw_tutorial();
+    else if (mode == 13)
+      draw_screensaver();
+    else if (mode == 14)
+      draw_changelog();
     else
       draw_menu();
     SDL_RenderPresent(renderer);
     uint32_t elapsed = SDL_GetTicks() - frame;
-    /* Keep video and animated welcome screen at ~30 FPS. */
-    uint32_t frame_ms = (mode == 5 || (active && !playing_audio && !playing_radio)) ? 33 : 100;
+    /* Keep video, animated welcome, screensaver and active update loading bar at ~30 FPS. */
+    bool fast_anim = (mode == 5 || mode == 13 ||
+                      (mode == 2 && opt_section == OPT_SEC_UPDATE &&
+                       (kp_upd_checking || kp_upd_applying)) ||
+                      (active && !playing_audio && !playing_radio));
+    uint32_t frame_ms = fast_anim ? 33 : 100;
     if (elapsed < frame_ms)
       SDL_Delay(frame_ms - elapsed);
   }

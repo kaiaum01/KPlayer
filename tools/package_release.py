@@ -92,6 +92,25 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out
         vinfo.compress_type = zipfile.ZIP_DEFLATED
         vinfo.external_attr = (0o100000 | 0o644) << 16
         out.writestr(vinfo, (VERSION + "\n").encode("utf-8"))
+    notes_file = BASE / "releases" / "RELEASE_NOTES.md"
+    changelog_lines = []
+    if notes_file.is_file():
+        for raw in notes_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+            s = raw.strip()
+            if s.startswith("- "):
+                cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", s[2:].strip())
+                cleaned = cleaned.replace("`", "")
+                if cleaned:
+                    changelog_lines.append(cleaned)
+    if not changelog_lines:
+        changelog_lines = [
+            f"K PLAYER v{VERSION} instalado com sucesso no R36S.",
+            "Todas as suas configurações, favoritos e mídias foram preservados.",
+        ]
+    cinfo = zipfile.ZipInfo("kplayer/changelog.txt")
+    cinfo.compress_type = zipfile.ZIP_DEFLATED
+    cinfo.external_attr = (0o100000 | 0o644) << 16
+    out.writestr(cinfo, ("\n".join(changelog_lines[:8]) + "\n").encode("utf-8"))
     out.writestr(
         "SOURCE.txt",
         (

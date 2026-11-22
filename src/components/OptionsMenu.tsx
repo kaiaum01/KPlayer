@@ -26,6 +26,12 @@ import {
 } from './R36SIcons';
 import type { R36SButton } from './R36SControls';
 
+import {
+  formatScreensaverTimeout,
+  SCREENSAVER_TIMEOUT_OPTIONS,
+  SCREENSAVER_VIZ_LABELS,
+} from './ScreensaverOverlay';
+
 export interface OptionsMenuHandle {
   handleButton: (btn: R36SButton) => void;
   openSection: (sec: OptionSectionId) => void;
@@ -39,6 +45,7 @@ export type OptionSectionId =
   | 'radio_opts'
   | 'displayMode'
   | 'weather'
+  | 'screensaver'
   | 'language'
   | 'playback_rate'
   | 'playback_eq'
@@ -78,10 +85,22 @@ export interface OptionsMenuProps {
   updateChecking: boolean;
   updateApplying: boolean;
   updateMessage: string | null;
+  updateProgress: number;
+  updateStage: string | null;
+  updateDetail: string | null;
+  screensaverTimeoutSec: number;
+  screensaverVizStyle: number;
+  screensaverShowClock: boolean;
+  screensaverShowLyrics: boolean;
   onSetThemeIndex: (idx: number) => void;
   onSetLanguage: (lang: LanguageCode) => void;
   onSetDisplayMode: (mode: 'auto' | 'r36s' | 'square' | 'wide') => void;
   onToggleHomeLayout: () => void;
+  onCycleScreensaverTimeout: () => void;
+  onCycleScreensaverViz: () => void;
+  onToggleScreensaverClock: () => void;
+  onToggleScreensaverLyrics: () => void;
+  onStartScreensaverNow: () => void;
   onOpenCommandsTutorial: () => void;
   onSetPlaybackRate: (rate: number) => void;
   onSetVideoFit: (fit: VideoFit) => void;
@@ -167,10 +186,22 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     updateChecking,
     updateApplying,
     updateMessage,
+    updateProgress,
+    updateStage,
+    updateDetail,
+    screensaverTimeoutSec,
+    screensaverVizStyle,
+    screensaverShowClock,
+    screensaverShowLyrics,
     onSetThemeIndex,
     onSetLanguage,
     onSetDisplayMode,
     onToggleHomeLayout,
+    onCycleScreensaverTimeout,
+    onCycleScreensaverViz,
+    onToggleScreensaverClock,
+    onToggleScreensaverLyrics,
+    onStartScreensaverNow,
     onOpenCommandsTutorial,
     onSetPlaybackRate,
     onSetVideoFit,
@@ -246,7 +277,10 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
       goSection(returnSection);
       return;
     }
-    if (section === 'sleep' && (returnSection === 'music_opts' || returnSection === 'radio_opts')) {
+    if (
+      (section === 'sleep' || section === 'screensaver') &&
+      (returnSection === 'music_opts' || returnSection === 'radio_opts')
+    ) {
       goSection(returnSection);
       return;
     }
@@ -294,6 +328,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
       radio_opts: 'Opções de Rádio Online',
       displayMode: tr('Adaptação de tela', language),
       weather: 'Clima e Localização',
+      screensaver: 'Protetor de Tela',
       language: tr('Idioma', language),
       playback_rate: tr('Velocidade', language),
       playback_eq: tr('Equalizador', language),
@@ -311,7 +346,9 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     if (section === 'video_opts') return 'Controles exclusivos do player de vídeo';
     if (section === 'music_opts') return 'Controles exclusivos do player de música';
     if (section === 'iptv_opts') return 'Pesquisa digitada, abas, EPG e links M3U';
-    if (section === 'radio_opts') return 'Estações favoritas, categorias e timer de sono';
+    if (section === 'radio_opts') return 'Estações favoritas, categorias, protetor de tela e timer';
+    if (section === 'screensaver')
+      return 'Visualizadores estilo Windows Media Player, relógio/data/clima e letras (.LRC)';
     return 'Escolha uma opção na lista e pressione B para confirmar';
   }, [section]);
 
@@ -399,6 +436,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           label: tr('Velocidade', language),
           value: `${playbackRate.toFixed(2)}x`,
           onSelect: () => goSection('playback_rate', 'music_opts'),
+        },
+        {
+          id: 'mus-screensaver',
+          label: 'Protetor de tela',
+          value: formatScreensaverTimeout(screensaverTimeoutSec),
+          onSelect: () => goSection('screensaver', 'music_opts'),
         },
         {
           id: 'mus-sleep',
@@ -498,6 +541,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           },
         },
         {
+          id: 'rad-screensaver',
+          label: 'Protetor de tela',
+          value: formatScreensaverTimeout(screensaverTimeoutSec),
+          onSelect: () => goSection('screensaver', 'radio_opts'),
+        },
+        {
           id: 'rad-sleep',
           label: tr('Timer de sono', language),
           value: sleepIdx === 0 ? tr('Desativada', language) : `${sleepOptions[sleepIdx]} min`,
@@ -526,7 +575,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         : undefined;
       const updValue = updateStatus?.updateAvailable
         ? `Nova v${updateStatus.latestVersion}`
-        : `v${updateStatus?.currentVersion ?? '2.0.6'}`;
+        : `v${updateStatus?.currentVersion ?? '2.0.7'}`;
 
       return [
         {
@@ -552,6 +601,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           label: 'Layout da tela inicial',
           value: homeLayoutInverted ? 'Invertido (Clima topo)' : 'Clima grande embaixo',
           onSelect: onToggleHomeLayout,
+        },
+        {
+          id: 'screensaver',
+          label: 'Protetor de tela',
+          value: formatScreensaverTimeout(screensaverTimeoutSec),
+          onSelect: () => goSection('screensaver', 'root'),
         },
         {
           id: 'commands',
@@ -630,6 +685,64 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           selected: weatherMode === 'unset',
           value: weatherMode === 'unset' ? 'Sem local' : undefined,
           onSelect: onDisableWeather,
+        },
+      ];
+    }
+
+    if (section === 'screensaver') {
+      const nextTimeoutLabel = formatScreensaverTimeout(
+        SCREENSAVER_TIMEOUT_OPTIONS[
+          (SCREENSAVER_TIMEOUT_OPTIONS.indexOf(
+            screensaverTimeoutSec as (typeof SCREENSAVER_TIMEOUT_OPTIONS)[number]
+          ) +
+            1) %
+            SCREENSAVER_TIMEOUT_OPTIONS.length
+        ] ?? 30
+      );
+      void nextTimeoutLabel;
+      return [
+        {
+          id: 'ss-timeout',
+          label: 'Tempo para ativar (música / rádio)',
+          value: formatScreensaverTimeout(screensaverTimeoutSec),
+          selected: screensaverTimeoutSec > 0,
+          onSelect: onCycleScreensaverTimeout,
+        },
+        {
+          id: 'ss-viz',
+          label: 'Visualizador (estilo WMP)',
+          value: SCREENSAVER_VIZ_LABELS[screensaverVizStyle % SCREENSAVER_VIZ_LABELS.length],
+          onSelect: onCycleScreensaverViz,
+        },
+        {
+          id: 'ss-clock',
+          label: 'Relógio, data e clima',
+          value: screensaverShowClock ? 'Ativado' : 'Desativado',
+          selected: screensaverShowClock,
+          onSelect: onToggleScreensaverClock,
+        },
+        {
+          id: 'ss-lyrics',
+          label: 'Letras sobre visualizador',
+          value: screensaverShowLyrics ? 'Ativado' : 'Desativado',
+          selected: screensaverShowLyrics,
+          onSelect: onToggleScreensaverLyrics,
+        },
+        {
+          id: 'ss-now',
+          label: 'Iniciar protetor de tela agora',
+          badge: 'WMP',
+          value: 'Testar ao vivo',
+          onSelect: () => {
+            onClose();
+            onStartScreensaverNow();
+          },
+        },
+        {
+          id: 'ss-back',
+          label: '← Voltar às Opções',
+          hideChevron: true,
+          onSelect: goBack,
         },
       ];
     }
@@ -816,6 +929,16 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     onRadioToggleFav,
     onRadioCycleCategory,
     onRadioRefresh,
+    screensaverTimeoutSec,
+    screensaverVizStyle,
+    screensaverShowClock,
+    screensaverShowLyrics,
+    onCycleScreensaverTimeout,
+    onCycleScreensaverViz,
+    onToggleScreensaverClock,
+    onToggleScreensaverLyrics,
+    onStartScreensaverNow,
+    goBack,
   ]);
 
   useEffect(() => {
@@ -924,12 +1047,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 <div style={{ color: theme.accent }} className="text-[12.5px] font-extrabold">
                   {updateStatus?.updateAvailable
                     ? `Nova versão disponível: v${updateStatus.latestVersion}`
-                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.6'}`}
+                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.7'}`}
                 </div>
                 <div style={{ color: theme.muted }} className="text-[11.5px] mt-0.5">
                   {updateStatus?.updateAvailable
                     ? 'Pronta para baixar da pasta updates/ do GitHub e reiniciar automaticamente.'
-                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.7'} e próximas versões na pasta updates/.`}
+                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.8'} e próximas versões na pasta updates/.`}
                 </div>
               </div>
               <span
@@ -973,21 +1096,83 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
               </div>
             )}
 
-            <div style={{ color: theme.muted }} className="text-[11px] leading-snug">
-              Dados protegidos no update: favoritos ({favoriteTrackIds.length}), histórico ({history.length}), listas IPTV/Rádio do usuário, clima, idioma e tema.
-            </div>
-
-            {updateMessage && (
-              <div
-                style={{
-                  backgroundColor: rgbToRgba(theme.accent, 0.14),
-                  color: theme.accent,
-                }}
-                className="px-2.5 py-1.5 rounded-lg text-[11.5px] font-bold"
-              >
-                {updateMessage}
+            {/* Live KPlayer Update Loading Progress Bar */}
+            <div
+              style={{
+                backgroundColor: rgbToRgba(theme.elevated, 0.72),
+                border: `1px solid ${
+                  updateChecking || updateApplying
+                    ? rgbToRgba(theme.accent, 0.48)
+                    : themeHairline(theme)
+                }`,
+              }}
+              className="p-2.5 rounded-xl space-y-1.5"
+            >
+              <div className="flex items-center justify-between gap-2 text-[11.5px] font-bold">
+                <span
+                  style={{
+                    color:
+                      updateChecking || updateApplying || updateStatus?.updateAvailable
+                        ? theme.accent
+                        : theme.text,
+                  }}
+                  className="truncate"
+                >
+                  {updateStage ||
+                    (updateApplying
+                      ? 'Atualizando KPlayer...'
+                      : updateChecking
+                      ? 'Verificando atualizações...'
+                      : updateStatus?.updateAvailable
+                      ? `Atualização v${updateStatus.latestVersion} pronta para baixar`
+                      : 'Sistema pronto para atualizar')}
+                </span>
+                <span
+                  style={{
+                    color:
+                      updateChecking || updateApplying || updateProgress === 100
+                        ? theme.accent
+                        : theme.muted,
+                  }}
+                  className="tabular-nums shrink-0 font-extrabold"
+                >
+                  {Math.max(0, Math.min(100, Math.round(updateProgress)))}%
+                </span>
               </div>
-            )}
+
+              <div
+                style={{ backgroundColor: rgbToRgba(theme.bg, 0.9) }}
+                className="w-full h-3 rounded-full overflow-hidden relative border border-white/10"
+              >
+                <div
+                  style={{
+                    width: `${Math.max(
+                      updateChecking || updateApplying ? 8 : 0,
+                      Math.min(100, updateProgress)
+                    )}%`,
+                    background: `linear-gradient(90deg, ${theme.accent}, ${rgbToRgba(theme.accent, 0.72)})`,
+                    boxShadow: `0 0 14px ${rgbToRgba(theme.accent, 0.65)}`,
+                  }}
+                  className="h-full rounded-full transition-all duration-300 relative overflow-hidden"
+                >
+                  {(updateChecking || updateApplying) && (
+                    <div
+                      className="absolute inset-0 animate-pulse"
+                      style={{
+                        background:
+                          'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.42) 50%, transparent 100%)',
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div style={{ color: theme.muted }} className="text-[11px] leading-snug truncate">
+                {updateDetail ||
+                  updateMessage ||
+                  `Dados protegidos no update: favoritos (${favoriteTrackIds.length}), histórico (${history.length}), listas IPTV/Rádio, clima, idioma e tema.`}
+              </div>
+            </div>
 
             <form onSubmit={handleRepoSubmit} className="flex items-center gap-1.5 pt-0.5">
               <input

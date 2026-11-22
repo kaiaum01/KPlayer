@@ -27,8 +27,15 @@ import {
   parseLrc,
 } from './utils/media';
 import { describeWeatherCode, formatWeatherLocationShort } from './utils/weather';
+import { getWeatherHomeHero } from './utils/weatherMood';
 import { HeaderBar, UpdateBannerContext } from './components/HeaderBar';
 import { OptionsMenu, type OptionsMenuHandle, type OptionSectionId } from './components/OptionsMenu';
+import {
+  ScreensaverOverlay,
+  SCREENSAVER_TIMEOUT_OPTIONS,
+  SCREENSAVER_VIZ_LABELS,
+  formatScreensaverTimeout,
+} from './components/ScreensaverOverlay';
 import { WeatherGlyph, WeatherScreen, type WeatherScreenHandle } from './components/WeatherScreen';
 import {
   AudioVisualizer,
@@ -54,6 +61,15 @@ import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
 import { AndroidPlayerApp } from './components/AndroidPlayerApp';
 import portCoverImg from './assets/images/kplayer_port_cover_1795234394587.jpg';
+
+const APP_VERSION = '2.0.7';
+const DEFAULT_CHANGELOG_NOTES: string[] = [
+  'Changelog pós-atualização: exibido automaticamente uma única vez sempre que o KPlayer for atualizado.',
+  'Protetor de tela com visualizadores (30s) ativado por padrão ao ouvir Músicas ou Rádio Online.',
+  'Tela inicial inteligente com o Clima: troca "Seu som. Sua tela." por uma saudação do clima atual e uma mensagem descontraída aleatória.',
+  'Quando o Clima estiver desativado, a tela inicial preserva exatamente o texto padrão.',
+  'Barra de carregamento ao vivo (0% a 100%) durante verificação, download e instalação de atualizações.',
+];
 
 const RADIO_CATEGORIES = [
   'Brasil',
@@ -151,11 +167,38 @@ export default function App() {
   const [updateChecking, setUpdateChecking] = useState<boolean>(false);
   const [updateApplying, setUpdateApplying] = useState<boolean>(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<number>(0);
+  const [updateStage, setUpdateStage] = useState<string | null>(null);
+  const [updateDetail, setUpdateDetail] = useState<string | null>(null);
   const [optionsInitialSection, setOptionsInitialSection] = useState<OptionSectionId | undefined>(undefined);
   const [optionsContext, setOptionsContext] = useState<OptionsContext>('general');
   const [homeLayoutInverted, setHomeLayoutInverted] = useState<boolean>(() =>
     loadStorage('kp_home_layout_inverted', false)
   );
+  const [screensaverTimeoutSec, setScreensaverTimeoutSec] = useState<number>(() => {
+    const saved = loadStorage<number>('kp_ss_timeout_v207', 30);
+    return (SCREENSAVER_TIMEOUT_OPTIONS as readonly number[]).includes(saved) ? saved : 30;
+  });
+  const [screensaverVizStyle, setScreensaverVizStyle] = useState<number>(() => {
+    const saved = loadStorage<number>('kp_ss_viz', 0);
+    return saved >= 0 && saved < SCREENSAVER_VIZ_LABELS.length ? saved : 0;
+  });
+  const [screensaverShowClock, setScreensaverShowClock] = useState<boolean>(() =>
+    loadStorage('kp_ss_clock', true)
+  );
+  const [screensaverShowLyrics, setScreensaverShowLyrics] = useState<boolean>(() =>
+    loadStorage('kp_ss_lyrics', true)
+  );
+  const [screensaverActive, setScreensaverActive] = useState<boolean>(false);
+  const lastActivityRef = useRef<number>(Date.now());
+  const [weatherMoodSeed] = useState<number>(() => Math.floor(Math.random() * 100000));
+  const [lastSeenVersion, setLastSeenVersion] = useState<string>(() =>
+    loadStorage<string>('kp_last_seen_version', '')
+  );
+  const lastSeenVersionRef = useRef<string>(lastSeenVersion);
+  useEffect(() => {
+    lastSeenVersionRef.current = lastSeenVersion;
+  }, [lastSeenVersion]);
   const [tutorialDone, setTutorialDone] = useState<boolean>(() =>
     loadStorage('kp_tutorial_done_v206', false)
   );
@@ -164,6 +207,16 @@ export default function App() {
   useEffect(() => {
     tutorialDoneRef.current = tutorialDone;
   }, [tutorialDone]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('kp_ss_timeout_v207', JSON.stringify(screensaverTimeoutSec));
+      localStorage.setItem('kp_ss_viz', JSON.stringify(screensaverVizStyle));
+      localStorage.setItem('kp_ss_clock', JSON.stringify(screensaverShowClock));
+      localStorage.setItem('kp_ss_lyrics', JSON.stringify(screensaverShowLyrics));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [screensaverTimeoutSec, screensaverVizStyle, screensaverShowClock, screensaverShowLyrics]);
   const [libSearchQuery, setLibSearchQuery] = useState<string>('');
   const [showDeck, setShowDeck] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 820 : true
@@ -389,16 +442,36 @@ export default function App() {
   const checkForUpdates = useCallback(
     async (force = false) => {
       setUpdateChecking(true);
+      setUpdateProgress(22);
+      setUpdateStage('Verificando atualizações...');
+      setUpdateDetail('Consultando pasta updates/ no GitHub');
+      const pulseTimer = window.setInterval(() => {
+        setUpdateProgress((p) => (p < 82 ? p + 12 : p));
+      }, 180);
       try {
         const r = await fetch(`/api/update/check${force ? '?refresh=1' : ''}`);
-        if (!r.ok) return;
+        if (!r.ok) {
+          setUpdateProgress(0);
+          setUpdateStage('Falha na verificação');
+          setUpdateDetail('Não foi possível consultar o canal agora.');
+          return;
+        }
         const data = (await r.json()) as AppUpdateStatus;
         setUpdateStatus(data);
-        if (force) {
-          if (data.updateAvailable) {
+        setUpdateProgress(100);
+        if (data.updateAvailable) {
+          setUpdateStage(`Nova versão v${data.latestVersion} pronta`);
+          setUpdateDetail('Selecione Baixar e atualizar para instalar preservando dados.');
+          if (force) {
             setUpdateMessage(`Nova versão v${data.latestVersion} disponível na pasta updates/!`);
             notify(`Nova versão v${data.latestVersion} disponível`);
-          } else {
+          }
+        } else {
+          setUpdateStage('Verificação concluída');
+          setUpdateDetail(
+            `KPlayer v${data.currentVersion} em dia · Monitorando v${data.nextExpectedVersion}+`
+          );
+          if (force) {
             setUpdateMessage(
               `KPlayer v${data.currentVersion} atualizado. Monitorando v${data.nextExpectedVersion}+.`
             );
@@ -406,10 +479,14 @@ export default function App() {
           }
         }
       } catch {
+        setUpdateProgress(0);
+        setUpdateStage('Sem conexão com updates/');
+        setUpdateDetail('Verifique sua conexão e tente novamente.');
         if (force) {
           setUpdateMessage('Não foi possível consultar a pasta updates/ agora.');
         }
       } finally {
+        window.clearInterval(pulseTimer);
         setUpdateChecking(false);
       }
     },
@@ -444,7 +521,27 @@ export default function App() {
   const applyAppUpdate = useCallback(async () => {
     if (updateApplying) return;
     setUpdateApplying(true);
+    setUpdateProgress(10);
+    setUpdateStage('Conectando ao canal updates/...');
+    setUpdateDetail('Preparando download seguro (preservando dados e histórico)');
     setUpdateMessage('Baixando atualização da pasta updates/ (preservando dados e histórico)...');
+
+    const stepStages: Array<{ pct: number; stage: string; detail: string }> = [
+      { pct: 28, stage: 'Baixando pacote R36S...', detail: 'Transferindo arquivos da pasta updates/' },
+      { pct: 54, stage: 'Baixando pacote R36S...', detail: 'Verificando integridade dos blocos' },
+      { pct: 76, stage: 'Validando checksum SHA-256...', detail: 'Garantindo autenticidade do pacote' },
+      { pct: 90, stage: 'Aplicando atualização...', detail: 'Preservando favoritos, histórico, listas e clima' },
+    ];
+    let stepIdx = 0;
+    const progressTimer = window.setInterval(() => {
+      if (stepIdx < stepStages.length) {
+        const s = stepStages[stepIdx++];
+        setUpdateProgress(s.pct);
+        setUpdateStage(s.stage);
+        setUpdateDetail(s.detail);
+      }
+    }, 340);
+
     try {
       const r = await fetch('/api/update/apply', { method: 'POST' });
       const d = (await r.json()) as {
@@ -453,22 +550,35 @@ export default function App() {
         targetVersion?: string;
         restartRequired?: boolean;
       };
+      window.clearInterval(progressTimer);
       if (d.ok) {
+        setUpdateProgress(100);
+        setUpdateStage('Atualização concluída!');
+        setUpdateDetail(
+          `Versão v${d.targetVersion ?? updateStatus?.latestVersion ?? APP_VERSION} pronta · Reiniciando KPlayer...`
+        );
         setUpdateMessage(
           d.message ||
-            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? '2.0.6'} aplicada. Reiniciando...`
+            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? APP_VERSION} aplicada. Reiniciando...`
         );
         notify('Atualização concluída! Reiniciando KPlayer...');
         window.setTimeout(() => {
           setUpdateApplying(false);
           setUpdateMessage(null);
           setBootRunId((n) => n + 1);
-        }, 1200);
+        }, 1250);
         return;
       }
+      setUpdateProgress(0);
+      setUpdateStage('Falha ao atualizar');
+      setUpdateDetail('Seus dados e histórico seguem intactos.');
       setUpdateMessage('Não foi possível aplicar a atualização agora.');
       setUpdateApplying(false);
     } catch {
+      window.clearInterval(progressTimer);
+      setUpdateProgress(0);
+      setUpdateStage('Erro de conexão');
+      setUpdateDetail('Seus dados e histórico seguem intactos.');
       setUpdateMessage('Erro de conexão ao aplicar atualização.');
       setUpdateApplying(false);
     }
@@ -729,7 +839,13 @@ export default function App() {
       if (cancelled) return;
 
       setScreen(
-        !onboardedRef.current ? 'welcome' : !tutorialDoneRef.current ? 'tutorial' : 'home'
+        !onboardedRef.current
+          ? 'welcome'
+          : !tutorialDoneRef.current
+          ? 'tutorial'
+          : lastSeenVersionRef.current !== APP_VERSION
+          ? 'changelog'
+          : 'home'
       );
       setBootFading(false);
     };
@@ -1257,10 +1373,80 @@ export default function App() {
     [screen, prevScreen]
   );
 
+  // Automatic Screensaver idle trigger when playing Music or Radio
+  useEffect(() => {
+    const touch = () => {
+      lastActivityRef.current = Date.now();
+    };
+    window.addEventListener('pointerdown', touch, { passive: true });
+    window.addEventListener('keydown', touch, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', touch);
+      window.removeEventListener('keydown', touch);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (screensaverTimeoutSec <= 0 || screensaverActive) return;
+    const isAudioOrRadioPlaying =
+      isPlaying && (Boolean(activeRadio) || activeTrack?.kind === 'audio');
+    const blockedScreen =
+      screen === 'boot' ||
+      screen === 'welcome' ||
+      screen === 'terms' ||
+      screen === 'notice' ||
+      screen === 'tutorial' ||
+      screen === 'changelog' ||
+      screen === 'video' ||
+      updateApplying;
+    if (!isAudioOrRadioPlaying || blockedScreen) return;
+
+    const id = window.setInterval(() => {
+      if (Date.now() - lastActivityRef.current >= screensaverTimeoutSec * 1000) {
+        setScreensaverActive(true);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [
+    screensaverTimeoutSec,
+    screensaverActive,
+    isPlaying,
+    activeRadio,
+    activeTrack?.kind,
+    screen,
+    updateApplying,
+  ]);
+
   // Unified R36S physical / keyboard / on-screen button handler
   const handleButton = useCallback(
     (btn: R36SButton) => {
+      lastActivityRef.current = Date.now();
       if (screen === 'boot') return;
+
+      if (screensaverActive) {
+        if (btn === 'L1') {
+          setScreensaverVizStyle((v) => (v + SCREENSAVER_VIZ_LABELS.length - 1) % SCREENSAVER_VIZ_LABELS.length);
+          return;
+        }
+        if (btn === 'R1') {
+          setScreensaverVizStyle((v) => (v + 1) % SCREENSAVER_VIZ_LABELS.length);
+          return;
+        }
+        if (btn === 'X') {
+          setScreensaverShowLyrics((s) => !s);
+          return;
+        }
+        if (btn === 'Y') {
+          setScreensaverShowClock((s) => !s);
+          return;
+        }
+        if (btn === 'START') {
+          togglePlayPause();
+          return;
+        }
+        setScreensaverActive(false);
+        return;
+      }
 
       if (btn === 'START') {
         togglePlayPause();
@@ -1270,8 +1456,27 @@ export default function App() {
       if (btn === 'SELECT') {
         if (screen === 'options') {
           setScreen(prevScreen);
-        } else if (screen !== 'welcome' && screen !== 'terms' && screen !== 'notice' && screen !== 'tutorial') {
+        } else if (
+          screen !== 'welcome' &&
+          screen !== 'terms' &&
+          screen !== 'notice' &&
+          screen !== 'tutorial' &&
+          screen !== 'changelog'
+        ) {
           openOptionsScreen();
+        }
+        return;
+      }
+
+      if (screen === 'changelog') {
+        if (btn === 'B' || btn === 'A' || btn === 'X' || btn === 'Y') {
+          setLastSeenVersion(APP_VERSION);
+          try {
+            localStorage.setItem('kp_last_seen_version', JSON.stringify(APP_VERSION));
+          } catch {
+            // Ignore storage errors
+          }
+          setScreen('home');
         }
         return;
       }
@@ -1283,7 +1488,7 @@ export default function App() {
             openOptionsScreen('root');
           } else {
             setTutorialDone(true);
-            setScreen('home');
+            setScreen(lastSeenVersion !== APP_VERSION ? 'changelog' : 'home');
           }
         }
         return;
@@ -1309,6 +1514,8 @@ export default function App() {
           if (!tutorialDone) {
             setTutorialFromOptions(false);
             setScreen('tutorial');
+          } else if (lastSeenVersion !== APP_VERSION) {
+            setScreen('changelog');
           } else {
             setScreen('home');
           }
@@ -1495,6 +1702,7 @@ export default function App() {
     },
     [
       togglePlayPause,
+      screensaverActive,
       screen,
       prevScreen,
       stepTrack,
@@ -1531,6 +1739,7 @@ export default function App() {
       notify,
       tutorialDone,
       tutorialFromOptions,
+      lastSeenVersion,
     ]
   );
 
@@ -1594,9 +1803,9 @@ export default function App() {
 
   const updateBannerValue = useMemo(
     () => ({
-      currentVersion: updateStatus?.currentVersion ?? '2.0.6',
+      currentVersion: updateStatus?.currentVersion ?? APP_VERSION,
       updateAvailable: Boolean(updateStatus?.updateAvailable),
-      latestVersion: updateStatus?.latestVersion ?? '2.0.6',
+      latestVersion: updateStatus?.latestVersion ?? APP_VERSION,
       onOpenUpdate: () => openOptionsScreen('update'),
     }),
     [updateStatus, openOptionsScreen]
@@ -1646,7 +1855,7 @@ export default function App() {
       <div className="min-h-10 px-3 py-1.5 bg-[#101319] border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2.5 text-xs flex-wrap">
           <span className="font-bold text-zinc-100 whitespace-nowrap">
-            KPlayer v{updateStatus?.currentVersion ?? '2.0.6'} • R36S
+            KPlayer v{updateStatus?.currentVersion ?? APP_VERSION} • R36S
           </span>
           {updateStatus?.updateAvailable ? (
             <button
@@ -1949,7 +2158,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.6 • R36S
+                      v2.0.7 • R36S
                     </div>
                   </div>
 
@@ -2100,6 +2309,8 @@ export default function App() {
                       if (!tutorialDone) {
                         setTutorialFromOptions(false);
                         setScreen('tutorial');
+                      } else if (lastSeenVersion !== APP_VERSION) {
+                        setScreen('changelog');
                       } else {
                         setScreen('home');
                       }
@@ -2181,7 +2392,7 @@ export default function App() {
                         openOptionsScreen('root');
                       } else {
                         setTutorialDone(true);
-                        setScreen('home');
+                        setScreen(lastSeenVersion !== APP_VERSION ? 'changelog' : 'home');
                       }
                     }}
                     style={{
@@ -2198,6 +2409,97 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* ==================== ONE-TIME POST-UPDATE CHANGELOG (SHOWN ONCE PER VERSION) ==================== */}
+            {screen === 'changelog' && (() => {
+              const ver = updateStatus?.currentVersion ?? APP_VERSION;
+              const notes =
+                updateStatus?.notes && updateStatus.notes.length > 0 && updateStatus.latestVersion === ver
+                  ? updateStatus.notes.slice(0, 6)
+                  : DEFAULT_CHANGELOG_NOTES;
+              const handleDismissChangelog = () => {
+                setLastSeenVersion(APP_VERSION);
+                try {
+                  localStorage.setItem('kp_last_seen_version', JSON.stringify(APP_VERSION));
+                } catch {
+                  // Ignore storage errors
+                }
+                setScreen('home');
+              };
+
+              return (
+                <div className="w-full h-full relative overflow-hidden flex flex-col">
+                  <ModernBackdrop theme={theme} />
+                  <HeaderBar
+                    theme={theme}
+                    section="NOVIDADES"
+                    location={locationLabel}
+                  />
+                  <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-4 flex flex-col w-full max-w-[820px] mx-auto">
+                    <div className="shrink-0 mb-3 flex items-center justify-between gap-2">
+                      <div>
+                        <h2
+                          style={{ color: theme.text }}
+                          className="text-[21px] @min-[540px]:text-[25px] font-extrabold leading-tight"
+                        >
+                          Novidades da versão v{ver}
+                        </h2>
+                        <p style={{ color: theme.muted }} className="text-[12px] @min-[540px]:text-[13px] mt-0.5">
+                          O que mudou nesta atualização • exibido apenas uma vez
+                        </p>
+                      </div>
+                      <span
+                        style={{
+                          backgroundColor: rgbToRgba(theme.accent, 0.16),
+                          border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
+                          color: theme.accent,
+                        }}
+                        className="px-2.5 py-1 rounded-full text-[11px] font-extrabold shrink-0"
+                      >
+                        v{ver}
+                      </span>
+                    </div>
+
+                    <div className="flex-1 min-h-0 overflow-y-auto kp-scroll space-y-2 pr-0.5">
+                      {notes.map((item, idx) => (
+                        <div
+                          key={idx}
+                          style={{ ...modernPanelStyle(theme, 12) }}
+                          className="px-3.5 py-2.5 flex items-start gap-3"
+                        >
+                          <span
+                            style={{
+                              backgroundColor: theme.accent,
+                              boxShadow: `0 0 8px ${rgbToRgba(theme.accent, 0.55)}`,
+                            }}
+                            className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+                          />
+                          <div
+                            style={{ color: theme.text }}
+                            className="text-[13px] @min-[540px]:text-[13.5px] font-semibold leading-snug"
+                          >
+                            {item}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleDismissChangelog}
+                      style={{
+                        backgroundColor: theme.accent,
+                        color: theme.bg,
+                        boxShadow: `0 0 18px ${rgbToRgba(theme.accent, 0.35)}`,
+                      }}
+                      className="mt-3 w-full py-2.5 rounded-xl text-[14px] font-extrabold cursor-pointer hover:brightness-110 transition-all shrink-0"
+                    >
+                      B  •  Continuar para o K PLAYER
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ==================== TERMS OF USE ==================== */}
             {screen === 'terms' && (
@@ -2379,11 +2681,12 @@ export default function App() {
               </div>
             )}
 
-            {/* ==================== DASHBOARD / HOME (v2.0.6: MINI PLAYER TOP + LARGE WEATHER BOTTOM, INVERTIBLE) ==================== */}
+            {/* ==================== DASHBOARD / HOME (v2.0.7: WEATHER-REACTIVE HERO + MINI PLAYER TOP + LARGE WEATHER BOTTOM) ==================== */}
             {screen === 'home' && (() => {
               const wxInfo = weatherData
                 ? describeWeatherCode(weatherData.current.weatherCode, weatherData.current.isDay)
                 : null;
+              const weatherHero = getWeatherHomeHero(weatherData, weatherMoodSeed);
               const cityShort = formatWeatherLocationShort(weatherData?.location ?? weatherLocation);
               const todayDaily = weatherData?.daily?.[0];
               const nowTitle = activeRadio
@@ -2407,20 +2710,47 @@ export default function App() {
                 />
 
                 <div className="relative z-10 flex-1 min-h-0 px-4 pt-2.5 pb-3 flex flex-col justify-between gap-2.5 overflow-y-auto kp-scroll w-full max-w-[1120px] mx-auto">
-                  {/* Top Row: Hero Headline + Right Widget (DEFAULT: Mini Player | INVERTED: Compact Weather) */}
+                  {/* Top Row: Weather-reactive Hero (or default "Seu som. Sua tela." when Weather is OFF) + Right Widget */}
                   <div className="shrink-0 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-baseline gap-x-2.5 leading-tight">
-                        <span style={{ color: theme.text }} className="text-[24px] @min-[520px]:text-[29px] @min-[840px]:text-[33px] font-extrabold tracking-tight">
-                          {tr('Seu som.', language)}
-                        </span>
-                        <span style={{ color: theme.muted }} className="text-[24px] @min-[520px]:text-[29px] @min-[840px]:text-[33px] font-extrabold tracking-tight">
-                          {tr('Sua tela.', language)}
-                        </span>
-                      </div>
-                      <p style={{ color: theme.muted }} className="text-[12px] @min-[520px]:text-[13px] mt-0.5 truncate">
-                        {tr('Músicas, vídeos, rádios e TV ao vivo num player só.', language)}
-                      </p>
+                      {weatherHero ? (
+                        <>
+                          <div className="flex flex-wrap items-baseline gap-x-2 leading-tight">
+                            <span
+                              style={{ color: theme.text }}
+                              className="text-[21px] @min-[520px]:text-[26px] @min-[840px]:text-[30px] font-extrabold tracking-tight"
+                            >
+                              {weatherHero.headline}
+                            </span>
+                            <span
+                              style={{ color: theme.accent }}
+                              className="text-[20px] @min-[520px]:text-[24px] @min-[840px]:text-[28px] font-extrabold tracking-tight tabular-nums"
+                            >
+                              • {weatherHero.accentSuffix}
+                            </span>
+                          </div>
+                          <p
+                            style={{ color: theme.muted }}
+                            className="text-[12px] @min-[520px]:text-[13px] mt-0.5 truncate"
+                          >
+                            {weatherHero.subtitle}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap items-baseline gap-x-2.5 leading-tight">
+                            <span style={{ color: theme.text }} className="text-[24px] @min-[520px]:text-[29px] @min-[840px]:text-[33px] font-extrabold tracking-tight">
+                              {tr('Seu som.', language)}
+                            </span>
+                            <span style={{ color: theme.muted }} className="text-[24px] @min-[520px]:text-[29px] @min-[840px]:text-[33px] font-extrabold tracking-tight">
+                              {tr('Sua tela.', language)}
+                            </span>
+                          </div>
+                          <p style={{ color: theme.muted }} className="text-[12px] @min-[520px]:text-[13px] mt-0.5 truncate">
+                            {tr('Músicas, vídeos, rádios e TV ao vivo num player só.', language)}
+                          </p>
+                        </>
+                      )}
                     </div>
 
                     {!homeLayoutInverted ? (
@@ -3780,6 +4110,13 @@ export default function App() {
                 updateChecking={updateChecking}
                 updateApplying={updateApplying}
                 updateMessage={updateMessage}
+                updateProgress={updateProgress}
+                updateStage={updateStage}
+                updateDetail={updateDetail}
+                screensaverTimeoutSec={screensaverTimeoutSec}
+                screensaverVizStyle={screensaverVizStyle}
+                screensaverShowClock={screensaverShowClock}
+                screensaverShowLyrics={screensaverShowLyrics}
                 onSetThemeIndex={setThemeIndex}
                 onSetLanguage={setLanguage}
                 onSetDisplayMode={setR36sDisplayMode}
@@ -3793,6 +4130,30 @@ export default function App() {
                     );
                     return next;
                   });
+                }}
+                onCycleScreensaverTimeout={() => {
+                  setScreensaverTimeoutSec((cur) => {
+                    const idx = SCREENSAVER_TIMEOUT_OPTIONS.indexOf(
+                      cur as (typeof SCREENSAVER_TIMEOUT_OPTIONS)[number]
+                    );
+                    const next =
+                      SCREENSAVER_TIMEOUT_OPTIONS[(idx + 1) % SCREENSAVER_TIMEOUT_OPTIONS.length];
+                    notify(`Protetor de tela: ${formatScreensaverTimeout(next)}`);
+                    return next;
+                  });
+                }}
+                onCycleScreensaverViz={() => {
+                  setScreensaverVizStyle((cur) => {
+                    const next = (cur + 1) % SCREENSAVER_VIZ_LABELS.length;
+                    notify(`Visualizador: ${SCREENSAVER_VIZ_LABELS[next]}`);
+                    return next;
+                  });
+                }}
+                onToggleScreensaverClock={() => setScreensaverShowClock((s) => !s)}
+                onToggleScreensaverLyrics={() => setScreensaverShowLyrics((s) => !s)}
+                onStartScreensaverNow={() => {
+                  lastActivityRef.current = Date.now();
+                  setScreensaverActive(true);
                 }}
                 onOpenCommandsTutorial={() => {
                   setTutorialFromOptions(true);
@@ -3858,6 +4219,35 @@ export default function App() {
                 onApplyUpdate={applyAppUpdate}
                 onSaveUpdateRepo={saveUpdateRepo}
                 onClose={() => setScreen(prevScreen)}
+              />
+            )}
+
+            {/* ==================== PROTETOR DE TELA (WMP VISUALIZERS + RELÓGIO/CLIMA + LETRAS) ==================== */}
+            {screensaverActive && (
+              <ScreensaverOverlay
+                theme={theme}
+                audioElement={audioRef.current}
+                isPlaying={isPlaying}
+                activeTrack={activeTrack}
+                activeRadio={activeRadio}
+                lyrics={activeTrack?.lyrics}
+                activeLyricIndex={activeLyricIndex}
+                weatherData={weatherData}
+                weatherLocation={weatherLocation}
+                vizStyle={screensaverVizStyle}
+                showClockWeather={screensaverShowClock}
+                showLyrics={screensaverShowLyrics}
+                onCycleViz={(dir) =>
+                  setScreensaverVizStyle(
+                    (v) => (v + dir + SCREENSAVER_VIZ_LABELS.length) % SCREENSAVER_VIZ_LABELS.length
+                  )
+                }
+                onToggleClockWeather={() => setScreensaverShowClock((s) => !s)}
+                onToggleLyrics={() => setScreensaverShowLyrics((s) => !s)}
+                onExit={() => {
+                  lastActivityRef.current = Date.now();
+                  setScreensaverActive(false);
+                }}
               />
             )}
                 </div>
@@ -4015,7 +4405,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.6 — Edição R36S
+                  KPlayer v2.0.7 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4031,7 +4421,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
                   src={portCoverImg}
-                  alt="Capa do Port KPlayer v2.0.6 para R36S dArkOS"
+                  alt="Capa do Port KPlayer v2.0.7 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -4040,7 +4430,7 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.6-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.7-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4073,7 +4463,7 @@ export default function App() {
             <div className="mt-4 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.6-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.7-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code>,{' '}
                   <code className="text-zinc-100">kplayer/</code>,{' '}
@@ -4090,22 +4480,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.0.6 com Clima grande embaixo + Mini Player no topo (invertível), tutorial de Comandos na 1ª execução, Opções contextuais (Vídeo, Música, TV, Rádio), pesquisa digitada em TV/Séries/Vídeos, fontes maiores e Auto-Update pela pasta updates/.
+                Inclui binário ARM64 nativo v2.0.7 com changelog pós-atualização (exibido uma vez), protetor de tela com visualizadores (30s por padrão), saudação climática com sugestões descontraídas na tela inicial, barra de progresso de atualização e Auto-Update pela pasta updates/.
               </p>
             </div>
 
             <div className="mt-5 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.6-R36S.zip"
+                download="KPlayer-v2.0.7-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.6-R36S.zip
+                ⬇ Baixar KPlayer-v2.0.7-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.6-R36S.zip.sha256"
+                download="KPlayer-v2.0.7-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

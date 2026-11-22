@@ -214,7 +214,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.0.6' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.0.7' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -869,7 +869,7 @@ async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<s
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-EPG/2.0.6' },
+      headers: { 'User-Agent': 'KPlayer-EPG/2.0.7' },
     });
     clearTimeout(timer);
     if (!res.ok) return '';
@@ -1648,7 +1648,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.0.6' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.0.7' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1669,7 +1669,7 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipFilename = 'KPlayer-v2.0.6-R36S.zip';
+  const r36sZipFilename = 'KPlayer-v2.0.7-R36S.zip';
   const r36sZipPath = path.join(__dirname, 'releases', r36sZipFilename);
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
@@ -1684,14 +1684,14 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.0.6',
+        version: '2.0.7',
         filename: r36sZipFilename,
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
       });
     } catch {
-      return res.status(404).json({ ready: false, version: '2.0.6', filename: r36sZipFilename });
+      return res.status(404).json({ ready: false, version: '2.0.7', filename: r36sZipFilename });
     }
   });
 
@@ -1746,7 +1746,7 @@ async function createServer() {
 
   function nextPatchVersion(ver: string): string {
     const m = ver.trim().replace(/^v/i, '').match(SEMVER_RE);
-    if (!m) return '2.0.7';
+    if (!m) return '2.0.8';
     return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
   }
 
@@ -1772,7 +1772,7 @@ async function createServer() {
     } catch {
       // Fallback below
     }
-    return '2.0.6';
+    return '2.0.7';
   }
 
   async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
@@ -2471,7 +2471,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.6' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.7' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -2582,7 +2582,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.6' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.7' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -2780,7 +2780,7 @@ async function createServer() {
     try {
       const r = await fetch('https://ipwho.is/', {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.6' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.7' },
       });
       const data = (await r.json()) as {
         success?: boolean;
@@ -2875,7 +2875,7 @@ async function createServer() {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=pt&format=json`;
       const upstream = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.6' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.7' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ results: [], error: 'geocoding_unavailable' });
@@ -2938,7 +2938,7 @@ async function createServer() {
         `&timezone=auto&forecast_days=7`;
       const upstream = await fetch(apiUrl, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.6' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.7' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ error: 'weather_unavailable' });
@@ -3057,7 +3057,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.6',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.7',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -3153,7 +3153,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.0.6 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.0.7 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

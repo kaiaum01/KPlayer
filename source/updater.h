@@ -1,6 +1,7 @@
-/* Native R36S Auto-Updater bridge (v2.0.5).
+/* Native R36S Auto-Updater bridge with real-time loading progress bar.
  * Runs ./updater.py off-thread via posix_spawn (never shell) to check GitHub
  * updates/latest.json at boot and on-demand inside Options -> Verificar atualizacoes,
+ * polls iptv/.cache/update-progress.tsv for live download/install progress (0-100%),
  * and applies verified updates atomically while preserving all user data.
  * Exit code 42 signals KPlayer.sh to restart immediately with the new version. */
 
@@ -10,9 +11,12 @@ static bool kp_upd_applying = false;
 static bool kp_upd_available = false;
 static bool kp_upd_checked_once = false;
 static int kp_upd_exit_code = 0;
+static int kp_upd_progress = 0;
+static char kp_upd_stage[96] = "";
+static char kp_upd_detail[128] = "";
 static char kp_upd_current[32] = KPLAYER_VERSION;
 static char kp_upd_latest[32] = KPLAYER_VERSION;
-static char kp_upd_next[32] = "2.0.7";
+static char kp_upd_next[32] = "2.0.8";
 static char kp_upd_source[32] = "local";
 static char kp_upd_repo[128] = "";
 static char kp_upd_message[192] = "";
@@ -21,6 +25,7 @@ static int kp_upd_note_count = 0;
 static bool kp_upd_restart_requested = false;
 static bool kp_upd_toast_pending = false;
 static char kp_upd_toast_text[192] = "";
+static uint32_t kp_upd_progress_next_poll = 0;
 
 static int kp_upd_run_python(char *const argv[]) {
   extern char **environ;
@@ -35,12 +40,47 @@ static int kp_upd_run_python(char *const argv[]) {
   return -1;
 }
 
+static void kp_upd_poll_progress_file(void) {
+  FILE *f = fopen("iptv/.cache/update-progress.tsv", "r");
+  if (!f) return;
+  char line[320];
+  if (fgets(line, sizeof(line), f)) {
+    size_t len = strlen(line);
+    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+      line[--len] = 0;
+    if (!strncmp(line, "PROG\t", 5)) {
+      char *p = line + 5;
+      char *fields[4] = {0};
+      int nf = 0;
+      while (nf < 4) {
+        fields[nf++] = p;
+        char *tab = strchr(p, '\t');
+        if (!tab) break;
+        *tab = 0;
+        p = tab + 1;
+      }
+      int pct = nf >= 1 ? atoi(fields[0]) : 0;
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      pthread_mutex_lock(&kp_upd_mutex);
+      kp_upd_progress = pct;
+      if (nf >= 2 && fields[1][0]) snprintf(kp_upd_stage, sizeof(kp_upd_stage), "%.95s", fields[1]);
+      if (nf >= 3) snprintf(kp_upd_detail, sizeof(kp_upd_detail), "%.127s", fields[2]);
+      pthread_mutex_unlock(&kp_upd_mutex);
+    }
+  }
+  fclose(f);
+}
+
 static void kp_upd_parse_tsv(const char *path, bool notify_user) {
   FILE *f = fopen(path, "r");
   if (!f) {
     pthread_mutex_lock(&kp_upd_mutex);
     kp_upd_checking = false;
     kp_upd_checked_once = true;
+    kp_upd_progress = 0;
+    snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Falha na verificação");
+    snprintf(kp_upd_detail, sizeof(kp_upd_detail), "Manifesto indisponível");
     snprintf(kp_upd_message, sizeof(kp_upd_message),
              "Não foi possível ler o manifesto de atualização.");
     if (notify_user) {
@@ -52,7 +92,7 @@ static void kp_upd_parse_tsv(const char *path, bool notify_user) {
   }
 
   char line[512];
-  char cur[32] = KPLAYER_VERSION, lat[32] = KPLAYER_VERSION, nxt[32] = "2.0.7";
+  char cur[32] = KPLAYER_VERSION, lat[32] = KPLAYER_VERSION, nxt[32] = "2.0.8";
   char src[32] = "local", repo[128] = "", err[160] = "";
   bool avail = false;
   char notes[4][160];
@@ -99,11 +139,20 @@ static void kp_upd_parse_tsv(const char *path, bool notify_user) {
   for (int i = 0; i < ncnt; i++)
     snprintf(kp_upd_notes[i], sizeof(kp_upd_notes[i]), "%.159s", notes[i]);
   if (avail) {
+    kp_upd_progress = 100;
+    snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Atualização v%.31s pronta", lat);
+    snprintf(kp_upd_detail, sizeof(kp_upd_detail), "Pressione B em Baixar e atualizar");
     snprintf(kp_upd_message, sizeof(kp_upd_message),
              "Nova versão v%.31s pronta na pasta updates/!", lat);
   } else if (err[0]) {
+    kp_upd_progress = 0;
+    snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Canal aguardando configuração");
+    snprintf(kp_upd_detail, sizeof(kp_upd_detail), "%.127s", err);
     snprintf(kp_upd_message, sizeof(kp_upd_message), "%.159s", err);
   } else {
+    kp_upd_progress = 100;
+    snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Verificação concluída");
+    snprintf(kp_upd_detail, sizeof(kp_upd_detail), "v%.31s instalada • monitorando v%.31s+", cur, nxt);
     snprintf(kp_upd_message, sizeof(kp_upd_message),
              "KPlayer v%.31s em dia. Monitorando v%.31s+.", cur, nxt);
   }
@@ -128,6 +177,9 @@ static void *kp_upd_check_worker(void *arg) {
     pthread_mutex_lock(&kp_upd_mutex);
     kp_upd_checking = false;
     kp_upd_checked_once = true;
+    kp_upd_progress = 0;
+    snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Sem conexão");
+    snprintf(kp_upd_detail, sizeof(kp_upd_detail), "Verifique o Wi-Fi do R36S");
     snprintf(kp_upd_message, sizeof(kp_upd_message),
              "Sem conexão com o canal updates/ do GitHub.");
     if (notify_user) {
@@ -143,9 +195,13 @@ static void *kp_upd_apply_worker(void *unused) {
   (void)unused;
   char *argv[] = {"python3", "./updater.py", "apply", NULL};
   int rc = kp_upd_run_python(argv);
+  kp_upd_poll_progress_file();
   pthread_mutex_lock(&kp_upd_mutex);
   kp_upd_applying = false;
   if (rc == 42) {
+    kp_upd_progress = 100;
+    snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Atualização concluída!");
+    snprintf(kp_upd_detail, sizeof(kp_upd_detail), "Reiniciando KPlayer sem perda de dados...");
     kp_upd_exit_code = 42;
     kp_upd_restart_requested = true;
     snprintf(kp_upd_message, sizeof(kp_upd_message),
@@ -153,11 +209,17 @@ static void *kp_upd_apply_worker(void *unused) {
     snprintf(kp_upd_toast_text, sizeof(kp_upd_toast_text), "%s", kp_upd_message);
     kp_upd_toast_pending = true;
   } else if (rc == 0) {
+    kp_upd_progress = 100;
+    snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Sistema em dia");
+    snprintf(kp_upd_detail, sizeof(kp_upd_detail), "v%.31s já é a versão mais recente", kp_upd_current);
     snprintf(kp_upd_message, sizeof(kp_upd_message),
              "KPlayer já está na versão mais recente (v%s).", kp_upd_current);
     snprintf(kp_upd_toast_text, sizeof(kp_upd_toast_text), "%s", kp_upd_message);
     kp_upd_toast_pending = true;
   } else {
+    kp_upd_progress = 0;
+    snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Falha na atualização");
+    snprintf(kp_upd_detail, sizeof(kp_upd_detail), "Seus dados e histórico seguem intactos");
     snprintf(kp_upd_message, sizeof(kp_upd_message),
              "Falha ao baixar/verificar pacote. Seus dados seguem intactos.");
     snprintf(kp_upd_toast_text, sizeof(kp_upd_toast_text), "%s", kp_upd_message);
@@ -174,6 +236,9 @@ static void updater_start_check(bool notify_user) {
     return;
   }
   kp_upd_checking = true;
+  kp_upd_progress = 18;
+  snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Verificando atualizações...");
+  snprintf(kp_upd_detail, sizeof(kp_upd_detail), "Consultando pasta updates/ no GitHub");
   snprintf(kp_upd_message, sizeof(kp_upd_message),
            "Verificando pasta updates/ no GitHub...");
   pthread_mutex_unlock(&kp_upd_mutex);
@@ -184,6 +249,7 @@ static void updater_start_check(bool notify_user) {
   } else {
     pthread_mutex_lock(&kp_upd_mutex);
     kp_upd_checking = false;
+    kp_upd_progress = 0;
     pthread_mutex_unlock(&kp_upd_mutex);
   }
 }
@@ -195,15 +261,20 @@ static void updater_start_apply(void) {
     return;
   }
   kp_upd_applying = true;
+  kp_upd_progress = 4;
+  snprintf(kp_upd_stage, sizeof(kp_upd_stage), "Preparando atualização...");
+  snprintf(kp_upd_detail, sizeof(kp_upd_detail), "Conectando ao canal updates/ do GitHub");
   snprintf(kp_upd_message, sizeof(kp_upd_message),
            "Baixando e verificando pacote SHA-256 (mantendo dados)...");
   pthread_mutex_unlock(&kp_upd_mutex);
+  remove("iptv/.cache/update-progress.tsv");
   pthread_t t;
   if (pthread_create(&t, NULL, kp_upd_apply_worker, NULL) == 0) {
     pthread_detach(t);
   } else {
     pthread_mutex_lock(&kp_upd_mutex);
     kp_upd_applying = false;
+    kp_upd_progress = 0;
     pthread_mutex_unlock(&kp_upd_mutex);
   }
 }
@@ -220,8 +291,18 @@ static bool updater_is_available(char *latest_out, size_t latest_cap) {
 static void updater_poll_main_thread(void) {
   bool need_toast = false;
   bool need_restart = false;
+  bool is_busy = false;
+  bool is_checking = false;
   char toast_buf[192] = "";
+  uint32_t now = SDL_GetTicks();
+
   pthread_mutex_lock(&kp_upd_mutex);
+  is_busy = kp_upd_applying;
+  is_checking = kp_upd_checking;
+  if (is_checking && kp_upd_progress < 85 && (int32_t)(now - kp_upd_progress_next_poll) >= 0) {
+    kp_upd_progress += 5;
+    if (kp_upd_progress > 85) kp_upd_progress = 85;
+  }
   if (kp_upd_toast_pending) {
     snprintf(toast_buf, sizeof(toast_buf), "%s", kp_upd_toast_text);
     kp_upd_toast_pending = false;
@@ -232,6 +313,12 @@ static void updater_poll_main_thread(void) {
     need_restart = true;
   }
   pthread_mutex_unlock(&kp_upd_mutex);
+
+  if ((is_busy || is_checking) && (int32_t)(now - kp_upd_progress_next_poll) >= 0) {
+    kp_upd_progress_next_poll = now + 140;
+    if (is_busy) kp_upd_poll_progress_file();
+  }
+
   if (need_toast && toast_buf[0]) notify(toast_buf);
   if (need_restart) running = 0;
 }

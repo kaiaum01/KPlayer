@@ -4,6 +4,7 @@ export type ScreenMode =
   | 'boot'
   | 'welcome'
   | 'tutorial'
+  | 'changelog'
   | 'terms'
   | 'notice'
   | 'home'

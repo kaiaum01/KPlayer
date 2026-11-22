@@ -786,3 +786,141 @@ static void weather_key(SDL_Keycode k) {
     else weather_view = WEATHER_VIEW_SETUP;
   }
 }
+
+/* Weather-reactive Home hero headline + randomized relaxed suggestion (v2.0.7).
+ * Returns false when Weather is off/unavailable so Home preserves its default copy. */
+static int weather_hero_bucket = -1;
+static int weather_hero_pick = 0;
+
+static bool weather_home_hero_copy(char *headline, size_t hcap,
+                                   char *subtitle, size_t scap) {
+  pthread_mutex_lock(&weather_mutex);
+  WeatherState w = weather_data;
+  pthread_mutex_unlock(&weather_mutex);
+
+  if (!w.valid || !w.temp[0])
+    return false;
+
+  int code = w.code;
+  double temp_val = atof(w.temp);
+  int bucket = 8; /* Default: nublado */
+  if (code >= 95) bucket = 0;
+  else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) bucket = 1;
+  else if ((code >= 71 && code <= 77) || code == 85 || code == 86) bucket = 2;
+  else if (code == 45 || code == 48) bucket = 3;
+  else if (temp_val <= 16.0) bucket = 4;
+  else if (temp_val >= 30.0) bucket = 5;
+  else if (code <= 1 && w.is_day) bucket = 6;
+  else if (code <= 1 && !w.is_day) bucket = 7;
+
+  static const char *const msg_storm[] = {
+      "Temporal lá fora — tá perfeito pra ver um filme ou série!",
+      "Dia de trovoada combina com uma série maratonada.",
+      "Fica no conforto curtindo uma música ou TV ao vivo!"
+  };
+  static const char *const msg_rain[] = {
+      "Clima de chuva: tá bom demais pra ver um filme ou série!",
+      "Chuvinha pedindo uma música boa ou um filme no capricho.",
+      "Tempo chuvoso combina com rádio ao vivo ou uma série!",
+      "Barulhinho de chuva — escolhe uma música pra relaxar!"
+  };
+  static const char *const msg_snow[] = {
+      "Frio intenso! Ideal pra se enrolar e ver um filme.",
+      "Clima congelante pede uma série boa ou música quentinha!",
+      "Dia gelado perfeito pra maratonar vídeos e séries."
+  };
+  static const char *const msg_fog[] = {
+      "Neblina lá fora — clima de cinema pra ver um filme!",
+      "Com essa neblina, vai bem uma música calma ou rádio.",
+      "Tempo misterioso lá fora: perfeito pra uma série!"
+  };
+  static const char *const msg_cold[] = {
+      "Friozinho pedindo cobertor, série ou um filmão!",
+      "Clima fresco demais pra curtir uma música ou filme.",
+      "Com esse frio, tá bom pra ver um filme ou uma série!",
+      "Dia fresquinho combina com rádio ao vivo e música boa."
+  };
+  static const char *const msg_hot[] = {
+      "Calor forte! Fica na sombra curtindo música ou TV.",
+      "Muito calor lá fora — bota uma rádio ou um filme!",
+      "Clima quente pede uma playlist animada pra refrescar!",
+      "Sol pegando fogo: ótimo pra relaxar vendo uma série."
+  };
+  static const char *const msg_sunny[] = {
+      "Dia lindo! Bota uma música animada pra embalar!",
+      "Solzão lá fora — escolhe uma rádio ou sua playlist!",
+      "Tempo aberto combina com música boa ou TV ao vivo!",
+      "Sol brilhando! Dá o play nas suas músicas favoritas."
+  };
+  static const char *const msg_clear_night[] = {
+      "Noite tranquila — tá bom pra ver um filme ou série!",
+      "Clima de noite combina com uma música relaxante.",
+      "Noite estrelada pedindo um filmão ou rádio noturna!",
+      "Fim de dia perfeito pra curtir uma série ou música."
+  };
+  static const char *const msg_cloudy[] = {
+      "Tempo nublado — tá ótimo pra ver um filme ou série!",
+      "Céu fechadinho combina demais com uma música boa.",
+      "Clima tranquilo: escolhe uma rádio, filme ou série!",
+      "Nuvens no céu pedem uma playlist ou TV ao vivo."
+  };
+
+  const char *const *pool = msg_cloudy;
+  int count = (int)(sizeof(msg_cloudy) / sizeof(msg_cloudy[0]));
+  const char *prefix = w.is_day ? "Céu nublado" : "Noite nublada";
+
+  switch (bucket) {
+  case 0:
+    prefix = "Tempestade lá fora";
+    pool = msg_storm;
+    count = (int)(sizeof(msg_storm) / sizeof(msg_storm[0]));
+    break;
+  case 1:
+    prefix = "Chuvinha lá fora";
+    pool = msg_rain;
+    count = (int)(sizeof(msg_rain) / sizeof(msg_rain[0]));
+    break;
+  case 2:
+    prefix = "Tempo gelado";
+    pool = msg_snow;
+    count = (int)(sizeof(msg_snow) / sizeof(msg_snow[0]));
+    break;
+  case 3:
+    prefix = "Tempo com neblina";
+    pool = msg_fog;
+    count = (int)(sizeof(msg_fog) / sizeof(msg_fog[0]));
+    break;
+  case 4:
+    prefix = "Friozinho bom";
+    pool = msg_cold;
+    count = (int)(sizeof(msg_cold) / sizeof(msg_cold[0]));
+    break;
+  case 5:
+    prefix = "Calorzão lá fora";
+    pool = msg_hot;
+    count = (int)(sizeof(msg_hot) / sizeof(msg_hot[0]));
+    break;
+  case 6:
+    prefix = "Dia ensolarado";
+    pool = msg_sunny;
+    count = (int)(sizeof(msg_sunny) / sizeof(msg_sunny[0]));
+    break;
+  case 7:
+    prefix = "Noite estrelada";
+    pool = msg_clear_night;
+    count = (int)(sizeof(msg_clear_night) / sizeof(msg_clear_night[0]));
+    break;
+  default:
+    break;
+  }
+
+  if (weather_hero_bucket != bucket) {
+    weather_hero_bucket = bucket;
+    weather_hero_pick = count > 0 ? (rand() % count) : 0;
+  }
+  int idx = count > 0 ? (weather_hero_pick % count) : 0;
+  snprintf(headline, hcap, "%s • %.10s°C", prefix, w.temp);
+  snprintf(subtitle, scap, "%s", pool[idx]);
+  return true;
+}
+

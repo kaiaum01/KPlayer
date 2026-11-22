@@ -1,13 +1,13 @@
 {
   "schemaVersion": 2,
-  "version": "2.0.6",
-  "nextVersion": "2.0.7",
+  "version": "2.0.7",
+  "nextVersion": "2.0.8",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.0.6",
-  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.0.6",
-  "releasedAt": "2026-11-22T18:13:42Z",
-  "repository": "kaiaum01/KPlayer",
+  "releaseTag": "v2.0.7",
+  "releasePageUrl": "",
+  "releasedAt": "2026-11-22T22:20:00Z",
+  "repository": "",
   "branch": "main",
   "updatesDir": "updates",
   "preserveUserPaths": [
@@ -23,24 +23,23 @@
     "resume.cfg"
   ],
   "notes": [
-    "Nova Tela Inicial com Layout Invertível:",
-    "Clima Open-Meteo ampliado ocupando o card maior na parte inferior da tela inicial, exibindo temperatura atual, condição, sensação térmica, umidade, vento, máxima/mínima e resumo da",
-    "Mini Player compacto no topo direito ao lado de \"Seu som. Sua tela.\", mostrando de forma limpa apenas o que está sendo reproduzido no momento.",
-    "Opção Layout da tela inicial nas Configurações gerais (Clima embaixo + Mini player ou Player embaixo + Clima no topo) salva localmente.",
-    "Tutorial de Comandos na Primeira Inicialização + \"Rever comandos\":",
-    "Os antigos \"Atalhos\" agora se chamam Comandos e aparecem automaticamente em formato de tutorial visual na primeira vez que o KPlayer inicia."
+    "Changelog pós-atualização: toda vez que o KPlayer atualizar de versão, exibe uma tela com as novidades apenas uma vez antes de iniciar",
+    "Protetor de tela com visualizadores estilo Windows Media Player ativado por padrão em 30 segundos ao ouvir Músicas ou Rádio Online",
+    "Tela inicial inteligente com o Clima: substitui 'Seu som. Sua tela.' por uma saudação do clima atual + mensagem descontraída aleatória para cada momento do tempo",
+    "Quando o Clima estiver desativado, a tela inicial mantém exatamente o texto padrão ('Seu som. Sua tela.')",
+    "Barra de carregamento ao vivo (0%–100%) no atualizador do player durante verificação, download e instalação sem perda de dados"
   ],
   "r36s": {
-    "filename": "KPlayer-v2.0.6-R36S.zip",
-    "path": "updates/v2.0.6/KPlayer-v2.0.6-R36S.zip",
-    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.6/KPlayer-v2.0.6-R36S.zip",
-    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.0.6/KPlayer-v2.0.6-R36S.zip",
-    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.6/KPlayer-v2.0.6-R36S.zip.sha256",
-    "sha256": "39338a11ac1ef7c78c80d2400cf9367d1596b604de319f2a39adbd10f4f668b6",
-    "sizeBytes": 9166150
+    "filename": "KPlayer-v2.0.7-R36S.zip",
+    "path": "updates/v2.0.7/KPlayer-v2.0.7-R36S.zip",
+    "url": "",
+    "releaseUrl": "",
+    "sha256Url": "",
+    "sha256": "",
+    "sizeBytes": 0
   },
   "web": {
-    "version": "2.0.6",
+    "version": "2.0.7",
     "reloadRequired": true
   }
 }

@@ -260,9 +260,9 @@ export const TERMS_PAGES: Array<{ title: string; body: [string, string, string] 
   {
     title: 'Sobre o aplicativo',
     body: [
-      'K PLAYER v2.0.6 é um reprodutor independente para suas músicas, vídeos, rádios e listas IPTV. O aplicativo não hospeda, armazena nem distribui conteúdo próprio. Use mídias que você tenha direito de acessar. A compatibilidade e o desempenho dependem do arquivo, dos codecs e do aparelho.',
-      'K PLAYER v2.0.6 is an independent player for your music, videos, online radio and IPTV playlists. The application does not host, store or distribute its own media content. Use media you have the right to access. Compatibility and performance depend on the file, codecs and device.',
-      'K PLAYER v2.0.6 es un reproductor independiente para tu música, vídeos, radio y listas IPTV. La aplicación no aloja, almacena ni distribuye contenido propio. Usa medios a los que tengas derecho de acceso. La compatibilidad y el rendimiento dependen del archivo, los códecs y el dispositivo.',
+      'K PLAYER v2.0.7 é um reprodutor independente para suas músicas, vídeos, rádios e listas IPTV. O aplicativo não hospeda, armazena nem distribui conteúdo próprio. Use mídias que você tenha direito de acessar. A compatibilidade e o desempenho dependem do arquivo, dos codecs e do aparelho.',
+      'K PLAYER v2.0.7 is an independent player for your music, videos, online radio and IPTV playlists. The application does not host, store or distribute its own media content. Use media you have the right to access. Compatibility and performance depend on the file, codecs and device.',
+      'K PLAYER v2.0.7 es un reproductor independiente para tu música, vídeos, radio y listas IPTV. La aplicación no aloja, almacena ni distribuye contenido propio. Usa medios a los que tengas derecho de acceso. La compatibilidad y el rendimiento dependen del archivo, los códecs y el dispositivo.',
     ],
   },
   {

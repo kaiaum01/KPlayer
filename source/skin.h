@@ -41,6 +41,7 @@ static void art(int x, int y, int size) {
 static bool updater_is_available(char *latest_out, size_t latest_cap);
 static void draw_home_weather_widget(void);
 static void draw_home_weather_large(void);
+static bool weather_home_hero_copy(char *headline, size_t hcap, char *subtitle, size_t scap);
 static bool home_layout_inverted;
 static char menu_search[64];
 static bool menu_search_kb;
@@ -182,12 +183,18 @@ static void draw_home_player_large(void) {
 static void draw_home(void) {
   backdrop();
   draw_header(tr("DASHBOARD"));
-  /* Hero: two-tone headline on left + Mini Player (default) or compact Weather (inverted) on right. */
-  const char *h1 = tr("Seu som."), *h2 = tr("Sua tela.");
-  label(h1, 18, 42, 26, textc, 220);
-  label(h2, 18 + (int)measure(h1, 26) + 8, 42, 26, muted, 220);
-  label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 77, 12,
-        muted, 386);
+  /* Hero: weather-reactive greeting + fun suggestion when Weather is ON; default copy when OFF. */
+  char w_head[96] = "", w_sub[160] = "";
+  if (weather_home_hero_copy(w_head, sizeof(w_head), w_sub, sizeof(w_sub))) {
+    label(w_head, 18, 44, 23, textc, 386);
+    label(w_sub, 18, 77, 12, muted, 386);
+  } else {
+    const char *h1 = tr("Seu som."), *h2 = tr("Sua tela.");
+    label(h1, 18, 42, 26, textc, 220);
+    label(h2, 18 + (int)measure(h1, 26) + 8, 42, 26, muted, 220);
+    label(tr("Músicas, vídeos, rádios e TV ao vivo num player só."), 18, 77, 12,
+          muted, 386);
+  }
   if (home_layout_inverted)
     draw_home_weather_widget();
   else

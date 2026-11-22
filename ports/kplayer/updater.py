@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Safe atomic auto-updater for KPlayer R36S (v2.0.6).
+"""Safe atomic auto-updater for KPlayer R36S (v2.0.7).
 
 Checks the GitHub updates/latest.json channel (with GitHub Releases fallback)
-for any version newer than the installed one (e.g. 2.0.5 -> 2.0.6 -> 2.0.7),
+for any version newer than the installed one (e.g. 2.0.6 -> 2.0.7 -> 2.0.8),
 downloads and SHA-256 verifies the R36S ZIP package, applies updated binaries
 and assets atomically while strictly preserving all user data and history, and
 signals KPlayer.sh (exit code 42) to restart immediately.
@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-CURRENT_FALLBACK = "2.0.6"
+CURRENT_FALLBACK = "2.0.7"
 UA = f"KPlayer-Updater/{CURRENT_FALLBACK}"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",
@@ -331,6 +331,20 @@ def write_check_tsv(info: dict[str, object], out_path: Path | None) -> None:
         print(content, end="")
 
 
+def write_progress(gamedir: Path, pct: int, stage: str, detail: str = "") -> None:
+    try:
+        p = gamedir / "iptv" / ".cache" / "update-progress.tsv"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        pct_clamped = max(0, min(100, int(pct)))
+        s = stage.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+        d = detail.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(f"PROG\t{pct_clamped}\t{s}\t{d}\n", encoding="utf-8")
+        os.replace(tmp, p)
+    except OSError:
+        pass
+
+
 def apply_update(gamedir: Path) -> int:
     ports_dir = gamedir.parent.resolve()
     lock_file = gamedir / ".update.lock"
@@ -348,8 +362,10 @@ def apply_update(gamedir: Path) -> int:
         pass
 
     try:
+        write_progress(gamedir, 5, "Conectando ao GitHub...", "Lendo updates/latest.json")
         info = check_update(gamedir)
         if not info.get("updateAvailable"):
+            write_progress(gamedir, 100, "KPlayer atualizado", "Nenhuma versão mais nova disponível")
             print("KPlayer ja esta na versao mais recente.")
             return 0
 
@@ -358,10 +374,13 @@ def apply_update(gamedir: Path) -> int:
             r36s = {}
         candidates = build_download_candidates(info)
         if not candidates:
+            write_progress(gamedir, 0, "Erro ao localizar pacote", "Nenhuma URL válida encontrada")
             print("Nenhuma URL valida de atualizacao encontrada.")
             return 1
 
+        write_progress(gamedir, 12, "Verificando assinatura...", "Consultando checksum SHA-256")
         expected_sha = resolve_expected_sha256(r36s, candidates)
+        expected_size = int(r36s.get("sizeBytes") or 0) if str(r36s.get("sizeBytes") or "").isdigit() else 0
         has_user_repo = (gamedir / "update-repo.txt").is_file() and bool(
             (gamedir / "update-repo.txt").read_text(encoding="utf-8", errors="replace").strip()
         )
@@ -372,11 +391,20 @@ def apply_update(gamedir: Path) -> int:
             downloaded = False
             actual_sha = ""
 
-            for pkg_url in candidates:
+            for idx, pkg_url in enumerate(candidates):
                 hasher = hashlib.sha256()
                 total = 0
+                last_emit = 0.0
+                write_progress(
+                    gamedir,
+                    15,
+                    "Baixando pacote R36S...",
+                    f"Conectando ao espelho {idx + 1}/{len(candidates)}",
+                )
                 try:
                     with urlopen_with_retry(pkg_url, timeout=45, retries=2) as resp, zip_path.open("wb") as out:
+                        clen_hdr = resp.headers.get("Content-Length") if hasattr(resp, "headers") else None
+                        content_len = int(clen_hdr) if clen_hdr and str(clen_hdr).isdigit() else expected_size
                         while True:
                             chunk = resp.read(65536)
                             if not chunk:
@@ -386,6 +414,29 @@ def apply_update(gamedir: Path) -> int:
                                 raise ValueError("Pacote excede o limite permitido.")
                             hasher.update(chunk)
                             out.write(chunk)
+                            now_t = time.monotonic()
+                            if now_t - last_emit >= 0.12:
+                                last_emit = now_t
+                                mb_done = total / (1024 * 1024)
+                                if content_len > 0:
+                                    frac = min(1.0, total / content_len)
+                                    pct = 15 + int(frac * 63)
+                                    mb_tot = content_len / (1024 * 1024)
+                                    write_progress(
+                                        gamedir,
+                                        pct,
+                                        "Baixando pacote R36S...",
+                                        f"{mb_done:.1f} MB / {mb_tot:.1f} MB",
+                                    )
+                                else:
+                                    pct = min(76, 18 + int(mb_done * 2))
+                                    write_progress(
+                                        gamedir,
+                                        pct,
+                                        "Baixando pacote R36S...",
+                                        f"{mb_done:.1f} MB recebidos",
+                                    )
+                    write_progress(gamedir, 80, "Validando integridade...", "Conferindo assinatura SHA-256")
                     actual_sha = hasher.hexdigest().lower()
                     if expected_sha and actual_sha != expected_sha:
                         print(f"Checksum SHA-256 divergente em {pkg_url}; tentando proximo espelho...")
@@ -397,11 +448,14 @@ def apply_update(gamedir: Path) -> int:
                     continue
 
             if not downloaded:
+                write_progress(gamedir, 0, "Falha no download", "Não foi possível verificar o pacote")
                 print("Nao foi possivel baixar um pacote verificado; atualizacao cancelada.")
                 return 1
 
+            write_progress(gamedir, 84, "Verificando pacote ZIP...", "Testando integridade dos arquivos")
             with zipfile.ZipFile(zip_path) as zf:
                 if zf.testzip() is not None:
+                    write_progress(gamedir, 0, "Pacote corrompido", "ZIP inválido — dados preservados")
                     print("Arquivo ZIP corrompido; atualizacao cancelada.")
                     return 1
 
@@ -426,15 +480,18 @@ def apply_update(gamedir: Path) -> int:
                         continue
                     uncompressed_total += max(0, int(member.file_size))
                     if uncompressed_total > MAX_EXTRACT_BYTES:
+                        write_progress(gamedir, 0, "Limite de segurança", "Pacote extraído muito grande")
                         print("Pacote extraido excede o limite de seguranca.")
                         return 1
                     safe_members.append((member, norm, target))
 
                 if not safe_members:
+                    write_progress(gamedir, 0, "Pacote vazio", "Nenhum arquivo válido para aplicar")
                     print("Pacote sem arquivos validos para aplicar.")
                     return 1
 
-                for member, _norm, target in safe_members:
+                total_files = len(safe_members)
+                for fidx, (member, _norm, target) in enumerate(safe_members, start=1):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     tmp_target = target.with_name(target.name + ".upd")
                     with zf.open(member) as src_f, tmp_target.open("wb") as dst_f:
@@ -446,11 +503,25 @@ def apply_update(gamedir: Path) -> int:
                         mode = 0o644
                     os.chmod(tmp_target, mode)
                     os.replace(tmp_target, target)
+                    if fidx == 1 or fidx == total_files or fidx % 2 == 0:
+                        pct = 86 + int((fidx / total_files) * 12)
+                        write_progress(
+                            gamedir,
+                            pct,
+                            "Instalando atualização...",
+                            f"Arquivo {fidx}/{total_files} (dados preservados)",
+                        )
 
         new_ver = str(info.get("latestVersion") or "").strip()
         if new_ver:
             (gamedir / "installed-version.txt").write_text(new_ver + "\n", encoding="utf-8")
             (gamedir / "app-version.txt").write_text(new_ver + "\n", encoding="utf-8")
+        write_progress(
+            gamedir,
+            100,
+            "Atualização concluída!",
+            f"Reiniciando KPlayer v{new_ver or CURRENT_FALLBACK}...",
+        )
         print(f"Atualizado para v{new_ver} preservando dados e historico. Reiniciando...")
         return 42
     finally:

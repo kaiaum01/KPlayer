@@ -304,11 +304,32 @@ int main(void) {
   preferences_path = prefpath;
   tutorial_done = false;
   key(SDLK_RETURN, false);
-  /* First run opens Comandos tutorial (mode 12) before Home */
+  /* First run opens Comandos tutorial (mode 12), then one-time Changelog (mode 14) before Home */
   assert(mode == 12 && onboarding_done && !tutorial_done);
   draw_tutorial();
   key(SDLK_RETURN, false);
-  assert(mode == 3 && tutorial_done);
+  assert(mode == 14 && tutorial_done);
+  draw_changelog();
+  key(SDLK_RETURN, false);
+  assert(mode == 3 && !strcmp(seen_version, KPLAYER_VERSION));
+  /* Second startup for same version skips changelog straight to Home */
+  assert(strcmp(seen_version, KPLAYER_VERSION) == 0);
+  /* Screensaver default timeout is 30 seconds (index 1) */
+  assert(ss_timeout_idx == 1 && ss_timeout_secs[ss_timeout_idx] == 30);
+  /* Weather-reactive Home hero copy: OFF -> false; ON -> true with climate & fun text */
+  {
+    char hbuf[96] = "", sbuf[160] = "";
+    weather_data.valid = false;
+    assert(!weather_home_hero_copy(hbuf, sizeof(hbuf), sbuf, sizeof(sbuf)));
+    weather_data.valid = true;
+    snprintf(weather_data.temp, sizeof(weather_data.temp), "19");
+    weather_data.code = 61; /* chuva */
+    weather_data.is_day = true;
+    assert(weather_home_hero_copy(hbuf, sizeof(hbuf), sbuf, sizeof(sbuf)));
+    assert(strstr(hbuf, "19") != NULL && sbuf[0] != 0);
+    draw_home();
+    weather_data.valid = false;
+  }
   language = 0;
   onboarding_done = false;
   load_preferences();
@@ -539,8 +560,35 @@ int main(void) {
   assert(home_layout_inverted != prev_inv);
   draw_home();
   home_layout_inverted = false;
-  /* Navigate to Rever comandos (20) -> opens mode 12 tutorial */
+  /* Navigate to Protetor de tela (25) -> opens OPT_SEC_SCREENSAVER */
   opt_cursor = 4;
+  opt_sync_option_id();
+  assert(option == 25);
+  key(SDLK_RETURN, false);
+  assert(opt_section == OPT_SEC_SCREENSAVER && option == 70);
+  draw_options();
+  int prev_ss = ss_timeout_idx;
+  key(SDLK_RIGHT, false);
+  assert(ss_timeout_idx != prev_ss);
+  /* Test all 5 WMP visualizer styles + clock/weather + lyrics in mode 13 */
+  ss_open(4);
+  assert(mode == 13);
+  for (int v = 0; v < SS_VIZ_COUNT; v++) {
+    ss_viz_style = v;
+    draw_screensaver();
+  }
+  key(SDLK_e, false);
+  assert(mode == 13);
+  key(SDLK_x, false);
+  assert(mode == 13);
+  key(SDLK_y, false);
+  assert(mode == 13);
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 4);
+  mode = 2;
+  opt_enter_section(OPT_SEC_ROOT);
+  /* Navigate to Rever comandos (20) -> opens mode 12 tutorial */
+  opt_cursor = 5;
   opt_sync_option_id();
   assert(option == 20);
   key(SDLK_RETURN, false);
@@ -556,7 +604,11 @@ int main(void) {
   assert(option == 19);
   key(SDLK_RETURN, false);
   assert(opt_section == OPT_SEC_UPDATE);
+  kp_upd_progress = 64;
+  kp_upd_applying = true;
   draw_options();
+  kp_upd_applying = false;
+  kp_upd_progress = 0;
   key(SDLK_BACKSPACE, false);
   assert(opt_section == OPT_SEC_ROOT);
   opt_cursor = OPT_ROOT_COUNT - 1;
