@@ -87,26 +87,28 @@ static void kp_upd_parse_tsv(const char *path, bool notify_user) {
   fclose(f);
 
   pthread_mutex_lock(&kp_upd_mutex);
-  snprintf(kp_upd_current, sizeof(kp_upd_current), "%s", cur);
-  snprintf(kp_upd_latest, sizeof(kp_upd_latest), "%s", lat);
-  snprintf(kp_upd_next, sizeof(kp_upd_next), "%s", nxt);
-  snprintf(kp_upd_source, sizeof(kp_upd_source), "%s", src);
-  snprintf(kp_upd_repo, sizeof(kp_upd_repo), "%s", repo);
+  snprintf(kp_upd_current, sizeof(kp_upd_current), "%.31s", cur);
+  snprintf(kp_upd_latest, sizeof(kp_upd_latest), "%.31s", lat);
+  snprintf(kp_upd_next, sizeof(kp_upd_next), "%.31s", nxt);
+  snprintf(kp_upd_source, sizeof(kp_upd_source), "%.31s", src);
+  snprintf(kp_upd_repo, sizeof(kp_upd_repo), "%.127s", repo);
   kp_upd_available = avail;
+  if (ncnt < 0) ncnt = 0;
+  if (ncnt > 4) ncnt = 4;
   kp_upd_note_count = ncnt;
   for (int i = 0; i < ncnt; i++)
-    snprintf(kp_upd_notes[i], sizeof(kp_upd_notes[i]), "%s", notes[i]);
+    snprintf(kp_upd_notes[i], sizeof(kp_upd_notes[i]), "%.159s", notes[i]);
   if (avail) {
     snprintf(kp_upd_message, sizeof(kp_upd_message),
-             "Nova versão v%s pronta na pasta updates/!", lat);
+             "Nova versão v%.31s pronta na pasta updates/!", lat);
   } else if (err[0]) {
-    snprintf(kp_upd_message, sizeof(kp_upd_message), "%s", err);
+    snprintf(kp_upd_message, sizeof(kp_upd_message), "%.159s", err);
   } else {
     snprintf(kp_upd_message, sizeof(kp_upd_message),
-             "KPlayer v%s em dia. Monitorando v%s+.", cur, nxt);
+             "KPlayer v%.31s em dia. Monitorando v%.31s+.", cur, nxt);
   }
   if (notify_user || avail) {
-    snprintf(kp_upd_toast_text, sizeof(kp_upd_toast_text), "%s",
+    snprintf(kp_upd_toast_text, sizeof(kp_upd_toast_text), "%.191s",
              avail ? "Nova atualização disponível — abra Opções (SELECT)" : kp_upd_message);
     kp_upd_toast_pending = true;
   }

@@ -1189,14 +1189,17 @@ static void draw_options(void) {
     bool applying = kp_upd_applying;
     char cur[32], lat[32], nxt[32], src[32], msg[192], repo[128];
     int ncnt = kp_upd_note_count;
+    if (ncnt < 0) ncnt = 0;
+    if (ncnt > 4) ncnt = 4;
     char notes[4][160];
-    snprintf(cur, sizeof(cur), "%s", kp_upd_current);
-    snprintf(lat, sizeof(lat), "%s", kp_upd_latest);
-    snprintf(nxt, sizeof(nxt), "%s", kp_upd_next);
-    snprintf(src, sizeof(src), "%s", kp_upd_source);
-    snprintf(msg, sizeof(msg), "%s", kp_upd_message);
-    snprintf(repo, sizeof(repo), "%s", kp_upd_repo);
-    for (int i = 0; i < ncnt; i++) snprintf(notes[i], sizeof(notes[i]), "%s", kp_upd_notes[i]);
+    snprintf(cur, sizeof(cur), "%.31s", kp_upd_current);
+    snprintf(lat, sizeof(lat), "%.31s", kp_upd_latest);
+    snprintf(nxt, sizeof(nxt), "%.31s", kp_upd_next);
+    snprintf(src, sizeof(src), "%.31s", kp_upd_source);
+    snprintf(msg, sizeof(msg), "%.191s", kp_upd_message);
+    snprintf(repo, sizeof(repo), "%.127s", kp_upd_repo);
+    for (int i = 0; i < ncnt; i++)
+      snprintf(notes[i], sizeof(notes[i]), "%.159s", kp_upd_notes[i]);
     pthread_mutex_unlock(&kp_upd_mutex);
 
     panel_card(24, 94, 592, 168, 12);

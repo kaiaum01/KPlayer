@@ -534,7 +534,7 @@ static void draw_weather(void) {
         card(24, y, 592, 42, 10, focus, panel);
         label(list[i].name, 40, y + 7, 15, focus ? accent : textc, 340);
         char sub[112];
-        snprintf(sub, sizeof(sub), "%s%s%s", list[i].region,
+        snprintf(sub, sizeof(sub), "%.47s%s%.47s", list[i].region,
                  (list[i].region[0] && list[i].country[0]) ? " • " : "",
                  list[i].country);
         label(sub, 40, y + 25, 10, muted, 360);
@@ -563,36 +563,36 @@ static void draw_weather(void) {
 
   /* Hero card */
   panel_card(18, 42, 604, 110, 14);
-  char loc_title[120];
+  char loc_title[128];
   if (snap.city.region[0])
-    snprintf(loc_title, sizeof(loc_title), "%s, %s", snap.city.name, snap.city.region);
+    snprintf(loc_title, sizeof(loc_title), "%.63s, %.47s", snap.city.name, snap.city.region);
   else
-    snprintf(loc_title, sizeof(loc_title), "%s", snap.city.name);
+    snprintf(loc_title, sizeof(loc_title), "%.63s", snap.city.name);
   label(loc_title, 34, 52, 18, textc, 360);
   label(weather_mode == WEATHER_MODE_IP ? "Open-Meteo • Localização por IP"
                                         : "Open-Meteo • Cidade manual",
         34, 76, 11, accent, 320);
   label(snap.desc, 34, 96, 15, textc, 280);
-  char mm[96];
-  snprintf(mm, sizeof(mm), "Sensação %s°C  •  Mín %s°  Máx %s°",
+  char mm[112];
+  snprintf(mm, sizeof(mm), "Sensação %.15s°C  •  Mín %.15s°  Máx %.15s°",
            snap.feels, snap.tmin, snap.tmax);
   label(mm, 34, 122, 11, muted, 360);
 
   /* Big temperature on right of hero */
-  char bigt[24];
-  snprintf(bigt, sizeof(bigt), "%s°C", snap.temp);
+  char bigt[28];
+  snprintf(bigt, sizeof(bigt), "%.15s°C", snap.temp);
   centered(bigt, 426, 56, 180, 38, accent);
   char sun[48];
-  snprintf(sun, sizeof(sun), "Sol %s / %s", snap.sunrise, snap.sunset);
+  snprintf(sun, sizeof(sun), "Sol %.15s / %.15s", snap.sunrise, snap.sunset);
   centered(sun, 426, 114, 180, 11, muted);
 
   /* 4 metrics row */
   const char *m_lbl[4] = {"UMIDADE", "VENTO", "PRESSÃO", "ÍNDICE UV"};
-  char m_val[4][24];
+  char m_val[4][32];
   snprintf(m_val[0], sizeof(m_val[0]), "%d%%", snap.humidity);
-  snprintf(m_val[1], sizeof(m_val[1]), "%s km/h", snap.wind);
+  snprintf(m_val[1], sizeof(m_val[1]), "%.15s km/h", snap.wind);
   snprintf(m_val[2], sizeof(m_val[2]), "%d hPa", snap.pressure);
-  snprintf(m_val[3], sizeof(m_val[3]), "%s", snap.uv);
+  snprintf(m_val[3], sizeof(m_val[3]), "%.15s", snap.uv);
   for (int i = 0; i < 4; i++) {
     int mx = 18 + i * 154;
     panel_card(mx, 162, 144, 52, 10);
@@ -608,8 +608,8 @@ static void draw_weather(void) {
     int hx = 18 + i * 102;
     panel_card(hx, 240, 94, 68, 10);
     centered(snap.hours[i].hour, hx + 4, 247, 86, 11, muted);
-    char ht[16], hp[16];
-    snprintf(ht, sizeof(ht), "%s°", snap.hours[i].temp);
+    char ht[24], hp[24];
+    snprintf(ht, sizeof(ht), "%.15s°", snap.hours[i].temp);
     snprintf(hp, sizeof(hp), "%d%% chv", snap.hours[i].rain_prob);
     centered(ht, hx + 4, 265, 86, 16, textc);
     centered(hp, hx + 4, 288, 86, 9, accent);
@@ -623,9 +623,9 @@ static void draw_weather(void) {
     rounded(18, dy, 604, 23, 7, i == 0 ? elevated : panel);
     label(snap.days[i].day, 28, dy + 5, 11, i == 0 ? accent : textc, 100);
     label(snap.days[i].desc, 134, dy + 5, 11, muted, 220);
-    char dp[24], dmm[32];
+    char dp[28], dmm[40];
     snprintf(dp, sizeof(dp), "Chuva %d%%", snap.days[i].rain_prob);
-    snprintf(dmm, sizeof(dmm), "%s° / %s°", snap.days[i].tmin, snap.days[i].tmax);
+    snprintf(dmm, sizeof(dmm), "%.15s° / %.15s°", snap.days[i].tmin, snap.days[i].tmax);
     label(dp, 382, dy + 5, 11, dim, 100);
     label(dmm, 514, dy + 5, 12, textc, 98);
   }

@@ -54,7 +54,7 @@ static void draw_header(const char *section) {
   char upd_ver[32] = "";
   if (updater_is_available(upd_ver, sizeof(upd_ver))) {
     char badge[48];
-    snprintf(badge, sizeof(badge), "v%s • SEL", upd_ver);
+    snprintf(badge, sizeof(badge), "v%.31s • SEL", upd_ver);
     rounded(404, 6, 112, 20, 10, alpha(accent, 44));
     centered(badge, 404, 9, 112, 10, accent);
   }
