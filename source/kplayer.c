@@ -1157,11 +1157,11 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Changelog pós-atualização: exibido uma única vez ao atualizar de versão.",
-        "Protetor de tela com visualizadores (30s) ativado por padrão em Músicas e Rádio.",
-        "Tela inicial inteligente: saudação do clima + sugestões aleatórias descontraídas.",
-        "Quando o clima estiver desligado, a tela inicial mantém o texto padrão.",
-        "Barra de carregamento ao vivo (0% a 100%) ao verificar e instalar atualizações.",
+        "Imagens completas de scraper (capa, boxart, marquee e fanart) salvas em kplayer/scraper/.",
+        "Metadados completos inseridos automaticamente em /roms/ports e /roms2/ports/gamelist.xml sem apagar outros jogos.",
+        "Criação automática de gamelist.xml se ainda não existir na pasta ports.",
+        "Nome da versão atualizado automaticamente no arquivo .sh (KPlayer v2.0.8.sh) a cada atualização.",
+        "Visualizador de 30s ativado por padrão e saudação climática com sugestões na tela inicial.",
     };
     int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
     for (int i = 0; i < n && changelog_count < 6; i++)
@@ -2517,6 +2517,7 @@ int main(int argc, char **argv) {
        : (strcmp(seen_version, KPLAYER_VERSION) != 0 ? 14 : 3));
   load_favorites();
   run_boot_splash();
+  scraper_sync_boot();
   weather_boot_refresh();
   updater_start_check(false);
   ss_touch_activity();

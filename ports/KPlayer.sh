@@ -1,10 +1,11 @@
 #!/bin/bash
-# K PLAYER - dArkOS / Debian 13 ARM64 / PortMaster
+# KPlayer v2.0.8 - dArkOS / Debian 13 ARM64 / PortMaster
+KPLAYER_VERSION="2.0.8"
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)" || exit 1
 GAMEDIR="$script_dir/kplayer"
 cd "$GAMEDIR" || exit 1
 exec > "$GAMEDIR/log.txt" 2>&1
-printf 'K PLAYER nativo\n'
+printf 'K PLAYER v%s nativo\n' "$KPLAYER_VERSION"
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 controlfolder=""
 for candidate in /opt/system/Tools/PortMaster /opt/tools/PortMaster "$XDG_DATA_HOME/PortMaster" "$script_dir/PortMaster" /roms/ports/PortMaster; do
@@ -36,12 +37,15 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-chmod +x ./kplayer
+chmod +x ./kplayer ./scraper_sync.py ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py 2>/dev/null || true
+if [ -f ./scraper_sync.py ] && command -v python3 >/dev/null 2>&1; then
+    python3 ./scraper_sync.py --version "$KPLAYER_VERSION" >/dev/null 2>&1 || true
+fi
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
 while true; do
-    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py 2>/dev/null || true
+    chmod +x ./kplayer ./scraper_sync.py ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py 2>/dev/null || true
     ./kplayer
     result=$?
     if [ "$result" -eq 42 ]; then
@@ -49,7 +53,19 @@ while true; do
         if [ -n "${mapper_pid:-}" ]; then kill "$mapper_pid" 2>/dev/null || true; wait "$mapper_pid" 2>/dev/null || true; fi
         trap - EXIT
         sleep 1
-        exec "$script_dir/KPlayer.sh"
+        next_sh=""
+        if [ -f "$GAMEDIR/installed-version.txt" ]; then
+            new_ver="$(tr -d ' \r\n' < "$GAMEDIR/installed-version.txt")"
+            if [ -n "$new_ver" ] && [ -f "$script_dir/KPlayer v${new_ver}.sh" ]; then
+                next_sh="$script_dir/KPlayer v${new_ver}.sh"
+            fi
+        fi
+        if [ -z "$next_sh" ]; then
+            for cand in "$script_dir"/KPlayer*.sh; do
+                if [ -f "$cand" ]; then next_sh="$cand"; break; fi
+            done
+        fi
+        exec "${next_sh:-$0}"
     fi
     break
 done

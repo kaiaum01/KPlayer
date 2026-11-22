@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Open-Meteo weather & location helper for KPlayer R36S (v2.0.7).
+"""Open-Meteo weather & location helper for KPlayer R36S (v2.0.8).
 
 Uses only Python standard library (zero external dependencies) so it works
 directly on dArkOS / Debian 13 ARM64.
@@ -19,7 +19,7 @@ import time
 import urllib.parse
 import urllib.request
 
-UA = "KPlayer-R36S-Weather/2.0.7"
+UA = "KPlayer-R36S-Weather/2.0.8"
 CACHE_DIR = Path("iptv/.cache")
 CACHE_TTL = 600  # 10 minutes
 

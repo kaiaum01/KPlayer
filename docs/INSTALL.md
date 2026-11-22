@@ -1,14 +1,13 @@
-# Instalação / Installation — KPlayer v2.0.3 (R36S / dArkOS)
+# Instalação / Installation — KPlayer v2.0.8 (R36S / dArkOS)
 
 ## Português
 
-1. Extraia `KPlayer-v2.0.3-R36S.zip`.
-2. Copie os arquivos para `/roms/ports/` (ou `/roms2/ports/` no segundo cartão):
-   - `KPlayer.sh`
-   - pasta `kplayer/`
-   - `images/KPlayer-image.png` (capa do port para o EmulationStation / dArkOS)
-   - `gamelist.xml` (se você ainda não tiver um `gamelist.xml` em `ports/`; caso já tenha outros ports, abra `kplayer/KPlayer-metadata.xml` e cole o bloco `<game>...</game>` no seu `gamelist.xml` existente).
-3. No R36S, abra **Ports → KPlayer v2.0.3**. Escolha o idioma e a cor do tema e confirme com **B**.
+1. Extraia `KPlayer-v2.0.8-R36S.zip`.
+2. Copie para `/roms/ports/` (ou `/roms2/ports/` no segundo cartão):
+   - `KPlayer v2.0.8.sh` (o nome da versão no `.sh` é atualizado automaticamente a cada atualização futura)
+   - pasta `kplayer/` (já contém todas as imagens de scraper em `kplayer/scraper/`, metadados completos e o sincronizador automático `scraper_sync.py`)
+3. No R36S, abra **Ports → KPlayer v2.0.8**.
+   - Ao abrir, o KPlayer insere automaticamente os metadados completos e artes de scraper (Capa, Boxart, Marquee e Fanart) no arquivo `gamelist.xml` de `/roms/ports` e `/roms2/ports` **sem apagar nenhum jogo/port existente** (ou cria o arquivo se ainda não existir).
 
 ### Pastas de mídia (carregamento rápido sem sobrecarregar o console)
 
@@ -22,15 +21,12 @@
 - **IPTV do Usuário (`.m3u`, `.m3u8`, `.txt` ou links via teclado na tela)**: `ports/kplayer/iptv_usuario/`
 
 Requer R36S ARM64, dArkOS/PortMaster, SDL2, ALSA e plugins VLC compatíveis em
-`/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio, IPTV e Placar da Bola requerem internet.
+`/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio, IPTV, Clima e Placar da Bola requerem internet.
 Todos os catálogos públicos de IPTV e Rádio vêm de agregadores abertos da internet; você sempre tem o direito de usar seus próprios links (veja `TERMS.md`).
-
-Antes de atualizar, faça backup dos arquivos `settings.cfg`, `preferences.cfg` e `favorites.cfg`.
 Se houver erro, consulte `ports/kplayer/log.txt`.
 
 ## English
 
-1. Extract `KPlayer-v2.0.3-R36S.zip`.
-2. Copy `KPlayer.sh`, `kplayer/`, `images/KPlayer-image.png`, and `gamelist.xml` (or merge `kplayer/KPlayer-metadata.xml` into your existing `ports/gamelist.xml`) into `/roms/ports/` (or `/roms2/ports/`).
-3. Open **Ports → KPlayer v2.0.3** on your R36S.
-4. Put music in `/roms/bgmusic` or `/roms2/bgmusic`, videos in `/roms/videos` or `/roms2/videos`, custom IPTV playlists in `ports/kplayer/iptv_usuario/`, and custom radios in `ports/kplayer/radios_usuario/`. See `TERMS.md` for transparency and open-source notices.
+1. Extract `KPlayer-v2.0.8-R36S.zip`.
+2. Copy `KPlayer v2.0.8.sh` and the `kplayer/` folder into `/roms/ports/` (or `/roms2/ports/`).
+3. Open **Ports → KPlayer v2.0.8** on your R36S. KPlayer automatically merges its complete scraper artwork (`kplayer/scraper/`) and metadata into `/roms/ports/gamelist.xml` and `/roms2/ports/gamelist.xml` without removing existing games (or creates `gamelist.xml` if absent), and automatically updates the version in the `.sh` launcher on every future update.

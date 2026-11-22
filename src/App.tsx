@@ -60,15 +60,18 @@ import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/Placar
 import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
 import { AndroidPlayerApp } from './components/AndroidPlayerApp';
-import portCoverImg from './assets/images/kplayer_port_cover_1795234394587.jpg';
+import scraperCoverImg from './assets/images/kplayer_scraper_image_1795388174490.jpg';
+import scraperBoxartImg from './assets/images/kplayer_scraper_boxart_1795388231552.jpg';
+import scraperMarqueeImg from './assets/images/kplayer_scraper_marquee_1795388175584.jpg';
+import scraperFanartImg from './assets/images/kplayer_scraper_fanart_1795388174418.jpg';
 
-const APP_VERSION = '2.0.7';
+const APP_VERSION = '2.0.8';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Changelog pós-atualização: exibido automaticamente uma única vez sempre que o KPlayer for atualizado.',
-  'Protetor de tela com visualizadores (30s) ativado por padrão ao ouvir Músicas ou Rádio Online.',
-  'Tela inicial inteligente com o Clima: troca "Seu som. Sua tela." por uma saudação do clima atual e uma mensagem descontraída aleatória.',
-  'Quando o Clima estiver desativado, a tela inicial preserva exatamente o texto padrão.',
-  'Barra de carregamento ao vivo (0% a 100%) durante verificação, download e instalação de atualizações.',
+  'Pacote completo de imagens para scraper (Capa, Boxart, Marquee e Fanart) organizado dentro de kplayer/scraper/.',
+  'Inserção automática de metadados completos no gamelist.xml de /roms/ports e /roms2/ports sem apagar seus outros jogos/ports.',
+  'Se o arquivo gamelist.xml ainda não existir na pasta ports, o KPlayer cria automaticamente com todos os metadados.',
+  'Atualização automática do nome da versão no lançador .sh (KPlayer v2.0.8.sh) a cada nova atualização.',
+  'Protetor de tela com visualizadores (30s padrão), saudação climática inteligente na tela inicial e barra de progresso de atualização.',
 ];
 
 const RADIO_CATEGORIES = [
@@ -2158,7 +2161,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.7 • R36S
+                      v2.0.8 • R36S
                     </div>
                   </div>
 
@@ -4405,7 +4408,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.7 — Edição R36S
+                  KPlayer v2.0.8 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4420,8 +4423,8 @@ export default function App() {
             <div className="mt-4 flex gap-3.5 items-stretch">
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
-                  src={portCoverImg}
-                  alt="Capa do Port KPlayer v2.0.7 para R36S dArkOS"
+                  src={scraperCoverImg}
+                  alt="Capa de Scraper KPlayer v2.0.8 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -4430,24 +4433,24 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.7-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.8-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-zinc-400">Arquitetura</span>
-                  <span className="font-medium text-zinc-200 truncate">
-                    {r36sInfo?.arch ?? 'ARM64 (dArkOS)'}
+                  <span className="text-zinc-400">Lançador .sh</span>
+                  <span className="font-medium text-[#1db954] truncate">
+                    KPlayer v2.0.8.sh (auto-versionado)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Tamanho</span>
                   <span className="font-medium text-zinc-200">
-                    {r36sInfo ? formatBytes(r36sInfo.sizeBytes) : '~6.9 MB'}
+                    {r36sInfo ? formatBytes(r36sInfo.sizeBytes) : '~8.2 MB'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-zinc-400">dArkOS XML</span>
-                  <span className="font-medium text-[#1db954]">gamelist.xml + capa PNG</span>
+                  <span className="text-zinc-400">Scraper + XML</span>
+                  <span className="font-medium text-[#1db954]">Merge automático em gamelist.xml</span>
                 </div>
                 {r36sInfo?.sha256 && (
                   <div className="pt-1 border-t border-white/10">
@@ -4460,42 +4463,73 @@ export default function App() {
               </div>
             </div>
 
-            <div className="mt-4 text-xs text-zinc-300 space-y-1.5">
+            <div className="mt-3 rounded-xl bg-[#0c0f15] border border-white/10 p-2.5">
+              <div className="text-[11px] font-bold text-zinc-200 mb-2">
+                Artes de Scraper incluídas em <code className="text-[#1db954]">kplayer/scraper/</code>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black">
+                  <img
+                    src={scraperBoxartImg}
+                    alt="Boxart Thumbnail KPlayer R36S"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-16 object-cover"
+                  />
+                  <div className="text-[10px] text-center text-zinc-400 py-0.5">Boxart / Thumb</div>
+                </div>
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black">
+                  <img
+                    src={scraperMarqueeImg}
+                    alt="Marquee Logo KPlayer R36S"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-16 object-cover"
+                  />
+                  <div className="text-[10px] text-center text-zinc-400 py-0.5">Marquee / Logo</div>
+                </div>
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black">
+                  <img
+                    src={scraperFanartImg}
+                    alt="Fanart Wallpaper KPlayer R36S"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-16 object-cover"
+                  />
+                  <div className="text-[10px] text-center text-zinc-400 py-0.5">Fanart / Fundo</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.7-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.8-R36S.zip</code>.</li>
                 <li>
-                  Copie <code className="text-zinc-100">KPlayer.sh</code>,{' '}
-                  <code className="text-zinc-100">kplayer/</code>,{' '}
-                  <code className="text-zinc-100">images/KPlayer-image.png</code> e{' '}
-                  <code className="text-zinc-100">gamelist.xml</code> (ou mescle{' '}
-                  <code className="text-zinc-100">kplayer/KPlayer-metadata.xml</code>) para{' '}
-                  <code className="text-zinc-100">/roms/ports/</code>.
+                  Copie <code className="text-zinc-100">KPlayer v2.0.8.sh</code> e a pasta{' '}
+                  <code className="text-zinc-100">kplayer/</code> para{' '}
+                  <code className="text-zinc-100">/roms/ports/</code> ou{' '}
+                  <code className="text-zinc-100">/roms2/ports/</code>.
                 </li>
                 <li>
-                  Coloque músicas em <code className="text-zinc-100">/roms/bgmusic</code> ou{' '}
-                  <code className="text-zinc-100">/roms2/bgmusic</code> e vídeos em{' '}
-                  <code className="text-zinc-100">/roms/videos</code> ou{' '}
-                  <code className="text-zinc-100">/roms2/videos</code>.
+                  Ao abrir o KPlayer, ele insere os metadados e artes de scraper automaticamente no{' '}
+                  <code className="text-zinc-100">gamelist.xml</code> existente sem apagar nenhum outro port (ou cria se não existir).
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.0.7 com changelog pós-atualização (exibido uma vez), protetor de tela com visualizadores (30s por padrão), saudação climática com sugestões descontraídas na tela inicial, barra de progresso de atualização e Auto-Update pela pasta updates/.
+                Inclui binário ARM64 nativo v2.0.8 com artes de scraper completas em kplayer/scraper/, merge seguro em gamelist.xml, lançador .sh atualizado automaticamente a cada versão, changelog pós-atualização e visualizador 30s.
               </p>
             </div>
 
-            <div className="mt-5 flex items-center gap-2.5">
+            <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.7-R36S.zip"
+                download="KPlayer-v2.0.8-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.7-R36S.zip
+                ⬇ Baixar KPlayer-v2.0.8-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.7-R36S.zip.sha256"
+                download="KPlayer-v2.0.8-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256
@@ -4536,8 +4570,8 @@ export default function App() {
             <div className="mt-4 flex gap-3.5 items-stretch">
               <div className="w-[128px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
-                  src={portCoverImg}
-                  alt="Capa KPlayer v2.0.4 Android"
+                  src={scraperBoxartImg}
+                  alt="Capa KPlayer"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />

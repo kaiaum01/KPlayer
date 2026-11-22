@@ -16,7 +16,7 @@ static char kp_upd_stage[96] = "";
 static char kp_upd_detail[128] = "";
 static char kp_upd_current[32] = KPLAYER_VERSION;
 static char kp_upd_latest[32] = KPLAYER_VERSION;
-static char kp_upd_next[32] = "2.0.8";
+static char kp_upd_next[32] = "2.0.9";
 static char kp_upd_source[32] = "local";
 static char kp_upd_repo[128] = "";
 static char kp_upd_message[192] = "";
@@ -92,7 +92,7 @@ static void kp_upd_parse_tsv(const char *path, bool notify_user) {
   }
 
   char line[512];
-  char cur[32] = KPLAYER_VERSION, lat[32] = KPLAYER_VERSION, nxt[32] = "2.0.8";
+  char cur[32] = KPLAYER_VERSION, lat[32] = KPLAYER_VERSION, nxt[32] = "2.0.9";
   char src[32] = "local", repo[128] = "", err[160] = "";
   bool avail = false;
   char notes[4][160];
@@ -321,4 +321,21 @@ static void updater_poll_main_thread(void) {
 
   if (need_toast && toast_buf[0]) notify(toast_buf);
   if (need_restart) running = 0;
+}
+
+static void *kp_scraper_sync_worker(void *unused) {
+  (void)unused;
+  if (access("./scraper_sync.py", F_OK) != 0)
+    return NULL;
+  char *argv[] = {"python3", "./scraper_sync.py", "--version", (char *)KPLAYER_VERSION, NULL};
+  (void)kp_upd_run_python(argv);
+  return NULL;
+}
+
+static void scraper_sync_boot(void) {
+  if (access("./scraper_sync.py", F_OK) != 0)
+    return;
+  pthread_t t;
+  if (pthread_create(&t, NULL, kp_scraper_sync_worker, NULL) == 0)
+    pthread_detach(t);
 }

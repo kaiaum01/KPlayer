@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
-"""Build the R36S install ZIP from an explicit runtime allowlist; no personal media."""
+"""Build the R36S install ZIP from an explicit runtime allowlist; no personal media.
+
+v2.0.8+:
+- Automatically stamps the versioned launcher script as `KPlayer v<VERSION>.sh`
+  (with updated version header and `KPLAYER_VERSION` inside) on every release.
+- Bundles all EmulationStation scraper images (`kplayer/scraper/*.png`),
+  `kplayer/scraper_sync.py`, `kplayer/KPlayer-metadata.xml`, and `kplayer/gamelist.xml`
+  cleanly inside `kplayer/` so manual ZIP extraction NEVER overwrites an existing
+  `/roms/ports/gamelist.xml` or `/roms2/ports/gamelist.xml`; the player merges its
+  metadata automatically on launch and update.
+"""
 from pathlib import Path
 import hashlib
-import json
 import os
 import re
 import zipfile
@@ -24,14 +33,22 @@ release.mkdir(exist_ok=True)
 archive = release / f"KPlayer-v{VERSION}-R36S.zip"
 runtime = BASE / "ports" / "kplayer"
 
+launcher_src = BASE / "ports" / "KPlayer.sh"
+if not launcher_src.is_file():
+    raise SystemExit(f"Missing launcher script: {launcher_src}")
+
 files = [
-    BASE / "ports" / "KPlayer.sh",
-    BASE / "ports" / "gamelist.xml",
     BASE / "ports" / "images" / "KPlayer-image.png",
     runtime / "kplayer",
     runtime / "kplayer.gptk",
     runtime / "cover.png",
     runtime / "KPlayer-metadata.xml",
+    runtime / "gamelist.xml",
+    runtime / "scraper_sync.py",
+    runtime / "scraper" / "kplayer-image.png",
+    runtime / "scraper" / "kplayer-thumb.png",
+    runtime / "scraper" / "kplayer-marquee.png",
+    runtime / "scraper" / "kplayer-fanart.png",
     runtime / "iptv_fetch.py",
     runtime / "football_fetch.py",
     runtime / "weather_fetch.py",
@@ -62,11 +79,11 @@ if (runtime / "update-repo.txt").is_file():
     files.append(runtime / "update-repo.txt")
 
 EXECUTABLE_NAMES = {
-    "KPlayer.sh",
     "kplayer",
     "iptv_fetch.py",
     "football_fetch.py",
     "weather_fetch.py",
+    "scraper_sync.py",
     "updater.py",
     "golazo",
 }
@@ -75,14 +92,58 @@ for path in files:
     if not path.is_file():
         raise SystemExit(f"Missing runtime file: {path}")
 
+
+def stamp_launcher_text(raw: str, ver: str) -> bytes:
+    out = re.sub(
+        r"^#\s*K\s*PLAYER(?:\s+v?\d+\.\d+\.\d+)?\b.*$",
+        f"# KPlayer v{ver} - dArkOS / Debian 13 ARM64 / PortMaster",
+        raw,
+        count=1,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+    if re.search(r'^KPLAYER_VERSION="[^"]*"', out, flags=re.MULTILINE):
+        out = re.sub(
+            r'^KPLAYER_VERSION="[^"]*"',
+            f'KPLAYER_VERSION="{ver}"',
+            out,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    return out.encode("utf-8")
+
+
+def stamp_xml_version(raw: str, ver: str) -> bytes:
+    out = re.sub(r"KPlayer v\d+\.\d+\.\d+\.sh", f"KPlayer v{ver}.sh", raw)
+    out = re.sub(r"KPlayer v\d+\.\d+\.\d+", f"KPlayer v{ver}", out)
+    return out.encode("utf-8")
+
+
 with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out:
+    # Write dynamically versioned launcher script: `KPlayer v<VERSION>.sh`
+    launcher_arcname = f"KPlayer v{VERSION}.sh"
+    launcher_bytes = stamp_launcher_text(launcher_src.read_text(encoding="utf-8"), VERSION)
+    linfo = zipfile.ZipInfo(launcher_arcname)
+    linfo.compress_type = zipfile.ZIP_DEFLATED
+    linfo.external_attr = (0o100000 | 0o755) << 16
+    out.writestr(linfo, launcher_bytes)
+
+    # Also keep an internal template inside kplayer/ so scraper_sync can always regenerate .sh
+    tinfo = zipfile.ZipInfo("kplayer/KPlayer.sh.tmpl")
+    tinfo.compress_type = zipfile.ZIP_DEFLATED
+    tinfo.external_attr = (0o100000 | 0o644) << 16
+    out.writestr(tinfo, launcher_bytes)
+
     for path in files:
         arcname = path.relative_to(BASE / "ports").as_posix()
         info = zipfile.ZipInfo(arcname)
         info.compress_type = zipfile.ZIP_DEFLATED
         mode = 0o755 if path.name in EXECUTABLE_NAMES else 0o644
         info.external_attr = (0o100000 | mode) << 16
-        out.writestr(info, path.read_bytes())
+        if path.name in ("KPlayer-metadata.xml", "gamelist.xml"):
+            data = stamp_xml_version(path.read_text(encoding="utf-8"), VERSION)
+        else:
+            data = path.read_bytes()
+        out.writestr(info, data)
 
     out.write(BASE / "docs" / "INSTALL.md", "README_INSTALL.md")
     out.write(BASE / "TERMS.md", "TERMS.md")

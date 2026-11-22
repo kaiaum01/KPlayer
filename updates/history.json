@@ -1,7 +1,20 @@
 {
   "schemaVersion": 2,
-  "latest": "2.0.7",
+  "latest": "2.0.8",
   "releases": [
+    {
+      "version": "2.0.8",
+      "releaseTag": "v2.0.8",
+      "releasedAt": "2026-11-22T23:05:00Z",
+      "r36s": "updates/v2.0.8/KPlayer-v2.0.8-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Pacote completo de imagens de scraper (Capa, Boxart, Marquee e Fanart) dentro de kplayer/scraper/",
+        "Inserção automática de metadados completos em /roms/ports/gamelist.xml e /roms2/ports/gamelist.xml sem apagar entradas existentes (e criação automática se não existir)",
+        "Atualização automática do nome da versão no script lançador .sh (KPlayer v2.0.8.sh) a cada nova atualização",
+        "Metadados completos EmulationStation/ScreenScraper mantidos dentro da pasta kplayer/"
+      ]
+    },
     {
       "version": "2.0.7",
       "releaseTag": "v2.0.7",

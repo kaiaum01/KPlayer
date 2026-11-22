@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Safe atomic auto-updater for KPlayer R36S (v2.0.7).
+"""Safe atomic auto-updater for KPlayer R36S (v2.0.8).
 
 Checks the GitHub updates/latest.json channel (with GitHub Releases fallback)
-for any version newer than the installed one (e.g. 2.0.6 -> 2.0.7 -> 2.0.8),
+for any version newer than the installed one (e.g. 2.0.7 -> 2.0.8 -> 2.0.9),
 downloads and SHA-256 verifies the R36S ZIP package, applies updated binaries
-and assets atomically while strictly preserving all user data and history, and
-signals KPlayer.sh (exit code 42) to restart immediately.
+and assets atomically while strictly preserving all user data, gamelist.xml,
+and history, updates the versioned `KPlayer v<VERSION>.sh` launcher, merges
+scraper metadata into `/roms/ports` & `/roms2/ports`, and signals exit code 42
+to restart immediately.
 """
 from pathlib import Path
 import hashlib
@@ -22,7 +24,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-CURRENT_FALLBACK = "2.0.7"
+CURRENT_FALLBACK = "2.0.8"
 UA = f"KPlayer-Updater/{CURRENT_FALLBACK}"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",
@@ -39,6 +41,7 @@ REPO_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 
 PRESERVE_PREFIXES = (
+    "gamelist.xml",
     "kplayer/iptv_usuario/",
     "kplayer/radios_usuario/",
     "kplayer/midias/",
@@ -59,6 +62,7 @@ EXECUTABLE_NAMES = {
     "iptv_fetch.py",
     "football_fetch.py",
     "weather_fetch.py",
+    "scraper_sync.py",
     "updater.py",
 }
 
@@ -497,14 +501,16 @@ def apply_update(gamedir: Path) -> int:
                     with zf.open(member) as src_f, tmp_target.open("wb") as dst_f:
                         shutil.copyfileobj(src_f, dst_f)
                     mode = (member.external_attr >> 16) & 0o777
-                    if target.name in EXECUTABLE_NAMES:
+                    if target.name in EXECUTABLE_NAMES or (
+                        target.name.startswith("KPlayer") and target.name.endswith(".sh")
+                    ):
                         mode = 0o755
                     elif not mode:
                         mode = 0o644
                     os.chmod(tmp_target, mode)
                     os.replace(tmp_target, target)
                     if fidx == 1 or fidx == total_files or fidx % 2 == 0:
-                        pct = 86 + int((fidx / total_files) * 12)
+                        pct = 86 + int((fidx / total_files) * 11)
                         write_progress(
                             gamedir,
                             pct,
@@ -516,6 +522,24 @@ def apply_update(gamedir: Path) -> int:
         if new_ver:
             (gamedir / "installed-version.txt").write_text(new_ver + "\n", encoding="utf-8")
             (gamedir / "app-version.txt").write_text(new_ver + "\n", encoding="utf-8")
+        # Update versioned `KPlayer v<new_ver>.sh` and non-destructively merge gamelist.xml metadata
+        write_progress(
+            gamedir,
+            98,
+            "Atualizando atalho e scraper...",
+            f"Renomeando .sh para v{new_ver or CURRENT_FALLBACK} e atualizando gamelist.xml",
+        )
+        try:
+            import subprocess
+
+            sync_script = gamedir / "scraper_sync.py"
+            if sync_script.is_file():
+                cmd = [sys.executable or "python3", str(sync_script)]
+                if new_ver:
+                    cmd += ["--version", new_ver]
+                subprocess.run(cmd, cwd=str(gamedir), timeout=10, check=False)
+        except Exception:
+            pass
         write_progress(
             gamedir,
             100,

@@ -1,16 +1,17 @@
 {
   "schemaVersion": 2,
-  "version": "2.0.7",
-  "nextVersion": "2.0.8",
+  "version": "2.0.8",
+  "nextVersion": "2.0.9",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.0.7",
-  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.0.7",
-  "releasedAt": "2026-11-22T22:25:56Z",
-  "repository": "kaiaum01/KPlayer",
+  "releaseTag": "v2.0.8",
+  "releasePageUrl": "",
+  "releasedAt": "2026-11-22T23:05:00Z",
+  "repository": "",
   "branch": "main",
   "updatesDir": "updates",
   "preserveUserPaths": [
+    "gamelist.xml",
     "iptv_usuario/",
     "radios_usuario/",
     "midias/",
@@ -23,24 +24,23 @@
     "resume.cfg"
   ],
   "notes": [
-    "Changelog Pós-Atualização (Exibido Apenas Uma Vez):",
-    "Toda vez que o KPlayer for atualizado para uma nova versão, uma tela dedicada \"Novidades da versão vX.Y.Z\" aparece automaticamente antes da tela inicial resumindo o que mudou.",
-    "Ao pressionar B para continuar, a versão vista é salva localmente (settings.cfg) para não aparecer novamente até o próximo update — e cada novo pacote já embute automaticamente o c",
-    "Visualizador / Protetor de Tela em 30 Segundos Ativado por Padrão:",
-    "O protetor de tela com os 5 visualizadores inspirados no Windows Media Player (Barras e Ondas, Alquimia, Bateria / Pulso, Plenitude e Ambience / Cosmos), relógio/data/clima e letra",
-    "Pode ser ajustado ou desativado a qualquer momento em SELECT → Protetor de tela (Desativado, 30 segundos, 60 segundos, 2 minutos, 5 minutos)."
+    "Pacote completo de artes de scraper (Capa 4:3, Boxart 3:4, Marquee 16:9 e Fanart 16:9) salvo dentro da pasta kplayer/scraper/",
+    "Inserção automática e não destrutiva de metadados completos no gamelist.xml de /roms/ports e /roms2/ports sem apagar outros jogos/ports",
+    "Criação automática de gamelist.xml caso ainda não exista na pasta ports, mantendo também cópia interna em kplayer/",
+    "Nome da versão atualizado automaticamente no arquivo lançador .sh (KPlayer v2.0.8.sh) a cada atualização, removendo atalhos duplicados antigos",
+    "Changelog pós-atualização exibido uma vez, visualizador de 30s ativado por padrão e saudação climática inteligente na tela inicial"
   ],
   "r36s": {
-    "filename": "KPlayer-v2.0.7-R36S.zip",
-    "path": "updates/v2.0.7/KPlayer-v2.0.7-R36S.zip",
-    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.7/KPlayer-v2.0.7-R36S.zip",
-    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.0.7/KPlayer-v2.0.7-R36S.zip",
-    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.7/KPlayer-v2.0.7-R36S.zip.sha256",
-    "sha256": "c32bf5da4303d15be49bc19601c8f157f33f842db97d5184da7fda844c2f8e0d",
-    "sizeBytes": 9183392
+    "filename": "KPlayer-v2.0.8-R36S.zip",
+    "path": "updates/v2.0.8/KPlayer-v2.0.8-R36S.zip",
+    "url": "",
+    "releaseUrl": "",
+    "sha256Url": "",
+    "sha256": "",
+    "sizeBytes": 0
   },
   "web": {
-    "version": "2.0.7",
+    "version": "2.0.8",
     "reloadRequired": true
   }
 }
