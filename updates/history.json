@@ -1,12 +1,27 @@
 {
-  "schemaVersion": 1,
-  "latest": "2.0.4",
+  "schemaVersion": 2,
+  "latest": "2.0.5",
   "releases": [
     {
+      "version": "2.0.5",
+      "releaseTag": "v2.0.5",
+      "releasedAt": "2026-11-22T07:20:00Z",
+      "r36s": "updates/v2.0.5/KPlayer-v2.0.5-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Todos os updates das versões 2.0.2, 2.0.3 e 2.0.4 aplicados no binário nativo do R36S (C + SDL2)",
+        "Reajustes finos no auto-updater R36S (cache-busting, retries, espelho GitHub Releases, SHA-256 e auto-reload do KPlayer.sh)",
+        "Clima Open-Meteo nativo no botão X + widget no canto direito da Home",
+        "Opções em ordem alfabética (sem abas laterais), barra inferior removida + guia de Atalhos, EPG ao vivo no IPTV",
+        "Workflow de updates/ e GitHub Releases 100% focado no R36S"
+      ]
+    },
+    {
       "version": "2.0.4",
+      "releaseTag": "v2.0.4",
       "releasedAt": "2026-11-21T21:40:00Z",
       "r36s": "updates/v2.0.4/KPlayer-v2.0.4-R36S.zip",
-      "android": "updates/v2.0.4/KPlayer-v2.0.4-Android.apk",
+      "sha256": "",
       "notes": [
         "App de Clima Open-Meteo no botão X + widget compacto na tela inicial",
         "Barra inferior removida + lista de Atalhos nas Opções",
@@ -15,14 +30,15 @@
     },
     {
       "version": "2.0.3",
+      "releaseTag": "v2.0.3",
       "releasedAt": "2026-11-21T00:00:00Z",
       "r36s": "updates/v2.0.3/KPlayer-v2.0.3-R36S.zip",
-      "android": "updates/v2.0.3/KPlayer-v2.0.3-Android.apk",
+      "sha256": "",
       "notes": [
         "Auto-Update via pasta updates/ do GitHub sem perda de dados/histórico",
         "Novo menu de Opções (SELECT) por seleção direta",
         "EPG ao vivo + IPTV Brasil 2026 integrado",
-        "Edições R36S e Android totalmente adaptativas"
+        "Adaptação dinâmica de tela no R36S"
       ]
     }
   ]

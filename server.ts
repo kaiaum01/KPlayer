@@ -214,7 +214,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.0.4' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.0.5' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -869,7 +869,7 @@ async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<s
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-EPG/2.0.4' },
+      headers: { 'User-Agent': 'KPlayer-EPG/2.0.5' },
     });
     clearTimeout(timer);
     if (!res.ok) return '';
@@ -1648,7 +1648,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.0.4' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.0.5' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1669,7 +1669,8 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipPath = path.join(__dirname, 'releases', 'KPlayer-v2.0.4-R36S.zip');
+  const r36sZipFilename = 'KPlayer-v2.0.5-R36S.zip';
+  const r36sZipPath = path.join(__dirname, 'releases', r36sZipFilename);
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
   app.get('/api/r36s/info', async (_req, res) => {
@@ -1683,21 +1684,21 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.0.4',
-        filename: 'KPlayer-v2.0.4-R36S.zip',
+        version: '2.0.5',
+        filename: r36sZipFilename,
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
       });
     } catch {
-      return res.status(404).json({ ready: false });
+      return res.status(404).json({ ready: false, version: '2.0.5', filename: r36sZipFilename });
     }
   });
 
   app.get('/api/r36s/download', async (_req, res) => {
     try {
       await fs.access(r36sZipPath);
-      return res.download(r36sZipPath, 'KPlayer-v2.0.4-R36S.zip');
+      return res.download(r36sZipPath, r36sZipFilename);
     } catch {
       return res.status(404).json({ error: 'Pacote R36S não encontrado' });
     }
@@ -1706,25 +1707,31 @@ async function createServer() {
   app.get('/api/r36s/sha256', async (_req, res) => {
     try {
       await fs.access(r36sShaPath);
-      return res.download(r36sShaPath, 'KPlayer-v2.0.4-R36S.zip.sha256');
+      return res.download(r36sShaPath, `${r36sZipFilename}.sha256`);
     } catch {
       return res.status(404).json({ error: 'Checksum não encontrado' });
     }
   });
 
-  // ==================== AUTO-UPDATE ENGINE (GITHUB updates/ CHANNEL) ====================
+  // ==================== AUTO-UPDATE ENGINE (GITHUB updates/ CHANNEL — R36S) ====================
 
   const REPO_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+  const BRANCH_RE = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
   const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+  const SHA256_RE = /^[0-9a-f]{64}$/i;
   const UPDATE_PRESERVE_PATHS = [
     'iptv_usuario/',
     'radios_usuario/',
     'midias/',
     'settings.cfg',
     'preferences.cfg',
+    'weather.cfg',
     'history.txt',
     'favorites.txt',
+    'radio-favorites.tsv',
+    'resume.cfg',
   ];
+  const weatherCache = new Map<string, { fetchedAt: number; payload: Record<string, unknown> }>();
 
   function compareSemver(a: string, b: string): number {
     const ma = a.trim().replace(/^v/i, '').match(SEMVER_RE);
@@ -1739,8 +1746,14 @@ async function createServer() {
 
   function nextPatchVersion(ver: string): string {
     const m = ver.trim().replace(/^v/i, '').match(SEMVER_RE);
-    if (!m) return '2.0.5';
+    if (!m) return '2.0.6';
     return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
+  }
+
+  function sanitizeBranch(raw: unknown): string {
+    const s = String(raw ?? '').trim().slice(0, 48);
+    if (!s || s.includes('..') || !BRANCH_RE.test(s)) return 'main';
+    return s;
   }
 
   async function readInstalledVersion(): Promise<string> {
@@ -1759,7 +1772,7 @@ async function createServer() {
     } catch {
       // Fallback below
     }
-    return '2.0.4';
+    return '2.0.5';
   }
 
   async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
@@ -1807,16 +1820,75 @@ async function createServer() {
     repository: string;
     branch: string;
     updatesFolderUrl: string;
+    releasePageUrl?: string;
     releasedAt: string;
     notes: string[];
     preserveUserPaths: string[];
-    source: 'github' | 'local';
+    source: 'github' | 'github-release' | 'local';
+    remoteStatus: 'ok' | 'unconfigured' | 'not_found' | 'network_error';
+    lastError?: string;
     checkedAt: number;
     r36s?: Record<string, unknown>;
-    android?: Record<string, unknown>;
   }
 
   let updateCheckCache: { ts: number; data: CheckedUpdatePayload } | null = null;
+
+  async function fetchRemoteReleaseFallback(
+    repository: string,
+    currentVersion: string
+  ): Promise<Record<string, unknown> | null> {
+    if (!REPO_SLUG_RE.test(repository)) return null;
+    const apiUrl = `https://api.github.com/repos/${repository}/releases/latest`;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 7000);
+      const r = await fetch(apiUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': `KPlayer-Updater/${currentVersion}`,
+          Accept: 'application/vnd.github+json',
+        },
+      });
+      clearTimeout(timer);
+      if (!r.ok) return null;
+      const txt = await r.text();
+      if (txt.length > 256 * 1024) return null;
+      const data = JSON.parse(txt) as {
+        tag_name?: string;
+        published_at?: string;
+        html_url?: string;
+        body?: string;
+        assets?: Array<{ name?: string; browser_download_url?: string; size?: number }>;
+      };
+      const ver = String(data.tag_name ?? '').trim().replace(/^v/i, '');
+      if (!SEMVER_RE.test(ver)) return null;
+      const zipAsset = (data.assets ?? []).find((a) => String(a.name ?? '').endsWith('-R36S.zip'));
+      const shaAsset = (data.assets ?? []).find((a) => String(a.name ?? '').endsWith('-R36S.zip.sha256'));
+      const notes = String(data.body ?? '')
+        .split(/\r?\n/)
+        .map((ln) => ln.trim())
+        .filter((ln) => ln.startsWith('- ') || ln.startsWith('* '))
+        .map((ln) => ln.slice(2).replace(/\*\*([^*]+)\*\*/g, '$1').trim().slice(0, 160))
+        .slice(0, 6);
+      return {
+        version: ver,
+        releasedAt: String(data.published_at ?? ''),
+        releasePageUrl: String(data.html_url ?? ''),
+        notes: notes.length ? notes : [`Release KPlayer R36S v${ver} disponível no GitHub.`],
+        r36s: {
+          filename: zipAsset?.name ?? `KPlayer-v${ver}-R36S.zip`,
+          path: `updates/v${ver}/KPlayer-v${ver}-R36S.zip`,
+          url: zipAsset?.browser_download_url ?? '',
+          releaseUrl: zipAsset?.browser_download_url ?? '',
+          sha256Url: shaAsset?.browser_download_url ?? '',
+          sha256: '',
+          sizeBytes: zipAsset?.size ?? 0,
+        },
+      };
+    } catch {
+      return null;
+    }
+  }
 
   async function runUpdateCheck(force = false): Promise<CheckedUpdatePayload> {
     if (!force && updateCheckCache && Date.now() - updateCheckCache.ts < 3 * 60_000) {
@@ -1825,21 +1897,27 @@ async function createServer() {
     const currentVersion = await readInstalledVersion();
     const localManifest = await readLocalUpdateManifest();
     const repository = await detectUpdateRepoSlug(localManifest);
-    const branch = String(
-      process.env.KPLAYER_UPDATE_BRANCH || localManifest?.branch || 'main'
-    )
-      .replace(/[^A-Za-z0-9._/-]/g, '')
-      .slice(0, 48) || 'main';
+    const branch = sanitizeBranch(process.env.KPLAYER_UPDATE_BRANCH || localManifest?.branch || 'main');
 
     let remoteManifest: Record<string, unknown> | null = null;
+    let source: 'github' | 'github-release' | 'local' = 'local';
+    let remoteStatus: 'ok' | 'unconfigured' | 'not_found' | 'network_error' = repository
+      ? 'network_error'
+      : 'unconfigured';
+    let lastError = repository ? '' : 'Informe usuario/repositorio para consultar o GitHub.';
+
     if (repository && REPO_SLUG_RE.test(repository)) {
-      const remoteUrl = `https://raw.githubusercontent.com/${repository}/${branch}/updates/latest.json`;
+      const bust = Date.now();
+      const remoteUrl = `https://raw.githubusercontent.com/${repository}/${branch}/updates/latest.json?t=${bust}`;
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8000);
         const r = await fetch(remoteUrl, {
           signal: controller.signal,
-          headers: { 'User-Agent': `KPlayer-Updater/${currentVersion}` },
+          headers: {
+            'User-Agent': `KPlayer-Updater/${currentVersion}`,
+            'Cache-Control': 'no-cache, no-store',
+          },
         });
         clearTimeout(timer);
         if (r.ok) {
@@ -1848,11 +1926,31 @@ async function createServer() {
             const parsed = JSON.parse(txt) as Record<string, unknown>;
             if (parsed && typeof parsed.version === 'string' && SEMVER_RE.test(parsed.version)) {
               remoteManifest = parsed;
+              source = 'github';
+              remoteStatus = 'ok';
+              lastError = '';
             }
           }
+        } else if (r.status === 404) {
+          remoteStatus = 'not_found';
+          lastError = 'Pasta updates/latest.json não encontrada nesse repositório.';
+        } else {
+          remoteStatus = 'network_error';
+          lastError = `GitHub retornou HTTP ${r.status}.`;
         }
       } catch {
-        remoteManifest = null;
+        remoteStatus = 'network_error';
+        lastError = 'Não foi possível conectar ao GitHub agora.';
+      }
+
+      if (!remoteManifest) {
+        const relFallback = await fetchRemoteReleaseFallback(repository, currentVersion);
+        if (relFallback) {
+          remoteManifest = relFallback;
+          source = 'github-release';
+          remoteStatus = 'ok';
+          lastError = '';
+        }
       }
     }
 
@@ -1869,6 +1967,14 @@ async function createServer() {
       ? active.preserveUserPaths.filter((x): x is string => typeof x === 'string')
       : UPDATE_PRESERVE_PATHS;
 
+    const r36sObj =
+      active?.r36s && typeof active.r36s === 'object'
+        ? { ...(active.r36s as Record<string, unknown>) }
+        : undefined;
+    if (r36sObj && typeof r36sObj.sha256 === 'string' && !SHA256_RE.test(r36sObj.sha256)) {
+      r36sObj.sha256 = '';
+    }
+
     const payload: CheckedUpdatePayload = {
       currentVersion,
       latestVersion,
@@ -1879,17 +1985,20 @@ async function createServer() {
       updatesFolderUrl: repository
         ? `https://github.com/${repository}/tree/${branch}/updates`
         : 'updates/',
+      releasePageUrl:
+        typeof active?.releasePageUrl === 'string' && active.releasePageUrl
+          ? active.releasePageUrl
+          : repository
+          ? `https://github.com/${repository}/releases/tag/v${latestVersion}`
+          : '',
       releasedAt: typeof active?.releasedAt === 'string' ? active.releasedAt : '',
       notes,
       preserveUserPaths,
-      source: remoteManifest ? 'github' : 'local',
+      source,
+      remoteStatus,
+      ...(lastError ? { lastError } : {}),
       checkedAt: Date.now(),
-      ...(active?.r36s && typeof active.r36s === 'object'
-        ? { r36s: active.r36s as Record<string, unknown> }
-        : {}),
-      ...(active?.android && typeof active.android === 'object'
-        ? { android: active.android as Record<string, unknown> }
-        : {}),
+      ...(r36sObj ? { r36s: r36sObj } : {}),
     };
     updateCheckCache = { ts: Date.now(), data: payload };
     return payload;
@@ -1914,8 +2023,20 @@ async function createServer() {
         notes: [],
         preserveUserPaths: UPDATE_PRESERVE_PATHS,
         source: 'local',
+        remoteStatus: 'network_error',
+        lastError: 'Falha ao consultar o canal de atualizações.',
         checkedAt: Date.now(),
       });
+    }
+  });
+
+  app.get('/api/update/history', async (_req, res) => {
+    try {
+      const raw = await fs.readFile(path.join(__dirname, 'updates', 'history.json'), 'utf8');
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return res.json({ ok: true, ...parsed });
+    } catch {
+      return res.json({ ok: true, latest: await readInstalledVersion(), releases: [] });
     }
   });
 
@@ -1945,8 +2066,9 @@ async function createServer() {
   app.post('/api/update/apply', async (_req, res) => {
     try {
       const status = await runUpdateCheck(true);
-      // Clear only volatile network caches — strictly preserve iptv_usuario/, radios_usuario/, midias/, settings & history
+      // Clear only volatile network caches — strictly preserve iptv_usuario/, radios_usuario/, midias/, weather, settings & history
       iptvCache.clear();
+      weatherCache.clear();
       epgIndexCache = null;
       updateCheckCache = null;
 
@@ -1955,11 +2077,14 @@ async function createServer() {
         previousVersion: status.currentVersion,
         targetVersion: status.latestVersion,
         updateAvailable: status.updateAvailable,
+        source: status.source,
+        releasePageUrl: status.releasePageUrl ?? '',
+        r36s: status.r36s,
         preservedUserPaths: status.preserveUserPaths,
         restartRequired: true,
         message: status.updateAvailable
-          ? `Atualização v${status.latestVersion} preparada preservando todos os seus dados e histórico. Reiniciando...`
-          : `KPlayer v${status.currentVersion} sincronizado com o canal de atualizações. Reiniciando...`,
+          ? `Atualização R36S v${status.latestVersion} preparada preservando todos os seus dados e histórico. Reiniciando...`
+          : `KPlayer R36S v${status.currentVersion} sincronizado com o canal updates/. Reiniciando...`,
       });
     } catch {
       return res.status(502).json({
@@ -2346,7 +2471,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.4' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.5' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -2457,7 +2582,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.4' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.5' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -2655,7 +2780,7 @@ async function createServer() {
     try {
       const r = await fetch('https://ipwho.is/', {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.4' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.5' },
       });
       const data = (await r.json()) as {
         success?: boolean;
@@ -2721,7 +2846,7 @@ async function createServer() {
 
   // ==================== OPEN-METEO WEATHER & GEOCODING API ====================
 
-  const weatherCache = new Map<string, { fetchedAt: number; payload: Record<string, unknown> }>();
+  // weatherCache declared above so /api/update/apply can also flush it cleanly
   const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000;
 
   const PT_WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -2750,7 +2875,7 @@ async function createServer() {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=pt&format=json`;
       const upstream = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.4' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.5' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ results: [], error: 'geocoding_unavailable' });
@@ -2813,7 +2938,7 @@ async function createServer() {
         `&timezone=auto&forecast_days=7`;
       const upstream = await fetch(apiUrl, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.4' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.0.5' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ error: 'weather_unavailable' });
@@ -2932,7 +3057,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.4',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.5',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -3028,7 +3153,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.0.4 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.0.5 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

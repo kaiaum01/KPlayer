@@ -1,4 +1,4 @@
-name: KPlayer - Auto-Update (updates/) e Release Automática
+name: KPlayer R36S - Auto-Update (updates/) e Release Automática
 
 on:
   workflow_dispatch:
@@ -6,25 +6,34 @@ on:
     branches: [main]
     paths:
       - 'source/**'
-      - 'android/**'
       - 'ports/**'
+      - 'tools/**'
+      - 'patches/**'
+      - 'tests/**'
       - 'src/**'
       - 'server.ts'
       - 'package.json'
       - 'releases/RELEASE_NOTES.md'
+      - '.github/workflows/auto-update.yml'
     paths-ignore:
       - 'updates/**'
+
+concurrency:
+  group: kplayer-r36s-auto-update-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  build-r36s-update:
-    name: Compilar R36S para canal updates/ e Release
+  build-and-publish-r36s:
+    name: Compilar R36S, publicar updates/ e GitHub Release
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
@@ -34,10 +43,10 @@ jobs:
         run: |
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go install github.com/0xjuanma/golazo@latest
           cp "$GOPATH/bin/linux_arm64/golazo" ports/kplayer/golazo
-      - name: Instalar compilador ARM64
+      - name: Instalar compilador ARM64 e SDL2 para testes
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config patch xz-utils make flex bison file
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config patch xz-utils make flex bison file libsdl2-2.0-0
       - name: Cachear núcleo libVLC ARM64
         uses: actions/cache@v4
         with:
@@ -45,68 +54,26 @@ jobs:
           key: libvlc-3.0.23-arm64-${{ hashFiles('patches/kplayer-vlc.patch', 'tools/build_libvlc_arm64.sh') }}
       - name: Compilar núcleo libVLC ARM64
         run: bash tools/build_libvlc_arm64.sh
-      - name: Compilar KPlayer ARM64
+      - name: Executar testes nativos R36S e scripts Python
+        run: |
+          mkdir -p output
+          gcc -O1 -g -fsanitize=address,undefined -I source/include tests/test_native.c -o output/test-native -ldl -lpthread -lm
+          gcc -O1 -g -fsanitize=address,undefined tests/test_tags.c -o output/test-tags
+          ASAN_OPTIONS=detect_leaks=0 output/test-tags
+          (cd ports/kplayer && SDL_VIDEODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
+          python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py
+          python3 -m unittest discover -s tests -p test_football.py -v
+      - name: Compilar KPlayer ARM64 (R36S)
         run: |
           aarch64-linux-gnu-gcc -O2 -std=gnu11 -Wall -Wextra -Werror \
             -I source/include source/kplayer.c -o ports/kplayer/kplayer \
             -ldl -lpthread -lm
+          file ports/kplayer/kplayer
       - name: Gravar repositório do canal de auto-update
         run: echo "${{ github.repository }}" > ports/kplayer/update-repo.txt
-      - name: Empacotar R36S
+      - name: Empacotar R36S e gerar SHA-256
         run: python3 tools/package_release.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: KPlayer-Update-R36S
-          path: |
-            releases/KPlayer-v*-R36S.zip
-            releases/KPlayer-v*-R36S.zip.sha256
-
-  build-android-update:
-    name: Compilar Android APK para canal updates/ e Release
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
-      - name: Compilar APK Release
-        working-directory: android
-        run: gradle assembleRelease --no-daemon --stacktrace
-      - name: Empacotar APK e SHA-256
-        run: |
-          mkdir -p releases
-          VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
-          cp android/app/build/outputs/apk/release/app-release.apk "releases/KPlayer-v${VERSION}-Android.apk"
-          (cd releases && sha256sum "KPlayer-v${VERSION}-Android.apk" > "KPlayer-v${VERSION}-Android.apk.sha256")
-      - uses: actions/upload-artifact@v4
-        with:
-          name: KPlayer-Update-Android
-          path: |
-            releases/KPlayer-v*-Android.apk
-            releases/KPlayer-v*-Android.apk.sha256
-
-  publish-updates-and-release:
-    name: Publicar pasta updates/ e GitHub Release automaticamente
-    needs: [build-r36s-update, build-android-update]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/download-artifact@v4
-        with:
-          name: KPlayer-Update-R36S
-          path: releases
-      - uses: actions/download-artifact@v4
-        with:
-          name: KPlayer-Update-Android
-          path: releases
-      - name: Publicar manifesto e pacotes na pasta updates/
+      - name: Publicar manifesto e pacote R36S na pasta updates/
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           KPLAYER_UPDATE_BRANCH: main
@@ -121,10 +88,12 @@ jobs:
             exit 0
           fi
           VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
-          git commit -m "chore(updates): publicar auto-update v${VERSION} [skip ci]"
+          git commit -m "chore(updates): publicar auto-update R36S v${VERSION} [skip ci]"
+          git pull --rebase --autostash origin main || true
           git push origin HEAD:main
       - name: Montar notas da Release com modificações desta versão
         run: |
+          git fetch --tags --force || true
           VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
           TAG="v${VERSION}"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
@@ -134,7 +103,7 @@ jobs:
             if [ -f releases/RELEASE_NOTES.md ]; then
               cat releases/RELEASE_NOTES.md
             else
-              echo "# KPlayer ${TAG}"
+              echo "# KPlayer R36S ${TAG}"
             fi
             echo ""
             echo "---"
@@ -148,31 +117,38 @@ jobs:
             fi
             echo ""
             echo ""
-            echo "### Canal Auto-Update"
+            echo "### Canal Auto-Update R36S"
             echo "- Manifesto: \`updates/latest.json\`"
-            echo "- Pacotes arquivados: \`updates/${TAG}/\`"
+            echo "- Pacote R36S: \`updates/${TAG}/KPlayer-${TAG}-R36S.zip\`"
           } > /tmp/kplayer_release_notes.md
-      - name: Criar ou atualizar GitHub Release automaticamente
+      - name: Criar ou atualizar GitHub Release R36S automaticamente
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ASSETS=(
             "releases/KPlayer-v${VERSION}-R36S.zip"
             "releases/KPlayer-v${VERSION}-R36S.zip.sha256"
-            "releases/KPlayer-v${VERSION}-Android.apk"
-            "releases/KPlayer-v${VERSION}-Android.apk.sha256"
           )
+          for f in "${ASSETS[@]}"; do
+            test -f "$f"
+          done
 
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release edit "${RELEASE_TAG}" \
-              --title "KPlayer ${RELEASE_TAG} — R36S & Android" \
+              --title "KPlayer ${RELEASE_TAG} — R36S" \
               --notes-file /tmp/kplayer_release_notes.md \
               --latest
             gh release upload "${RELEASE_TAG}" "${ASSETS[@]}" --clobber
           else
             gh release create "${RELEASE_TAG}" "${ASSETS[@]}" \
-              --title "KPlayer ${RELEASE_TAG} — R36S & Android" \
+              --title "KPlayer ${RELEASE_TAG} — R36S" \
               --notes-file /tmp/kplayer_release_notes.md \
               --target main \
               --latest
           fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KPlayer-R36S-v${{ env.VERSION }}
+          path: |
+            releases/KPlayer-v*-R36S.zip
+            releases/KPlayer-v*-R36S.zip.sha256

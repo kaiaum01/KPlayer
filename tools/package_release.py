@@ -34,6 +34,7 @@ files = [
     runtime / "KPlayer-metadata.xml",
     runtime / "iptv_fetch.py",
     runtime / "football_fetch.py",
+    runtime / "weather_fetch.py",
     runtime / "updater.py",
     runtime / "golazo",
     runtime / "fonts" / "Interface.ttf",
@@ -65,6 +66,7 @@ EXECUTABLE_NAMES = {
     "kplayer",
     "iptv_fetch.py",
     "football_fetch.py",
+    "weather_fetch.py",
     "updater.py",
     "golazo",
 }
@@ -85,8 +87,11 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out
     out.write(BASE / "docs" / "INSTALL.md", "README_INSTALL.md")
     out.write(BASE / "TERMS.md", "TERMS.md")
     out.write(BASE / "LICENSE", "LICENSE")
-    out.writestr("kplayer/installed-version.txt", VERSION + "\n")
-    out.writestr("kplayer/app-version.txt", VERSION + "\n")
+    for vname in ("kplayer/installed-version.txt", "kplayer/app-version.txt"):
+        vinfo = zipfile.ZipInfo(vname)
+        vinfo.compress_type = zipfile.ZIP_DEFLATED
+        vinfo.external_attr = (0o100000 | 0o644) << 16
+        out.writestr(vinfo, (VERSION + "\n").encode("utf-8"))
     out.writestr(
         "SOURCE.txt",
         (

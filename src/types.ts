@@ -184,10 +184,13 @@ export interface AppUpdateStatus {
   repository: string;
   branch: string;
   updatesFolderUrl: string;
+  releasePageUrl?: string;
   releasedAt: string;
   notes: string[];
   preserveUserPaths: string[];
-  source: 'github' | 'local';
+  source: 'github' | 'github-release' | 'local';
+  remoteStatus?: 'ok' | 'unconfigured' | 'not_found' | 'network_error';
+  lastError?: string;
   checkedAt: number;
   r36s?: AppUpdateArtifact;
   android?: AppUpdateArtifact;

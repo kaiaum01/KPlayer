@@ -273,7 +273,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         : undefined;
       const updValue = updateStatus?.updateAvailable
         ? `Nova v${updateStatus.latestVersion}`
-        : `v${updateStatus?.currentVersion ?? '2.0.4'}`;
+        : `v${updateStatus?.currentVersion ?? '2.0.5'}`;
 
       return [
         {
@@ -797,21 +797,38 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 <div style={{ color: theme.accent }} className="text-[11px] font-extrabold">
                   {updateStatus?.updateAvailable
                     ? `Nova versão disponível: v${updateStatus.latestVersion}`
-                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.4'}`}
+                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.5'}`}
                 </div>
                 <div style={{ color: theme.muted }} className="text-[11px] mt-0.5">
                   {updateStatus?.updateAvailable
                     ? 'Pronta para baixar da pasta updates/ do GitHub e reiniciar automaticamente.'
-                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.5'} e próximas versões na pasta updates/.`}
+                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.6'} e próximas versões na pasta updates/.`}
                 </div>
               </div>
               <span
                 style={{ color: updateStatus?.updateAvailable ? theme.accent : theme.muted }}
                 className="text-[11px] font-bold tabular-nums shrink-0"
               >
-                {updateStatus?.source === 'github' ? 'GitHub Online' : 'Manifesto Local'}
+                {updateStatus?.source === 'github'
+                  ? 'GitHub Online'
+                  : updateStatus?.source === 'github-release'
+                    ? 'GitHub Releases'
+                    : 'Manifesto Local'}
               </span>
             </div>
+
+            {updateStatus?.remoteStatus && updateStatus.remoteStatus !== 'ok' && updateStatus.lastError && (
+              <div
+                style={{
+                  backgroundColor: rgbToRgba(theme.elevated, 0.7),
+                  border: `1px solid ${themeHairline(theme)}`,
+                  color: theme.muted,
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-[10.5px] leading-snug"
+              >
+                Usando manifesto local: {updateStatus.lastError}
+              </div>
+            )}
 
             {updateStatus?.notes && updateStatus.notes.length > 0 && (
               <div

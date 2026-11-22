@@ -438,7 +438,7 @@ export default function App() {
       if (d.ok) {
         setUpdateMessage(
           d.message ||
-            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? '2.0.4'} aplicada. Reiniciando...`
+            `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? '2.0.5'} aplicada. Reiniciando...`
         );
         notify('Atualização concluída! Reiniciando KPlayer...');
         window.setTimeout(() => {
@@ -1526,9 +1526,9 @@ export default function App() {
 
   const updateBannerValue = useMemo(
     () => ({
-      currentVersion: updateStatus?.currentVersion ?? '2.0.4',
+      currentVersion: updateStatus?.currentVersion ?? '2.0.5',
       updateAvailable: Boolean(updateStatus?.updateAvailable),
-      latestVersion: updateStatus?.latestVersion ?? '2.0.4',
+      latestVersion: updateStatus?.latestVersion ?? '2.0.5',
       onOpenUpdate: () => openOptionsScreen('update'),
     }),
     [updateStatus, openOptionsScreen]
@@ -1578,7 +1578,7 @@ export default function App() {
       <div className="min-h-10 px-3 py-1.5 bg-[#101319] border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2.5 text-xs flex-wrap">
           <span className="font-bold text-zinc-100 whitespace-nowrap">
-            KPlayer v{updateStatus?.currentVersion ?? '2.0.4'}
+            KPlayer v{updateStatus?.currentVersion ?? '2.0.5'} • R36S
           </span>
           {updateStatus?.updateAvailable ? (
             <button
@@ -1608,34 +1608,6 @@ export default function App() {
               Auto-Update · SELECT
             </button>
           )}
-          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[#181c25] border border-white/10">
-            {(
-              [
-                { id: 'r36s', label: 'R36S (Principal)' },
-                { id: 'android', label: 'Android (Adaptativo)' },
-                { id: 'split', label: 'Lado a Lado' },
-              ] as const
-            ).map((opt) => {
-              const active = editionView === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setEditionView(opt.id)}
-                  style={
-                    active
-                      ? { backgroundColor: theme.accent, color: theme.bg }
-                      : undefined
-                  }
-                  className={`px-2.5 py-1 rounded-md text-[11.5px] font-bold whitespace-nowrap cursor-pointer transition-colors ${
-                    active ? '' : 'text-zinc-300 hover:text-white'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
@@ -1648,14 +1620,7 @@ export default function App() {
             }}
             className="px-2.5 py-1 rounded-md text-xs font-bold hover:brightness-110 transition-all cursor-pointer whitespace-nowrap"
           >
-            ⬇ R36S (.zip)
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowAndroidModal(true)}
-            className="px-2.5 py-1 rounded-md text-xs font-semibold bg-[#1e222c] text-zinc-100 hover:bg-[#282e3b] border border-white/15 transition-colors cursor-pointer whitespace-nowrap"
-          >
-            ⬇ Android (.apk)
+            ⬇ Pacote R36S (.zip)
           </button>
           <button
             type="button"
@@ -1916,7 +1881,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.4 • R36S
+                      v2.0.5 • R36S
                     </div>
                   </div>
 
@@ -3675,7 +3640,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.4 — Visual Moderno
+                  KPlayer v2.0.5 — Edição R36S
                 </h2>
               </div>
               <button
@@ -3691,7 +3656,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
                 <img
                   src={portCoverImg}
-                  alt="Capa do Port KPlayer v2.0.4 para R36S dArkOS"
+                  alt="Capa do Port KPlayer v2.0.5 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -3700,7 +3665,7 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.4-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.5-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -3733,7 +3698,7 @@ export default function App() {
             <div className="mt-4 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.4-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.5-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code>,{' '}
                   <code className="text-zinc-100">kplayer/</code>,{' '}
@@ -3750,22 +3715,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 v2.0.4, Clima Open-Meteo, auto-update via pasta updates/, capa 640×480 e XML dArkOS, libVLC ARM64, <strong>Placar da Bola</strong>, IPTV Brasil + EPG e rádios <code className="text-zinc-300">.pls</code>.
+                Inclui binário ARM64 nativo v2.0.5 com Clima Open-Meteo (X), menu Opções A–Z (SELECT), Auto-Update nativo via pasta updates/ + GitHub Releases, EPG ao vivo no IPTV Brasil 2026, <strong>Placar da Bola</strong>, libVLC ARM64 e rádios <code className="text-zinc-300">.pls</code>.
               </p>
             </div>
 
             <div className="mt-5 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.4-R36S.zip"
+                download="KPlayer-v2.0.5-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.4-R36S.zip
+                ⬇ Baixar KPlayer-v2.0.5-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.4-R36S.zip.sha256"
+                download="KPlayer-v2.0.5-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

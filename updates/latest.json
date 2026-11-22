@@ -1,9 +1,12 @@
 {
-  "schemaVersion": 1,
-  "version": "2.0.4",
-  "nextVersion": "2.0.5",
+  "schemaVersion": 2,
+  "version": "2.0.5",
+  "nextVersion": "2.0.6",
   "channel": "stable",
-  "releasedAt": "2026-11-21T21:40:00Z",
+  "platform": "r36s",
+  "releaseTag": "v2.0.5",
+  "releasePageUrl": "",
+  "releasedAt": "2026-11-22T07:20:00Z",
   "repository": "",
   "branch": "main",
   "updatesDir": "updates",
@@ -13,31 +16,31 @@
     "midias/",
     "settings.cfg",
     "preferences.cfg",
+    "weather.cfg",
     "history.txt",
-    "favorites.txt"
+    "favorites.txt",
+    "radio-favorites.tsv",
+    "resume.cfg"
   ],
   "notes": [
-    "Novo aplicativo de Clima integrado via Open-Meteo (botão X na tela inicial) com escolha entre localização por IP ou busca manual de cidade",
-    "Widget compacto de localização e clima no canto direito ao lado de 'Seu som. Sua tela.'",
-    "Barra inferior removida para ampliar a área útil, com guia completo de Atalhos dentro das Opções",
-    "Menu de Opções (SELECT) reorganizado em ordem alfabética, com 'Verificar atualizações' (A) em penúltimo e 'Sair' por último"
+    "Núcleo nativo do R36S (C + SDL2 + libVLC) atualizado com TODOS os recursos das versões v2.0.2, v2.0.3, v2.0.4 e v2.0.5",
+    "Auto-Updater nativo no R36S com verificação no boot, aviso na barra superior, fallback para GitHub Releases, cache-busting, checagem SHA-256 e reinício automático preservando dados",
+    "App de Clima Open-Meteo nativo no botão X (perguntando IP ou pesquisa manual) + widget compacto ao lado de 'Seu som. Sua tela.'",
+    "Barra inferior removida no R36S + menu de Opções (SELECT) por seleção em ordem alfabética, com Atalhos, [A] Verificar atualizações em penúltimo e Sair por último",
+    "IPTV Brasil 2026 + guia de programação EPG ao vivo (AGORA / A SEGUIR) integrados diretamente na tela nativa de IPTV do R36S",
+    "Pipeline de Auto-Update e GitHub Release 100% focado no R36S (sem bloqueio por compilação Android)"
   ],
   "r36s": {
-    "filename": "KPlayer-v2.0.4-R36S.zip",
-    "path": "updates/v2.0.4/KPlayer-v2.0.4-R36S.zip",
+    "filename": "KPlayer-v2.0.5-R36S.zip",
+    "path": "updates/v2.0.5/KPlayer-v2.0.5-R36S.zip",
     "url": "",
-    "sha256": "",
-    "sizeBytes": 0
-  },
-  "android": {
-    "filename": "KPlayer-v2.0.4-Android.apk",
-    "path": "updates/v2.0.4/KPlayer-v2.0.4-Android.apk",
-    "url": "",
+    "releaseUrl": "",
+    "sha256Url": "",
     "sha256": "",
     "sizeBytes": 0
   },
   "web": {
-    "version": "2.0.4",
+    "version": "2.0.5",
     "reloadRequired": true
   }
 }
