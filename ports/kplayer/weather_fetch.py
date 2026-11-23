@@ -19,7 +19,7 @@ import time
 import urllib.parse
 import urllib.request
 
-UA = "KPlayer-R36S-Weather/2.0.8"
+UA = "KPlayer-R36S-Weather/2.0.9"
 CACHE_DIR = Path("iptv/.cache")
 CACHE_TTL = 600  # 10 minutes
 

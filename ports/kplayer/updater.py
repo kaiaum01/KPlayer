@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Safe atomic auto-updater for KPlayer R36S (v2.0.8).
+"""Safe atomic auto-updater for KPlayer R36S (v2.0.9).
 
 Checks the GitHub updates/latest.json channel (with GitHub Releases fallback)
-for any version newer than the installed one (e.g. 2.0.7 -> 2.0.8 -> 2.0.9),
+for any version newer than the installed one (e.g. 2.0.8 -> 2.0.9 -> 2.0.10),
 downloads and SHA-256 verifies the R36S ZIP package, applies updated binaries
 and assets atomically while strictly preserving all user data, gamelist.xml,
 and history, updates the versioned `KPlayer v<VERSION>.sh` launcher without
@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-CURRENT_FALLBACK = "2.0.8"
+CURRENT_FALLBACK = "2.0.9"
 UA = f"KPlayer-Updater/{CURRENT_FALLBACK}"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",

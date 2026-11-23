@@ -575,7 +575,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         : undefined;
       const updValue = updateStatus?.updateAvailable
         ? `Nova v${updateStatus.latestVersion}`
-        : `v${updateStatus?.currentVersion ?? '2.0.8'}`;
+        : `v${updateStatus?.currentVersion ?? '2.0.9'}`;
 
       return [
         {
@@ -1047,12 +1047,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 <div style={{ color: theme.accent }} className="text-[12.5px] font-extrabold">
                   {updateStatus?.updateAvailable
                     ? `Nova versão disponível: v${updateStatus.latestVersion}`
-                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.8'}`}
+                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.9'}`}
                 </div>
                 <div style={{ color: theme.muted }} className="text-[11.5px] mt-0.5">
                   {updateStatus?.updateAvailable
                     ? 'Pronta para baixar da pasta updates/ do GitHub e reiniciar automaticamente.'
-                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.9'} e próximas versões na pasta updates/.`}
+                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.10'} e próximas versões na pasta updates/.`}
                 </div>
               </div>
               <span

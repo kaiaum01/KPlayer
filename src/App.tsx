@@ -65,12 +65,12 @@ import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_179539140
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.0.8';
+const APP_VERSION = '2.0.9';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
   'Novas artes em alta resolução baseadas no disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490).',
   'Pacote completo salvo em kplayer/scraper/ com Capa (PNG transparente), Marquee (PNG transparente), Boxart (900×1200) e Fanart Full HD (1920×1080).',
   'Edição automática de metadados no gamelist.xml removida — seus arquivos XML permanecem 100% intactos.',
-  'Atualização automática do nome da versão no lançador .sh (KPlayer v2.0.8.sh) a cada nova atualização.',
+  'Atualização automática do nome da versão no lançador .sh (KPlayer v2.0.9.sh) a cada nova atualização.',
   'Protetor de tela com visualizadores (30s padrão), saudação climática inteligente na tela inicial e barra de progresso de atualização.',
 ];
 
@@ -2161,7 +2161,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.8 • R36S
+                      v2.0.9 • R36S
                     </div>
                   </div>
 
@@ -4408,7 +4408,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.8 — Edição R36S
+                  KPlayer v2.0.9 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4424,7 +4424,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.0.8 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.0.9 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4433,13 +4433,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.8-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.0.9-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer v2.0.8.sh (auto-versionado)
+                    KPlayer v2.0.9.sh (auto-versionado)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4503,35 +4503,35 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.8-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.9-R36S.zip</code>.</li>
                 <li>
-                  Copie <code className="text-zinc-100">KPlayer v2.0.8.sh</code> e a pasta{' '}
+                  Copie <code className="text-zinc-100">KPlayer v2.0.9.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
                   <code className="text-zinc-100">/roms/ports/</code> ou{' '}
                   <code className="text-zinc-100">/roms2/ports/</code>.
                 </li>
                 <li>
-                  Abra <strong className="text-zinc-100">Ports → KPlayer v2.0.8</strong>. As imagens de Capa/Marquee transparentes ficam disponíveis em{' '}
+                  Abra <strong className="text-zinc-100">Ports → KPlayer v2.0.9</strong>. As imagens de Capa/Marquee transparentes ficam disponíveis em{' '}
                   <code className="text-zinc-100">kplayer/scraper/</code> sem modificar nenhum <code className="text-zinc-100">gamelist.xml</code>.
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.0.8, Capa transparente (1200×1200), Marquee transparente (1600×490), Boxart e Fanart Full HD baseados no disco de vinil K, lançador .sh atualizado a cada versão, changelog pós-atualização e visualizador 30s.
+                Inclui binário ARM64 nativo v2.0.9, Capa transparente (1200×1200), Marquee transparente (1600×490), Boxart e Fanart Full HD baseados no disco de vinil K, lançador .sh atualizado a cada versão, changelog pós-atualização e visualizador 30s.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.8-R36S.zip"
+                download="KPlayer-v2.0.9-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.8-R36S.zip
+                ⬇ Baixar KPlayer-v2.0.9-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.8-R36S.zip.sha256"
+                download="KPlayer-v2.0.9-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

@@ -19,9 +19,9 @@ class UpdaterLauncherTest(unittest.TestCase):
             gamedir = ports / "kplayer"
             gamedir.mkdir(parents=True)
 
-            old_sh = ports / "KPlayer v2.0.7.sh"
+            old_sh = ports / "KPlayer v2.0.8.sh"
             old_sh.write_text(
-                '#!/bin/bash\n# KPlayer v2.0.7 - dArkOS\nKPLAYER_VERSION="2.0.7"\necho ok\n',
+                '#!/bin/bash\n# KPlayer v2.0.8 - dArkOS\nKPLAYER_VERSION="2.0.8"\necho ok\n',
                 encoding="utf-8",
             )
             legacy_sh = ports / "KPlayer.sh"
@@ -31,16 +31,16 @@ class UpdaterLauncherTest(unittest.TestCase):
             gamelist = ports / "gamelist.xml"
             gamelist.write_text(existing_xml, encoding="utf-8")
 
-            res = updater.sync_versioned_launcher(ports, gamedir, "2.0.8")
+            res = updater.sync_versioned_launcher(ports, gamedir, "2.0.9")
             self.assertIsNotNone(res)
-            new_sh = ports / "KPlayer v2.0.8.sh"
+            new_sh = ports / "KPlayer v2.0.9.sh"
             self.assertTrue(new_sh.is_file())
             self.assertFalse(old_sh.exists())
             self.assertFalse(legacy_sh.exists())
 
             sh_text = new_sh.read_text(encoding="utf-8")
-            self.assertIn('KPLAYER_VERSION="2.0.8"', sh_text)
-            self.assertIn("# KPlayer v2.0.8", sh_text)
+            self.assertIn('KPLAYER_VERSION="2.0.9"', sh_text)
+            self.assertIn("# KPlayer v2.0.9", sh_text)
 
             # Confirm gamelist.xml is 100% untouched byte-for-byte
             self.assertEqual(gamelist.read_text(encoding="utf-8"), existing_xml)
