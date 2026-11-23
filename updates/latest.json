@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "version": "2.1.0",
-  "nextVersion": "2.1.1",
+  "version": "2.1.1",
+  "nextVersion": "2.1.2",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.1.0",
-  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.0",
-  "releasedAt": "2026-11-23T15:06:05Z",
+  "releaseTag": "v2.1.1",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.1",
+  "releasedAt": "2026-11-23T19:45:00Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -17,30 +17,30 @@
     "settings.cfg",
     "preferences.cfg",
     "weather.cfg",
+    "news.cfg",
+    "gamelist.xml",
     "history.txt",
     "favorites.txt",
     "radio-favorites.tsv",
     "resume.cfg"
   ],
   "notes": [
-    "Nova Aba Notícias (antes do Placar da Bola):",
-    "Manchetes do Brasil em português com filtros rápidos (Todas, Urgente, Mundo, Polícia, Entretenimento e Esportes) via API NewsData.io (configurável por news.cfg no R36S ou NEWSDATA_",
-    "Dashboard Reorganizada (Músicas e Vídeos Unificados):",
-    "Os cards de músicas e vídeos foram unidos em Músicas e Vídeos, deixando a Home com Músicas e Vídeos, Arquivos, Rádio Online, IPTV, Notícias e Placar da Bola.",
-    "Correção Visual em Todos os 14 Temas do R36S:",
-    "Eliminado o artefato de listras horizontais dentro das caixas translúcidas e dos painéis do Protetor de Tela (relógio/clima, barra \"tocando agora\", letras e badges). Todas as caixa"
+    "Correção crítica de áudio no R36S (ALSA + libVLC): os sons das teclas agora liberam o dispositivo ALSA imediatamente antes de músicas, vídeos, rádios e IPTV, encerrando o bloqueio de reprodução.",
+    "Lazy-loading assíncrono da biblioteca de mídias na inicialização: a varredura de músicas e vídeos roda em segundo plano sem travar o boot nem bloquear a inicialização do áudio.",
+    "Atualização permitida mesmo na mesma versão: exibe aviso explícito e pede confirmação antes de reinstalar a mesma versão, preservando favoritos, histórico, listas e ajustes.",
+    "Notícias com imagens em cache e reprodução de vídeos no R36S, dashboard unificada (Músicas e Vídeos) e 14 temas com gradiente suave sem listras."
   ],
   "r36s": {
-    "filename": "KPlayer-v2.1.0-R36S.zip",
-    "path": "updates/v2.1.0/KPlayer-v2.1.0-R36S.zip",
-    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.0/KPlayer-v2.1.0-R36S.zip",
-    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.0/KPlayer-v2.1.0-R36S.zip",
-    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.0/KPlayer-v2.1.0-R36S.zip.sha256",
-    "sha256": "5a7db2c0474f5b8843e539e4046f07858d11c53993b757f16376de8595e693fa",
-    "sizeBytes": 16593978
+    "filename": "KPlayer-v2.1.1-R36S.zip",
+    "path": "updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.1/KPlayer-v2.1.1-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.1/KPlayer-v2.1.1-R36S.zip.sha256",
+    "sha256": "",
+    "sizeBytes": 0
   },
   "web": {
-    "version": "2.1.0",
+    "version": "2.1.1",
     "reloadRequired": true
   }
 }

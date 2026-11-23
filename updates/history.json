@@ -1,7 +1,20 @@
 {
   "schemaVersion": 2,
-  "latest": "2.1.0",
+  "latest": "2.1.1",
   "releases": [
+    {
+      "version": "2.1.1",
+      "releaseTag": "v2.1.1",
+      "releasedAt": "2026-11-23T19:45:00Z",
+      "r36s": "updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Correção crítica de áudio no R36S (ALSA + libVLC): sons das teclas agora liberam o dispositivo ALSA imediatamente antes de músicas, vídeos, rádios e IPTV",
+        "Lazy-loading assíncrono da biblioteca de mídias na inicialização, evitando bloqueio do boot e da inicialização do áudio",
+        "Atualização permitida mesmo na mesma versão com aviso explícito e confirmação em 2 etapas, preservando todos os dados do usuário",
+        "Aba Notícias com fotos em cache e reprodução de vídeos no R36S"
+      ]
+    },
     {
       "version": "2.1.0",
       "releaseTag": "v2.1.0",

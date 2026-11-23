@@ -68,13 +68,12 @@ import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_179539140
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.1.1';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Nova aba Notícias (antes do Placar da Bola) com cobertura do Brasil em português (Urgente, Mundo, Polícia, Entretenimento e Esportes) e leitor completo no controle.',
-  'Dashboard reorganizada: Músicas e Vídeos unificados em um único card, mantendo acesso rápido a Arquivos, Rádio Online, IPTV, Notícias e Placar da Bola.',
-  'Correção visual definitiva em todos os 14 temas do R36S: eliminadas listras internas em caixas translúcidas e HUD do protetor de tela, agora com gradiente suave real e borda nítida.',
-  '10 visualizadores reativos ao áudio no Protetor de Tela (+ Automático) e sons táteis de clique ao navegar pelos menus.',
-  'Mais animações em toda a interface e documentação atualizada no GitHub.',
+  'Correção crítica de áudio no R36S: liberação imediata do dispositivo ALSA nos sons das teclas para que músicas, vídeos, rádios e IPTV toquem normalmente sem conflito com a libVLC.',
+  'Carregamento assíncrono (lazy-loading) da biblioteca de mídias na inicialização, evitando travamentos em cartões SD grandes e mantendo o áudio desbloqueado durante o boot.',
+  'Atualização permitida mesmo na mesma versão (reinstalação forçada com aviso e confirmação em 2 etapas), preservando favoritos, histórico, listas e ajustes.',
+  'Aba Notícias com suporte a fotos em cache e reprodução de vídeos no R36S, dashboard unificada (Músicas e Vídeos) e 14 temas com gradiente suave sem listras.',
 ];
 
 const RADIO_CATEGORIES = [
@@ -536,19 +535,27 @@ export default function App() {
     [notify]
   );
 
-  const applyAppUpdate = useCallback(async () => {
+  const applyAppUpdate = useCallback(async (force = false) => {
     if (updateApplying) return;
     setUpdateApplying(true);
     setUpdateProgress(10);
-    setUpdateStage('Conectando ao canal updates/...');
+    setUpdateStage(force ? 'Preparando reinstalação da mesma versão...' : 'Conectando ao canal updates/...');
     setUpdateDetail('Preparando download seguro (preservando dados e histórico)');
-    setUpdateMessage('Baixando atualização da pasta updates/ (preservando dados e histórico)...');
+    setUpdateMessage(
+      force
+        ? 'Reinstalando a mesma versão a partir da pasta updates/ (preservando dados e histórico)...'
+        : 'Baixando atualização da pasta updates/ (preservando dados e histórico)...'
+    );
 
     const stepStages: Array<{ pct: number; stage: string; detail: string }> = [
       { pct: 28, stage: 'Baixando pacote R36S...', detail: 'Transferindo arquivos da pasta updates/' },
       { pct: 54, stage: 'Baixando pacote R36S...', detail: 'Verificando integridade dos blocos' },
       { pct: 76, stage: 'Validando checksum SHA-256...', detail: 'Garantindo autenticidade do pacote' },
-      { pct: 90, stage: 'Aplicando atualização...', detail: 'Preservando favoritos, histórico, listas e clima' },
+      {
+        pct: 90,
+        stage: force ? 'Reinstalando arquivos do sistema...' : 'Aplicando atualização...',
+        detail: 'Preservando favoritos, histórico, listas e clima',
+      },
     ];
     let stepIdx = 0;
     const progressTimer = window.setInterval(() => {
@@ -561,17 +568,22 @@ export default function App() {
     }, 340);
 
     try {
-      const r = await fetch('/api/update/apply', { method: 'POST' });
+      const r = await fetch('/api/update/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      });
       const d = (await r.json()) as {
         ok?: boolean;
         message?: string;
         targetVersion?: string;
+        reinstalled?: boolean;
         restartRequired?: boolean;
       };
       window.clearInterval(progressTimer);
       if (d.ok) {
         setUpdateProgress(100);
-        setUpdateStage('Atualização concluída!');
+        setUpdateStage(d.reinstalled ? 'Reinstalação concluída!' : 'Atualização concluída!');
         setUpdateDetail(
           `Versão v${d.targetVersion ?? updateStatus?.latestVersion ?? APP_VERSION} pronta · Reiniciando KPlayer...`
         );
@@ -579,7 +591,11 @@ export default function App() {
           d.message ||
             `Atualização v${d.targetVersion ?? updateStatus?.latestVersion ?? APP_VERSION} aplicada. Reiniciando...`
         );
-        notify('Atualização concluída! Reiniciando KPlayer...');
+        notify(
+          d.reinstalled
+            ? 'Reinstalação concluída! Reiniciando KPlayer...'
+            : 'Atualização concluída! Reiniciando KPlayer...'
+        );
         window.setTimeout(() => {
           setUpdateApplying(false);
           setUpdateMessage(null);
@@ -2199,7 +2215,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.1.0 • R36S
+                      v2.1.1 • R36S
                     </div>
                   </div>
 
@@ -4483,7 +4499,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.1.0 — Edição R36S
+                  KPlayer v2.1.1 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4499,7 +4515,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.1.0 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.1.1 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4508,13 +4524,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.1.0-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.1.1-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer.sh (v2.1.0 estável)
+                    KPlayer.sh (v2.1.1 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4578,7 +4594,7 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.0-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.1-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
@@ -4591,22 +4607,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.1.0, 10 visualizadores reativos (+ Automático), 14 temas R36S, sons táteis das teclas, interface animada, lançador KPlayer.sh estável e artes PNG transparentes em kplayer/scraper/.
+                Inclui binário ARM64 nativo v2.1.1, correção ALSA nos sons das teclas, lazy-loading assíncrono da biblioteca, Notícias com fotos/vídeos, 10 visualizadores reativos (+ Automático), 14 temas R36S, lançador KPlayer.sh estável e artes PNG transparentes em kplayer/scraper/.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.1.0-R36S.zip"
+                download="KPlayer-v2.1.1-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.1.0-R36S.zip
+                ⬇ Baixar KPlayer-v2.1.1-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.1.0-R36S.zip.sha256"
+                download="KPlayer-v2.1.1-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

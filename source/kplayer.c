@@ -390,12 +390,19 @@ static void label(const char *s, int x, int y, int size, SDL_Color c,
   SDL_Rect r = {x - 2, y - 2, t->w, t->h};
   SDL_RenderCopy(renderer, t->texture, NULL, &r);
 }
-static bool scan_cancelled;
+static volatile sig_atomic_t scan_cancelled;
+static pthread_mutex_t media_cache_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t media_scan_thread;
+static bool media_scan_thread_valid = false;
+static bool media_scan_running = false;
+static bool media_scan_pending_refresh = false;
+static int media_scan_found_count = 0;
 static Item cached_media[MAX_FILES];
 static int cached_media_total = 0;
 static bool media_preloaded = false;
 static bool media_cache_capped = false;
 static void clear_cached_media(void) {
+  pthread_mutex_lock(&media_cache_mutex);
   for (int i = 0; i < cached_media_total; i++) {
     free(cached_media[i].name);
     free(cached_media[i].path);
@@ -403,6 +410,8 @@ static void clear_cached_media(void) {
   cached_media_total = 0;
   media_preloaded = false;
   media_cache_capped = false;
+  media_scan_found_count = 0;
+  pthread_mutex_unlock(&media_cache_mutex);
 }
 static void notify(const char *message) {
   snprintf(status_note, sizeof(status_note), "%s", message);
@@ -534,24 +543,23 @@ static void scan(void) {
     notify(tr("Limite de 4096 itens: organize em subpastas"));
   menu_dirty = true;
 }
-static bool cache_has_path(const char *path) {
-  for (int i = 0; i < cached_media_total; i++)
-    if (cached_media[i].path && !strcmp(cached_media[i].path, path))
+static bool stage_has_path(const Item *list, int count, const char *path) {
+  for (int i = 0; i < count; i++)
+    if (list[i].path && !strcmp(list[i].path, path))
       return true;
   return false;
 }
-static void boot_scan_tree(const char *base, int depth, int media_filter,
-                           bool *capped, void (*on_tick)(int)) {
-  if (scan_cancelled || depth > 8 || cached_media_total >= MAX_FILES) {
-    *capped = cached_media_total >= MAX_FILES;
+static void boot_scan_tree_into(Item *dst, int *dst_total, const char *base,
+                                int depth, int media_filter, bool *capped) {
+  if (scan_cancelled || !running || depth > 8 || *dst_total >= MAX_FILES) {
+    if (*dst_total >= MAX_FILES) *capped = true;
     return;
   }
   DIR *d = opendir(base);
   if (!d)
     return;
   struct dirent *e;
-  while ((e = readdir(d)) && cached_media_total < MAX_FILES) {
-    if (on_tick) on_tick(cached_media_total);
+  while ((e = readdir(d)) && *dst_total < MAX_FILES) {
     if (scan_cancelled || !running) break;
     if (e->d_name[0] == '.')
       continue;
@@ -563,11 +571,11 @@ static void boot_scan_tree(const char *base, int depth, int media_filter,
     if (lstat(path, &lst) || S_ISLNK(lst.st_mode) || stat(path, &st))
       continue;
     if (S_ISDIR(st.st_mode)) {
-      boot_scan_tree(path, depth + 1, media_filter, capped, on_tick);
+      boot_scan_tree_into(dst, dst_total, path, depth + 1, media_filter, capped);
       continue;
     }
     if (!S_ISREG(st.st_mode) || st.st_size < 50 * 1024 ||
-        !supported(e->d_name) || cache_has_path(path))
+        !supported(e->d_name) || stage_has_path(dst, *dst_total, path))
       continue;
     if (media_filter == 1 && !audio_file(e->d_name))
       continue;
@@ -580,25 +588,122 @@ static void boot_scan_tree(const char *base, int depth, int media_filter,
       *capped = true;
       break;
     }
-    cached_media[cached_media_total++] = (Item){name, stored_path, false, st.st_size};
+    dst[(*dst_total)++] = (Item){name, stored_path, false, st.st_size};
+    pthread_mutex_lock(&media_cache_mutex);
+    media_scan_found_count = *dst_total;
+    pthread_mutex_unlock(&media_cache_mutex);
   }
-  if (cached_media_total >= MAX_FILES)
+  if (*dst_total >= MAX_FILES)
     *capped = true;
   closedir(d);
 }
-static void boot_index_media(void (*on_tick)(int)) {
-  scan_cancelled = false;
-  clear_cached_media();
+static void *media_scan_worker(void *arg) {
+  (void)arg;
+  Item *stage = (Item *)calloc(MAX_FILES, sizeof(Item));
+  int stage_total = 0;
   bool capped = false;
-  for (size_t i = 0;
-       i < sizeof(automatic_roots) / sizeof(*automatic_roots) && !capped && !scan_cancelled; i++) {
-    char resolved[PATH_MAX];
-    if (realpath(automatic_roots[i].path, resolved))
-      boot_scan_tree(resolved, 0, automatic_roots[i].kind, &capped, on_tick);
+  if (stage) {
+    for (size_t i = 0;
+         i < sizeof(automatic_roots) / sizeof(*automatic_roots) && !capped &&
+         !scan_cancelled && running;
+         i++) {
+      char resolved[PATH_MAX];
+      if (realpath(automatic_roots[i].path, resolved))
+        boot_scan_tree_into(stage, &stage_total, resolved, 0,
+                            automatic_roots[i].kind, &capped);
+    }
+    if (stage_total > 1)
+      qsort(stage, (size_t)stage_total, sizeof(*stage), sort_items);
   }
-  qsort(cached_media, cached_media_total, sizeof(*cached_media), sort_items);
-  media_cache_capped = capped;
-  media_preloaded = true;
+
+  Item *old_items = (Item *)calloc(MAX_FILES, sizeof(Item));
+  int old_total = 0;
+
+  pthread_mutex_lock(&media_cache_mutex);
+  if (!scan_cancelled && stage) {
+    if (old_items) {
+      old_total = cached_media_total;
+      if (old_total > 0)
+        memcpy(old_items, cached_media, (size_t)old_total * sizeof(Item));
+    } else {
+      for (int i = 0; i < cached_media_total; i++) {
+        free(cached_media[i].name);
+        free(cached_media[i].path);
+      }
+    }
+    cached_media_total = stage_total;
+    if (stage_total > 0)
+      memcpy(cached_media, stage, (size_t)stage_total * sizeof(Item));
+    media_cache_capped = capped;
+    media_preloaded = true;
+    media_scan_found_count = stage_total;
+    media_scan_pending_refresh = true;
+  } else if (stage) {
+    for (int i = 0; i < stage_total; i++) {
+      free(stage[i].name);
+      free(stage[i].path);
+    }
+  }
+  media_scan_running = false;
+  pthread_mutex_unlock(&media_cache_mutex);
+
+  free(stage);
+  if (old_items) {
+    for (int i = 0; i < old_total; i++) {
+      free(old_items[i].name);
+      free(old_items[i].path);
+    }
+    free(old_items);
+  }
+  return NULL;
+}
+static int media_library_found_count(void) {
+  pthread_mutex_lock(&media_cache_mutex);
+  int c = media_scan_running ? media_scan_found_count : cached_media_total;
+  pthread_mutex_unlock(&media_cache_mutex);
+  return c;
+}
+static void media_library_start_async(bool force) {
+  pthread_mutex_lock(&media_cache_mutex);
+  if (media_scan_running) {
+    pthread_mutex_unlock(&media_cache_mutex);
+    return;
+  }
+  if (!force && media_preloaded) {
+    pthread_mutex_unlock(&media_cache_mutex);
+    return;
+  }
+  bool need_join = media_scan_thread_valid;
+  media_scan_thread_valid = false;
+  pthread_mutex_unlock(&media_cache_mutex);
+
+  if (need_join)
+    pthread_join(media_scan_thread, NULL);
+
+  scan_cancelled = 0;
+  pthread_mutex_lock(&media_cache_mutex);
+  media_scan_running = true;
+  media_scan_found_count = 0;
+  pthread_mutex_unlock(&media_cache_mutex);
+
+  if (pthread_create(&media_scan_thread, NULL, media_scan_worker, NULL) == 0) {
+    pthread_mutex_lock(&media_cache_mutex);
+    media_scan_thread_valid = true;
+    pthread_mutex_unlock(&media_cache_mutex);
+  } else {
+    pthread_mutex_lock(&media_cache_mutex);
+    media_scan_running = false;
+    pthread_mutex_unlock(&media_cache_mutex);
+  }
+}
+static void media_library_join(void) {
+  scan_cancelled = 1;
+  pthread_mutex_lock(&media_cache_mutex);
+  bool valid = media_scan_thread_valid;
+  media_scan_thread_valid = false;
+  pthread_mutex_unlock(&media_cache_mutex);
+  if (valid)
+    pthread_join(media_scan_thread, NULL);
 }
 static void populate_automatic_from_cache(void) {
   clear_items();
@@ -606,6 +711,11 @@ static void populate_automatic_from_cache(void) {
   folder_error[0] = 0;
   automatic_view = true;
   locations_view = false;
+
+  pthread_mutex_lock(&media_cache_mutex);
+  bool scanning = media_scan_running;
+  bool preloaded = media_preloaded;
+  bool capped = media_cache_capped;
   for (int i = 0; i < cached_media_total && total < MAX_FILES; i++) {
     const char *nm = cached_media[i].name;
     const char *pt = cached_media[i].path;
@@ -624,25 +734,46 @@ static void populate_automatic_from_cache(void) {
     }
     items[total++] = (Item){name, stored_path, false, cached_media[i].size};
   }
+  pthread_mutex_unlock(&media_cache_mutex);
+
   if (!total) {
-    if (menu_search[0])
+    if (scanning && !preloaded)
+      snprintf(folder_error, sizeof(folder_error), "%s",
+               tr("Carregando biblioteca de mídias em segundo plano..."));
+    else if (menu_search[0])
       snprintf(folder_error, sizeof(folder_error), "Nenhum arquivo encontrado para a pesquisa");
     else
       snprintf(folder_error, sizeof(folder_error), "%s",
                tr(favorites_view ? "Nenhuma favorita encontrada" : "Nenhuma mídia acima de 50 KB encontrada"));
   }
-  if (media_cache_capped)
+  if (capped)
     notify(tr("Limite de 4096 itens: organize em subpastas"));
   mode = 0;
   menu_dirty = true;
 }
+static void media_library_poll(void) {
+  bool should_refresh = false;
+  pthread_mutex_lock(&media_cache_mutex);
+  if (media_scan_pending_refresh) {
+    media_scan_pending_refresh = false;
+    should_refresh = true;
+  }
+  pthread_mutex_unlock(&media_cache_mutex);
+  if (should_refresh && mode == 0 && automatic_view) {
+    populate_automatic_from_cache();
+  }
+}
 static void scan_automatic_media(void) {
-  if (!media_preloaded)
-    boot_index_media(NULL);
+  pthread_mutex_lock(&media_cache_mutex);
+  bool need_start = !media_preloaded && !media_scan_running;
+  pthread_mutex_unlock(&media_cache_mutex);
+  if (need_start)
+    media_library_start_async(false);
   populate_automatic_from_cache();
 }
 static void rescan_automatic_media(void) {
-  boot_index_media(NULL);
+  media_library_start_async(true);
+  notify(tr("Atualizando biblioteca em segundo plano..."));
   populate_automatic_from_cache();
 }
 static unsigned format_video(void **opaque, char *chroma, unsigned *width,
@@ -707,6 +838,7 @@ static void unlock_video(void *opaque, void *picture, void *const *planes) {
 #include "music_browser.h"
 
 static void save_resume(void);
+static void sfx_release_device(void);
 static void stop_media(void) {
   if (player && active && !preview_mode && resume_pending_ms < 0) save_resume();
   active = false;
@@ -738,6 +870,7 @@ static void play_path(const char *path) {
     return;
   }
   stop_media();
+  sfx_release_device();
   snprintf(current_path, sizeof(current_path), "%s", saved);
   const char *name = strrchr(saved, '/');
   name = name ? name + 1 : saved;
@@ -1188,11 +1321,10 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Nova aba Noticias na Dashboard (antes do Placar da Bola) e aba unificada Musicas e Videos.",
-        "Caixas e temas do R36S corrigidos com gradientes suaves sem listras ou sobreposicao de bordas.",
-        "10 visualizadores reativos no Protetor de Tela (+ Auto) e 14 temas exclusivos no R36S.",
-        "Sons de cliques tateis ao apertar teclas (ativavel em Opcoes -> Sons das teclas).",
-        "Mais animacoes em toda a interface e documentacao completa atualizada no GitHub.",
+        "Correcao critica de audio no R36S: Sons das teclas liberam o ALSA para musicas, videos, radio e IPTV tocarem normalmente.",
+        "Atualizador agora permite reinstalar mesmo estando na mesma versao, exibindo aviso claro e confirmacao antes de iniciar.",
+        "Aba Noticias agora exibe fotos em cache na lista e na materia + reproducao de videos direto no player libVLC.",
+        "Dashboard com Musicas e Videos unificados, 14 temas sem listras, 10 visualizadores reativos e mais animacoes.",
     };
     int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
     for (int i = 0; i < n && changelog_count < 6; i++)
@@ -1273,6 +1405,8 @@ static void opt_sync_option_id(void) {
 }
 
 static void opt_enter_section(int sec) {
+  if (opt_section == OPT_SEC_UPDATE && sec != OPT_SEC_UPDATE)
+    updater_disarm_reinstall();
   opt_section = sec;
   opt_cursor = 0;
   opt_scroll = 0;
@@ -1309,7 +1443,15 @@ static const char *opt_label_for(int id) {
   case 32: return "Pesquisar cidade manualmente";
   case 33: return "Limpar localização salva";
   case 40: return "Verificar nova versão agora";
-  case 41: return "Baixar e atualizar (sem perder dados)";
+  case 41: {
+    pthread_mutex_lock(&kp_upd_mutex);
+    bool avail = kp_upd_available;
+    bool armed = kp_upd_reinstall_armed;
+    pthread_mutex_unlock(&kp_upd_mutex);
+    if (avail) return "Baixar e atualizar (sem perder dados)";
+    if (armed) return "CONFIRMAR: Reinstalar mesma versão agora";
+    return "Reinstalar mesma versão (com aviso)";
+  }
   case 50: return "Pesquisar canais / séries / filmes";
   case 51: return "Limpar pesquisa IPTV";
   case 52: return "Alternar aba IPTV";
@@ -1546,6 +1688,7 @@ static void draw_options(void) {
     bool avail = kp_upd_available;
     bool checking = kp_upd_checking;
     bool applying = kp_upd_applying;
+    bool armed = kp_upd_reinstall_armed;
     int prog = kp_upd_progress;
     char cur[32], lat[32], nxt[32], src[32], msg[192], repo[128];
     char stage[96], detail[128];
@@ -1568,7 +1711,7 @@ static void draw_options(void) {
     panel_card(24, 94, 592, 188, 12);
     char hdr[128];
     if (avail) snprintf(hdr, sizeof(hdr), "Nova versão disponível: v%.31s", lat);
-    else snprintf(hdr, sizeof(hdr), "Versão instalada: v%.31s (monitorando v%.31s+)", cur, nxt);
+    else snprintf(hdr, sizeof(hdr), "Versão instalada: v%.31s (mesma versão mais recente)", cur);
     label(hdr, 40, 102, 15, avail ? accent : textc, 430);
     label(!strcmp(src, "github") || !strcmp(src, "github-release") ? "GitHub Online" : "Canal Local",
           480, 104, 11, avail ? accent : muted, 124);
@@ -1591,10 +1734,10 @@ static void draw_options(void) {
                                 : (applying ? "Atualizando KPlayer..."
                                    : checking ? "Verificando atualizações..."
                                    : avail ? "Atualização pronta para baixar"
-                                           : "Sistema pronto para atualizar");
+                                           : "Mesma versão instalada (reinstalação disponível)");
     char pct_txt[16];
     snprintf(pct_txt, sizeof(pct_txt), "%d%%", prog);
-    label(bar_stage, bx, by, 12, (checking || applying || avail) ? accent : textc, 480);
+    label(bar_stage, bx, by, 12, (checking || applying || avail || armed) ? accent : textc, 480);
     label(pct_txt, bx + bw - 48, by, 12, (checking || applying || prog == 100) ? accent : muted, 48);
 
     int ty = by + 18;
@@ -1618,10 +1761,30 @@ static void draw_options(void) {
     const char *bar_detail = detail[0] ? detail : (msg[0] ? msg : "Preserva favoritos, histórico, listas e ajustes.");
     label(bar_detail, bx, ty + 21, 11, (checking || applying) ? textc : muted, bw);
 
-    for (int i = 0; i < ncnt && i < 2; i++) {
-      char nb[176];
-      snprintf(nb, sizeof(nb), "• %.159s", notes[i]);
-      label(nb, 40, 206 + i * 17, 11, muted, 560);
+    if (!avail && !checking && !applying) {
+      /* Explicit warning banner for same-version update / reinstall */
+      SDL_Color warn_c = {245, 190, 66, 255};
+      rounded_gradient(36, 205, 568, 44, 9, alpha(warn_c, armed ? 68 : 34), alpha(warn_c, armed ? 36 : 16));
+      rounded_outline(36, 205, 568, 44, 9, alpha(warn_c, armed ? 220 : 135));
+      if (armed) {
+        char w1[160];
+        snprintf(w1, sizeof(w1), "AVISO: Mesma versão (v%.31s)! Pressione B novamente para confirmar.", cur);
+        label(w1, 48, 211, 11, warn_c, 544);
+        label("Todos os seus favoritos, histórico, listas, clima e notícias serão preservados.",
+              48, 229, 10, textc, 544);
+      } else {
+        char w1[160];
+        snprintf(w1, sizeof(w1), "AVISO: Você já está na versão v%.31s (monitorando v%.31s+).", cur, nxt);
+        label(w1, 48, 211, 11, warn_c, 544);
+        label("Você ainda pode atualizar para reinstalar o pacote desta versão mantendo seus dados.",
+              48, 229, 10, muted, 544);
+      }
+    } else {
+      for (int i = 0; i < ncnt && i < 2; i++) {
+        char nb[176];
+        snprintf(nb, sizeof(nb), "• %.159s", notes[i]);
+        label(nb, 40, 206 + i * 17, 11, muted, 560);
+      }
     }
     label("Preservados no update: favoritos, histórico, listas IPTV/Rádio, clima e ajustes.",
           40, 258, 10, dim, 560);
@@ -1797,6 +1960,7 @@ static void change_option(int dir) {
     ui_sfx_enabled = !ui_sfx_enabled;
     save_settings();
     if (ui_sfx_enabled) sfx_play(SFX_CONFIRM);
+    else sfx_release_device();
     notify(ui_sfx_enabled ? "Sons das teclas ativados" : "Sons das teclas desativados");
     break;
   case 30:
@@ -1816,9 +1980,30 @@ static void change_option(int dir) {
   case 40:
     updater_start_check(true);
     break;
-  case 41:
-    updater_start_apply();
+  case 41: {
+    pthread_mutex_lock(&kp_upd_mutex);
+    bool avail = kp_upd_available;
+    bool armed = kp_upd_reinstall_armed;
+    bool busy = kp_upd_applying || kp_upd_checking;
+    char cur[32];
+    snprintf(cur, sizeof(cur), "%.31s", kp_upd_current);
+    if (!avail && !busy && !armed) {
+      kp_upd_reinstall_armed = true;
+    }
+    pthread_mutex_unlock(&kp_upd_mutex);
+    if (busy) break;
+    if (avail) {
+      updater_start_apply(false);
+    } else if (!armed) {
+      char warn_msg[160];
+      snprintf(warn_msg, sizeof(warn_msg),
+               "Aviso: já está na v%.31s! Pressione B de novo para reinstalar.", cur);
+      notify(warn_msg);
+    } else {
+      updater_start_apply(true);
+    }
     break;
+  }
   case 50:
     mode = 8;
     iptv_open_search_kb();
@@ -2010,6 +2195,8 @@ static void key(SDL_Keycode k, bool repeat) {
     const int *ids = NULL;
     int cnt = opt_current_list(&ids);
     if ((k == SDLK_BACKSPACE || k == SDLK_m) && !repeat) {
+      if (opt_section == OPT_SEC_UPDATE)
+        updater_disarm_reinstall();
       if (opt_section == opt_entry_section)
         mode = return_mode;
       else if (opt_section == OPT_SEC_SCREENSAVER &&
@@ -2579,11 +2766,14 @@ int main(int argc, char **argv) {
        : (strcmp(seen_version, KPLAYER_VERSION) != 0 ? 14 : 3));
   load_favorites();
   run_boot_splash();
+  sfx_set_boot_ready(true);
   weather_boot_refresh();
   updater_start_check(false);
   ss_touch_activity();
   while (running) {
     uint32_t frame = SDL_GetTicks();
+    sfx_poll(frame, active || radio_play_is_busy());
+    media_library_poll();
     updater_poll_main_thread();
     if (!running) break;
     ss_check_idle(frame);
@@ -2721,6 +2911,7 @@ int main(int argc, char **argv) {
   free(bolddata);
   clear_queue();
   clear_music_entries();
+  media_library_join();
   clear_cached_media();
   if (cover_texture)
     SDL_DestroyTexture(cover_texture);

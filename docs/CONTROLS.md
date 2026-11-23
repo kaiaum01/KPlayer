@@ -1,4 +1,4 @@
-# Controls / Controles — KPlayer v2.1.0 (R36S)
+# Controls / Controles — KPlayer v2.1.1 (R36S)
 
 **English:** **B** confirms/opens and **A** goes back/cancels. **SELECT** opens or closes contextual Settings. **START** pauses/resumes active media. Tactile click sounds play on button presses (toggleable under **SELECT → Sons das teclas**). Software volume controls are not used; adjust volume with the console's physical buttons.
 

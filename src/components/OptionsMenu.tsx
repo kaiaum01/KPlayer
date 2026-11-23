@@ -127,7 +127,7 @@ export interface OptionsMenuProps {
   onOpenTerms: () => void;
   onExitApp: () => void;
   onCheckUpdate: (force?: boolean) => Promise<void>;
-  onApplyUpdate: () => Promise<void>;
+  onApplyUpdate: (force?: boolean) => Promise<void>;
   onSaveUpdateRepo: (repo: string) => Promise<boolean>;
   onClose: () => void;
 }
@@ -245,12 +245,20 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
   const [cursor, setCursor] = useState<number>(0);
   const [repoInput, setRepoInput] = useState<string>(updateStatus?.repository ?? '');
   const [repoSaving, setRepoSaving] = useState<boolean>(false);
+  const [reinstallArmed, setReinstallArmed] = useState<boolean>(false);
 
   useEffect(() => {
     setSection(entrySection);
     setReturnSection(entrySection);
     setCursor(0);
+    setReinstallArmed(false);
   }, [entrySection]);
+
+  useEffect(() => {
+    if (section !== 'update' || updateStatus?.updateAvailable) {
+      setReinstallArmed(false);
+    }
+  }, [section, updateStatus?.updateAvailable]);
 
   useEffect(() => {
     if (updateStatus?.repository) {
@@ -579,7 +587,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         : undefined;
       const updValue = updateStatus?.updateAvailable
         ? `Nova v${updateStatus.latestVersion}`
-        : `v${updateStatus?.currentVersion ?? '2.1.0'}`;
+        : `v${updateStatus?.currentVersion ?? '2.1.1'}`;
 
       return [
         {
@@ -774,11 +782,29 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
             ? 'Atualizando e reiniciando (mantendo dados)...'
             : updateStatus?.updateAvailable
             ? `Baixar e atualizar para v${updateStatus.latestVersion}`
-            : 'Sincronizar e reiniciar mantendo dados',
-          badge: updateStatus?.updateAvailable ? 'PRONTO' : undefined,
-          value: 'Preserva histórico, favoritos e listas',
+            : reinstallArmed
+            ? `CONFIRMAR: Reinstalar v${updateStatus?.currentVersion ?? '2.1.1'} mesmo assim`
+            : `Reinstalar mesma versão v${updateStatus?.currentVersion ?? '2.1.1'} (com aviso)`,
+          badge: updateStatus?.updateAvailable
+            ? 'PRONTO'
+            : reinstallArmed
+            ? 'CONFIRMAR'
+            : 'AVISO',
+          value: updateStatus?.updateAvailable
+            ? 'Preserva histórico, favoritos e listas'
+            : reinstallArmed
+            ? 'Pressione B novamente para confirmar'
+            : 'Você já está nesta versão · preserva dados',
           onSelect: () => {
-            if (!updateApplying) void onApplyUpdate();
+            if (updateApplying || updateChecking) return;
+            if (updateStatus?.updateAvailable) {
+              void onApplyUpdate(false);
+            } else if (!reinstallArmed) {
+              setReinstallArmed(true);
+            } else {
+              setReinstallArmed(false);
+              void onApplyUpdate(true);
+            }
           },
         },
         {
@@ -915,6 +941,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     onExitApp,
     onCheckUpdate,
     onApplyUpdate,
+    reinstallArmed,
     onSetThemeIndex,
     onSetLanguage,
     onSetDisplayMode,
@@ -1060,12 +1087,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 <div style={{ color: theme.accent }} className="text-[12.5px] font-extrabold">
                   {updateStatus?.updateAvailable
                     ? `Nova versão disponível: v${updateStatus.latestVersion}`
-                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.1.0'}`}
+                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.1.1'} (mesma versão mais recente)`}
                 </div>
                 <div style={{ color: theme.muted }} className="text-[11.5px] mt-0.5">
                   {updateStatus?.updateAvailable
                     ? 'Pronta para baixar da pasta updates/ do GitHub e reiniciar automaticamente.'
-                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.1.1'} e próximas versões na pasta updates/.`}
+                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.1.2'} e próximas versões na pasta updates/.`}
                 </div>
               </div>
               <span
@@ -1079,6 +1106,27 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                     : 'Manifesto Local'}
               </span>
             </div>
+
+            {!updateStatus?.updateAvailable && !updateApplying && (
+              <div
+                style={{
+                  backgroundColor: reinstallArmed
+                    ? 'rgba(245, 158, 11, 0.22)'
+                    : 'rgba(245, 158, 11, 0.12)',
+                  border: `1px solid ${
+                    reinstallArmed
+                      ? 'rgba(251, 191, 36, 0.85)'
+                      : 'rgba(245, 158, 11, 0.42)'
+                  }`,
+                  color: '#fde68a',
+                }}
+                className="px-2.5 py-2 rounded-lg text-[11px] leading-snug font-semibold"
+              >
+                {reinstallArmed
+                  ? `AVISO: Você já está na v${updateStatus?.currentVersion ?? '2.1.1'}. Pressione B novamente em "CONFIRMAR" para baixar e reinstalar a mesma versão (favoritos, histórico e listas serão preservados).`
+                  : `Aviso: você já está na versão mais recente (v${updateStatus?.currentVersion ?? '2.1.1'}). Atualizar novamente irá reinstalar esta mesma versão preservando seus dados.`}
+              </div>
+            )}
 
             {updateStatus?.remoteStatus && updateStatus.remoteStatus !== 'ok' && updateStatus.lastError && (
               <div

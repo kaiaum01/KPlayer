@@ -25,10 +25,10 @@ class UpdaterLauncherTest(unittest.TestCase):
                 '#!/bin/bash\n# KPlayer v2.0.8 - dArkOS\nKPLAYER_VERSION="2.0.8"\necho old\n',
                 encoding="utf-8",
             )
-            # Bundled fresh template from the v2.1.0 update package
+            # Bundled fresh template from the v2.1.1 update package
             tmpl = gamedir / "KPlayer.sh.tmpl"
             tmpl.write_text(
-                '#!/bin/bash\n# KPlayer v2.1.0 - dArkOS / Debian 13 ARM64 / PortMaster\nKPLAYER_VERSION="2.1.0"\nexec bash "$script_dir/KPlayer.sh"\n',
+                '#!/bin/bash\n# KPlayer v2.1.1 - dArkOS / Debian 13 ARM64 / PortMaster\nKPLAYER_VERSION="2.1.1"\nexec bash "$script_dir/KPlayer.sh"\n',
                 encoding="utf-8",
             )
 
@@ -36,7 +36,7 @@ class UpdaterLauncherTest(unittest.TestCase):
             gamelist = ports / "gamelist.xml"
             gamelist.write_text(existing_xml, encoding="utf-8")
 
-            res = updater.ensure_stable_launcher(ports, gamedir, "2.1.0")
+            res = updater.ensure_stable_launcher(ports, gamedir, "2.1.1")
             self.assertIsNotNone(res)
 
             stable_sh = ports / "KPlayer.sh"
@@ -44,13 +44,79 @@ class UpdaterLauncherTest(unittest.TestCase):
             self.assertFalse(broken_sh.exists())
 
             sh_text = stable_sh.read_text(encoding="utf-8")
-            self.assertIn('KPLAYER_VERSION="2.1.0"', sh_text)
-            self.assertIn("# KPlayer v2.1.0", sh_text)
+            self.assertIn('KPLAYER_VERSION="2.1.1"', sh_text)
+            self.assertIn("# KPlayer v2.1.1", sh_text)
             self.assertIn('exec bash "$script_dir/KPlayer.sh"', sh_text)
 
             # Confirm gamelist.xml is 100% untouched byte-for-byte
             self.assertEqual(gamelist.read_text(encoding="utf-8"), existing_xml)
             self.assertFalse((gamedir / "gamelist.xml").exists())
+
+    def test_same_version_update_requires_force_and_preserves_user_data(self) -> None:
+        import hashlib
+        import io
+        import zipfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ports = Path(tmp) / "ports"
+            gamedir = ports / "kplayer"
+            gamedir.mkdir(parents=True)
+            (gamedir / "installed-version.txt").write_text("2.1.1\n", encoding="utf-8")
+            (gamedir / "favorites.txt").write_text("fav-track\n", encoding="utf-8")
+            (gamedir / "news.cfg").write_text("api_key=local-test\n", encoding="utf-8")
+
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as zf:
+                zf.writestr("KPlayer.sh", '#!/bin/bash\n# KPlayer v2.1.1\nKPLAYER_VERSION="2.1.1"\n')
+                zf.writestr("kplayer/changelog.txt", "KPlayer v2.1.1 test\n")
+                zf.writestr("kplayer/favorites.txt", "SHOULD-NOT-OVERWRITE\n")
+                zf.writestr("kplayer/news.cfg", "SHOULD-NOT-OVERWRITE\n")
+            zip_bytes = buf.getvalue()
+            zip_sha = hashlib.sha256(zip_bytes).hexdigest()
+
+            fake_info = {
+                "currentVersion": "2.1.1",
+                "latestVersion": "2.1.1",
+                "nextExpectedVersion": "2.1.2",
+                "updateAvailable": False,
+                "repository": "kaiaum01/KPlayer",
+                "branch": "main",
+                "source": "github",
+                "error": "",
+                "notes": ["Reinstall test"],
+                "r36s": {
+                    "filename": "KPlayer-v2.1.1-R36S.zip",
+                    "path": "updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
+                    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
+                    "sha256": zip_sha,
+                },
+            }
+
+            class _FakeResp(io.BytesIO):
+                def __init__(self, data: bytes) -> None:
+                    super().__init__(data)
+                    self.headers = {"Content-Length": str(len(data))}
+
+                def __enter__(self) -> "_FakeResp":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    self.close()
+
+            with mock.patch.object(updater, "check_update", return_value=fake_info):
+                # Without --force, same version exits cleanly (0) without overwriting
+                rc_no_force = updater.apply_update(gamedir, force=False)
+                self.assertEqual(rc_no_force, 0)
+                self.assertFalse((gamedir / "changelog.txt").exists())
+
+                # With --force, same version reinstalls (returns 42) and preserves user files
+                with mock.patch.object(updater, "urlopen_with_retry", return_value=_FakeResp(zip_bytes)):
+                    rc_force = updater.apply_update(gamedir, force=True)
+                self.assertEqual(rc_force, 42)
+                self.assertEqual((gamedir / "changelog.txt").read_text(encoding="utf-8"), "KPlayer v2.1.1 test\n")
+                self.assertEqual((gamedir / "favorites.txt").read_text(encoding="utf-8"), "fav-track\n")
+                self.assertEqual((gamedir / "news.cfg").read_text(encoding="utf-8"), "api_key=local-test\n")
 
 
 if __name__ == "__main__":

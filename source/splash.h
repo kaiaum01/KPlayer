@@ -156,7 +156,7 @@ static void boot_pump_events(void) {
   }
 }
 
-static void boot_animate_to(float target, const char *step_label, int found,
+static void boot_animate_to(float target, const char *step_label,
                             uint32_t duration_ms) {
   uint32_t t0 = SDL_GetTicks();
   while (running) {
@@ -166,21 +166,11 @@ static void boot_animate_to(float target, const char *step_label, int found,
     if (frac > 1.0f) frac = 1.0f;
     float cur = splash_visual_progress + (target - splash_visual_progress) * frac;
     if (cur < splash_visual_progress) cur = target;
-    draw_boot_splash_frame(cur, step_label, found, 0.0f);
+    draw_boot_splash_frame(cur, step_label, media_library_found_count(), 0.0f);
     if (elapsed >= duration_ms)
       break;
     SDL_Delay(16);
   }
-}
-
-static void boot_scan_progress_cb(int found) {
-  boot_pump_events();
-  uint32_t now = SDL_GetTicks();
-  if (now - splash_last_frame < 24)
-    return;
-  splash_last_frame = now;
-  float p = 0.26f + 0.36f * (1.0f - expf(-(float)found / 80.0f));
-  draw_boot_splash_frame(p, "Carregando biblioteca de mídias", found, 0.0f);
 }
 
 static void run_boot_splash(void) {
@@ -188,7 +178,7 @@ static void run_boot_splash(void) {
   splash_last_frame = 0;
   splash_visual_progress = 0.02f;
 
-  /* Phase 1: Boot animation intro + core folders & IP location. */
+  /* Phase 1: Boot animation intro + core folders & IP location (no SDL audio open). */
   draw_boot_splash_frame(0.08f, "Iniciando K PLAYER", 0, 0.0f);
   network_location_start();
   mkdir(root, 0755);
@@ -196,13 +186,14 @@ static void run_boot_splash(void) {
   mkdir("iptv_usuario", 0755);
   snprintf(folder, sizeof(folder), "%s", root);
   refresh_locations();
-  boot_animate_to(0.26f, "Iniciando K PLAYER", 0, 420);
+  boot_animate_to(0.26f, "Iniciando K PLAYER", 340);
   if (!running) return;
 
-  /* Phase 2: Pre-index audio in /roms(2)/bgmusic and video in /roms(2)/videos. */
-  boot_index_media(boot_scan_progress_cb);
+  /* Phase 2: Start asynchronous lazy-loading indexer for /roms(2)/bgmusic and /roms(2)/videos
+   * so startup never stalls on large SD cards and ALSA/libVLC audio stays completely unblocked. */
+  media_library_start_async(false);
   scan();
-  boot_animate_to(0.64f, "Carregando biblioteca de mídias", cached_media_total, 420);
+  boot_animate_to(0.64f, "Carregando biblioteca em segundo plano", 360);
   if (!running) return;
 
   /* Phase 3: Kick off background preloads for Radio, IPTV and Placar da Bola. */
@@ -212,18 +203,18 @@ static void run_boot_splash(void) {
   iptv_fetch_categories_start(false);
   football_read();
   football_refresh();
-  boot_animate_to(0.92f, "Preparando rádios, IPTV e Placar da Bola", cached_media_total, 580);
+  boot_animate_to(0.92f, "Preparando rádios, IPTV e Placar da Bola", 420);
   if (!running) return;
 
   /* Phase 4: Ready pulse + smooth fade transition into the player. */
-  boot_animate_to(1.0f, "Tudo pronto!", cached_media_total, 360);
+  boot_animate_to(1.0f, "Tudo pronto!", 300);
   if (!running) return;
   uint32_t fade_start = SDL_GetTicks();
   while (running) {
     boot_pump_events();
     uint32_t dt = SDL_GetTicks() - fade_start;
     float fade = (float)dt / 210.0f;
-    draw_boot_splash_frame(1.0f, "Tudo pronto!", cached_media_total, fade);
+    draw_boot_splash_frame(1.0f, "Tudo pronto!", media_library_found_count(), fade);
     if (dt >= 210) break;
     SDL_Delay(16);
   }

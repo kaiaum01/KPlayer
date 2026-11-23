@@ -500,7 +500,16 @@ int main(void) {
   favorites_view = false;
   clear_cached_media();
   media_preloaded = false;
+  running = 1;
   scan_automatic_media();
+  for (int wait_ms = 0; wait_ms < 2000; wait_ms += 10) {
+    pthread_mutex_lock(&media_cache_mutex);
+    bool still_scanning = media_scan_running;
+    pthread_mutex_unlock(&media_cache_mutex);
+    if (!still_scanning) break;
+    SDL_Delay(10);
+  }
+  media_library_poll();
   assert(automatic_view && total == 1 &&
          !strcmp(items[0].name, "Grande.flac") && items[0].size >= 60 * 1024 &&
          !strcmp(items[0].path, automatic_track));
@@ -763,6 +772,23 @@ int main(void) {
   free(bolddata);
   if (cover_texture)
     SDL_DestroyTexture(cover_texture);
+  /* Verify v2.1.1 ALSA SFX release lifecycle & same-version reinstall disarm */
+  sfx_set_boot_ready(false);
+  sfx_play(SFX_CONFIRM);
+  assert(sfx_device == 0);
+  sfx_set_boot_ready(true);
+  sfx_poll(1000u, true);
+  sfx_release_device();
+  assert(sfx_device == 0);
+  pthread_mutex_lock(&kp_upd_mutex);
+  kp_upd_reinstall_armed = true;
+  pthread_mutex_unlock(&kp_upd_mutex);
+  updater_disarm_reinstall();
+  pthread_mutex_lock(&kp_upd_mutex);
+  assert(!kp_upd_reinstall_armed);
+  pthread_mutex_unlock(&kp_upd_mutex);
+
+  media_library_join();
   clear_cached_media();
   clear_music_entries();
   free(video.pixels);

@@ -616,6 +616,7 @@ static void *radio_play_worker(void *unused) {
 /* Called only on the SDL thread. The worker exclusively owns the player
  * while busy; the event loop skips player APIs until it has finished. */
 static void radio_start_async(RadioStation station) {
+  sfx_release_device();
   active = false;
   playing_radio = false;
   playing_iptv = false;

@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.1.1 — Correção Crítica de Áudio ALSA/libVLC, Lazy-Loading Assíncrono da Biblioteca & Reinstalação na Mesma Versão com Aviso
+
+- **Correção Crítica de Áudio no R36S (`source/sfx.h`, `source/kplayer.c`, `source/radio.h`):** Resolvido o conflito onde o dispositivo de áudio SDL2 aberto pelos sons das teclas mantinha o PCM ALSA travado e impedia a libVLC (`--aout=alsa`) de reproduzir músicas, vídeos, rádios e IPTV. Agora o dispositivo SDL2 só abre após o boot, libera imediatamente com `sfx_release_device()` antes de qualquer reprodução, recusa abrir enquanto mídia estiver ativa e fecha automaticamente ~160ms após o último clique.
+- **Lazy-Loading Assíncrono da Biblioteca de Mídias (`source/kplayer.c`, `source/splash.h`):** A indexação das pastas de músicas e vídeos (`/roms(2)/bgmusic`, `/roms(2)/videos`) passou a rodar em uma thread dedicada (`pthread_t` + staging buffer com troca atômica protegida por mutex) durante a inicialização e sob demanda, evitando travamentos em cartões SD grandes e garantindo que o som de clique nunca bloqueie a inicialização do áudio.
+- **Atualização / Reinstalação na Mesma Versão com Aviso (`source/updater.h`, `source/kplayer.c`, `ports/kplayer/updater.py`, Web):** O atualizador agora permite atualizar/reinstalar mesmo quando o dispositivo já está na versão mais recente (`apply --force`), exibindo um aviso explícito na tela e exigindo confirmação em 2 etapas (`B` para armar o aviso, `B` novamente para confirmar), preservando integralmente favoritos, histórico, listas IPTV/Rádio, clima, `news.cfg` e `gamelist.xml`.
+- **Notícias com Fotos em Cache e Vídeos no R36S (`source/news.h`, `ports/kplayer/news_fetch.py`):** Download em cache local de miniaturas/imagens nas matérias e reprodução direta de vídeos via libVLC.
+
 ## v2.1.0 — Aba Notícias, Músicas e Vídeos Unificados, Correção de Gradientes nos Temas, 10 Visualizadores & 14 Temas
 
 - **Nova Aba `Notícias` (antes do `Placar da Bola`) (`source/news.h`, `ports/kplayer/news_fetch.py`, `src/components/NewsScreen.tsx` & `/api/news`):** Leitor completo de notícias do Brasil em português integrado à API **NewsData.io** (`country=br`, `language=pt`, categorias `Urgente`, `Mundo`, `Polícia`, `Entretenimento` e `Esportes`), com fallback automático para feeds RSS brasileiros quando a chave `NEWSDATA_API_KEY` / `news.cfg` não estiver configurada, leitura completa no controle (`B` abrir, `↑/↓` rolar, `L1/R1` próxima/anterior, `Y` atualizar) e cache local.

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="KPlayer v2.1.0 — Central de Mídia Portátil para R36S" width="100%" />
+  <img src="docs/images/banner.svg" alt="KPlayer v2.1.1 — Central de Mídia Portátil para R36S" width="100%" />
 </p>
 
-<h1 align="center">KPlayer v2.1.0</h1>
+<h1 align="center">KPlayer v2.1.1</h1>
 
 <p align="center">
   <strong>Central de mídia portátil nativa para R36S (dArkOS / PortMaster — C + SDL2 + libVLC ARM64)</strong><br />
@@ -17,15 +17,21 @@
   <a href="docs/BUILD.md">Compilação</a> ·
   <a href="TERMS.md">Termos e Transparência</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.1.0</a> ·
+  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.1.1</a> ·
   <a href="THIRD_PARTY.md">Licenças</a>
 </p>
 
 ---
 
-## Novidades da v2.1.0 (R36S Nativo)
+## Novidades da v2.1.1 (R36S Nativo)
 
-- **Nova Aba `Notícias` (antes do `Placar da Bola`) e Card Unificado `Músicas e Vídeos`:**
+- **Correção Crítica de Áudio no R36S (ALSA + Sons das Teclas):**
+  - Corrigido o conflito em que o dispositivo de áudio SDL2 dos cliques impedia a libVLC (`--aout=alsa`) de reproduzir músicas, vídeos, rádios e IPTV. Os cliques agora só ativam após o boot, liberam o ALSA imediatamente (`sfx_release_device()`) antes de tocar qualquer mídia e fecham automaticamente ~160ms após o último clique.
+- **Lazy-Loading Assíncrono da Biblioteca de Mídias:**
+  - A varredura de músicas e vídeos (`/roms(2)/bgmusic`, `/roms(2)/videos`) agora roda de forma assíncrona em segundo plano (`pthread`), acelerando o boot em cartões SD cheios sem bloquear o áudio.
+- **Atualização na Mesma Versão com Aviso e Confirmação:**
+  - Em `SELECT → Verificar atualizações`, agora é possível atualizar/reinstalar mesmo já estando na versão mais recente (`--force`), com aviso explícito na tela e confirmação em 2 etapas (`B` duas vezes), preservando todos os seus dados e `gamelist.xml`.
+- **Nova Aba `Notícias` (com Imagens em Cache e Vídeos) e Card Unificado `Músicas e Vídeos`:**
   - Os cards de músicas e vídeos foram unidos em **`Músicas e Vídeos`** (`LRC & Cinema`), liberando espaço para a nova aba **`Notícias`** (manchetes do Brasil em português nas categorias **Urgente**, **Mundo**, **Polícia**, **Entretenimento** e **Esportes**) integrada à API **NewsData.io** (`news.cfg` no R36S ou `NEWSDATA_API_KEY`) com fallback automático para feeds RSS brasileiros ao vivo.
 - **Gradientes Suaves sem Listras em Todos os 14 Temas do R36S:**
   - Corrigido o artefato de listras horizontais nas caixas translúcidas e painéis do protetor de tela em todo o aplicativo: caixas e HUDs agora usam preenchimento sem sobreposição de transparência, gradiente vertical suave fiel ao tema e borda nítida de 1px.
@@ -64,7 +70,7 @@
 
 ## Instalação no R36S (dArkOS / PortMaster)
 
-1. Baixe **`KPlayer-v2.1.0-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
+1. Baixe **`KPlayer-v2.1.1-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
 2. Extraia e copie **`KPlayer.sh`** e a pasta **`kplayer/`** para `/roms/ports/` (ou `/roms2/ports/` no SD2).
 3. Coloque suas mídias nas pastas dedicadas (boot rápido — sem varrer ROMs/BIOS/saves):
 

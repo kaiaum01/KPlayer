@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-CURRENT_FALLBACK = "2.1.0"
+CURRENT_FALLBACK = "2.1.1"
 UA = f"KPlayer-Updater/{CURRENT_FALLBACK}"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",
@@ -445,7 +445,7 @@ def write_progress(gamedir: Path, pct: int, stage: str, detail: str = "") -> Non
         pass
 
 
-def apply_update(gamedir: Path) -> int:
+def apply_update(gamedir: Path, force: bool = False) -> int:
     ports_dir = gamedir.parent.resolve()
     lock_file = gamedir / ".update.lock"
     if lock_file.is_file():
@@ -464,10 +464,19 @@ def apply_update(gamedir: Path) -> int:
     try:
         write_progress(gamedir, 5, "Conectando ao GitHub...", "Lendo updates/latest.json")
         info = check_update(gamedir)
-        if not info.get("updateAvailable"):
+        same_version_reinstall = not info.get("updateAvailable")
+        if same_version_reinstall and not force:
             write_progress(gamedir, 100, "KPlayer atualizado", "Nenhuma versão mais nova disponível")
             print("KPlayer ja esta na versao mais recente.")
             return 0
+        if same_version_reinstall:
+            cur_v = str(info.get("latestVersion") or info.get("currentVersion") or CURRENT_FALLBACK)
+            write_progress(
+                gamedir,
+                9,
+                f"Reinstalando mesma versão (v{cur_v})...",
+                "Aviso confirmado — preservando dados e histórico",
+            )
 
         r36s = info.get("r36s")
         if not isinstance(r36s, dict):
@@ -658,8 +667,9 @@ def main() -> None:
         write_check_tsv(check_update(gamedir), out)
         return
     if cmd == "apply":
-        sys.exit(apply_update(gamedir))
-    print("Uso: updater.py [check|check-tsv [out]|apply]")
+        force = "--force" in sys.argv[2:] or "force" in sys.argv[2:]
+        sys.exit(apply_update(gamedir, force=force))
+    print("Uso: updater.py [check|check-tsv [out]|apply [--force]]")
     sys.exit(2)
 
 

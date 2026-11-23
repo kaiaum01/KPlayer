@@ -1,6 +1,6 @@
 #!/bin/bash
-# KPlayer v2.1.0 - dArkOS / Debian 13 ARM64 / PortMaster
-KPLAYER_VERSION="2.1.0"
+# KPlayer v2.1.1 - dArkOS / Debian 13 ARM64 / PortMaster
+KPLAYER_VERSION="2.1.1"
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)" || exit 1
 GAMEDIR="$script_dir/kplayer"
 cd "$GAMEDIR" || exit 1
