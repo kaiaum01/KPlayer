@@ -156,3 +156,87 @@
   animation: kp-boot-shimmer 1.35s ease-in-out infinite;
 }
 
+@keyframes kp-screen-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.kp-screen-enter {
+  animation: kp-screen-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes kp-toast-in {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.kp-toast-in {
+  animation: kp-toast-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes kp-orb-drift {
+  0%,
+  100% {
+    transform: translate3d(0px, 0px, 0px) scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translate3d(26px, -16px, 0px) scale(1.12);
+    opacity: 0.72;
+  }
+}
+
+@keyframes kp-orb-drift-rev {
+  0%,
+  100% {
+    transform: translate3d(0px, 0px, 0px) scale(1.06);
+    opacity: 0.38;
+  }
+  50% {
+    transform: translate3d(-24px, 18px, 0px) scale(0.95);
+    opacity: 0.65;
+  }
+}
+
+.kp-orb-drift {
+  animation: kp-orb-drift 11s ease-in-out infinite;
+}
+
+.kp-orb-drift-rev {
+  animation: kp-orb-drift-rev 14s ease-in-out infinite;
+}
+
+@keyframes kp-focus-glow {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.08);
+  }
+}
+
+.kp-focus-glow {
+  animation: kp-focus-glow 2.2s ease-in-out infinite;
+}
+
+.kp-tile-anim {
+  transition: transform 190ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 220ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+

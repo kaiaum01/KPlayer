@@ -1,46 +1,47 @@
 {
   "schemaVersion": 2,
-  "version": "2.0.9",
-  "nextVersion": "2.0.10",
+  "version": "2.1.0",
+  "nextVersion": "2.1.1",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.0.9",
-  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.0.9",
-  "releasedAt": "2026-11-23T02:12:43Z",
-  "repository": "kaiaum01/KPlayer",
+  "releaseTag": "v2.1.0",
+  "releasePageUrl": "",
+  "releasedAt": "2026-11-23T01:00:00Z",
+  "repository": "",
   "branch": "main",
   "updatesDir": "updates",
   "preserveUserPaths": [
+    "gamelist.xml",
     "iptv_usuario/",
     "radios_usuario/",
     "midias/",
     "settings.cfg",
     "preferences.cfg",
     "weather.cfg",
+    "news.cfg",
     "history.txt",
     "favorites.txt",
     "radio-favorites.tsv",
     "resume.cfg"
   ],
   "notes": [
-    "Correção Crítica do Lançador KPlayer.sh (Abre e Reinicia Sempre):",
-    "Corrigido o problema da v2.0.8 em que o script .sh mudava de nome (KPlayer v2.0.8.sh), procurava um arquivo versionado e impedia o EmulationStation de abrir o KPlayer.",
-    "Restaurado o lançador fixo KPlayer.sh (sem espaços no nome, com a versão v2.0.9 gravada internamente), reinício seguro via exec bash \"$script_dir/KPlayer.sh\", proteção contra erros",
-    "Novas Imagens de Alta Resolução Fiéis ao Disco de Vinil K Original (dentro de kplayer/scraper/):",
-    "Capa Principal (Fundo Transparente PNG32): kplayer/scraper/kplayer-image.png (1200×1200 RGBA) — disco de vinil preto com centro verde esmeralda K, anel duplo branco e legenda PLAYE",
-    "Marquee / Logo (Fundo Transparente PNG32): kplayer/scraper/kplayer-marquee.png (1600×490 RGBA) — logo horizontal grande com o disco de vinil K + tipografia K PLAYER com contorno es"
+    "Nova aba Notícias (antes do Placar da Bola) com manchetes do Brasil em português (Urgente, Mundo, Polícia, Entretenimento e Esportes) via NewsData.io com fallback RSS ao vivo",
+    "Dashboard reorganizada com Músicas e Vídeos unificados em um só card (Músicas e Vídeos, Arquivos, Rádio Online, IPTV, Notícias e Placar da Bola)",
+    "Correção definitiva das listras internas em caixas translúcidas e HUD do protetor de tela em todos os 14 temas do R36S, agora com gradiente suave real e borda nítida",
+    "10 visualizadores reativos ao áudio no Protetor de Tela (+ Automático), 14 temas exclusivos e sons táteis das teclas",
+    "Mais animações em toda a interface e documentação completa atualizada no GitHub"
   ],
   "r36s": {
-    "filename": "KPlayer-v2.0.9-R36S.zip",
-    "path": "updates/v2.0.9/KPlayer-v2.0.9-R36S.zip",
-    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.9/KPlayer-v2.0.9-R36S.zip",
-    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.0.9/KPlayer-v2.0.9-R36S.zip",
-    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.9/KPlayer-v2.0.9-R36S.zip.sha256",
-    "sha256": "7b48ca0c736431c9b0e4c304db97030b1ffc48694a1461c8ae3ed8af2f694464",
-    "sizeBytes": 16570849
+    "filename": "KPlayer-v2.1.0-R36S.zip",
+    "path": "updates/v2.1.0/KPlayer-v2.1.0-R36S.zip",
+    "url": "",
+    "releaseUrl": "",
+    "sha256Url": "",
+    "sha256": "",
+    "sizeBytes": 0
   },
   "web": {
-    "version": "2.0.9",
+    "version": "2.1.0",
     "reloadRequired": true
   }
 }

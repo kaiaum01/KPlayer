@@ -1,71 +1,72 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="KPlayer v2.0.3 — Central de Mídia Portátil para R36S" width="100%" />
+  <img src="docs/images/banner.svg" alt="KPlayer v2.1.0 — Central de Mídia Portátil para R36S" width="100%" />
 </p>
 
-<h1 align="center">KPlayer v2.0.3</h1>
+<h1 align="center">KPlayer v2.1.0</h1>
 
 <p align="center">
-  <strong>Central de mídia portátil para R36S (Principal — dArkOS Adaptativo) &amp; Android (Edição Adaptativa)</strong><br />
-  Músicas com letras sincronizadas (.LRC) · Vídeos · Rádio Online · IPTV · <strong>Placar da Bola</strong>
+  <strong>Central de mídia portátil nativa para R36S (dArkOS / PortMaster — C + SDL2 + libVLC ARM64)</strong><br />
+  Músicas e Vídeos (.LRC) · 10 Visualizadores Reativos · 14 Temas · Rádio Online · IPTV + EPG · Notícias · Clima · Placar da Bola
 </p>
 
 <p align="center">
   <a href="README.md">English</a> ·
   <a href="docs/INSTALL.md">Instalação (R36S)</a> ·
-  <a href="docs/ANDROID.md">Edição Android (Adaptativa)</a> ·
   <a href="docs/CONTROLS.md">Controles</a> ·
   <a href="docs/MEDIA.md">Mídias e Letras</a> ·
+  <a href="docs/BUILD.md">Compilação</a> ·
   <a href="TERMS.md">Termos e Transparência</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.0.3</a> ·
+  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.1.0</a> ·
   <a href="THIRD_PARTY.md">Licenças</a>
 </p>
 
 ---
 
-## Novidades da v2.0.3
+## Novidades da v2.1.0 (R36S Nativo)
 
-- **Tela de Aviso de Transparência e Termos Atualizados:** antes de entrar em **Rádio Online** ou **IPTV**, o player exibe uma tela clara informando que todos os dados vêm de agregadores públicos da internet ou fontes abertas, que o KPlayer não hospeda conteúdo e que você tem total direito de inserir seus próprios links e playlists.
-- **Tela de Boot Animada (Splash Screen):** toda vez que o KPlayer liga, uma tela animada com vinil giratório, anéis de sonar, faíscas orbitais, equalizador de 28 barras e barra de progresso pré-carrega suas mídias, rádios, IPTV e jogos do Placar da Bola de uma só vez — deixando a navegação interna instantânea e sem travamentos.
-- **Tela de Boas-Vindas Slim e Animada:** design enxuto e moderno no mesmo visual do boot, com seletor unificado de idioma (**Português / English / Español**) e **seletor de cores do tema em bolinhas** (7 temas ao vivo), sem botões gigantes nem barra inferior poluída.
-- **Placar da Bola (estilo SofaScore):** acompanhe jogos ao vivo, encerrados e futuros do **Brasileirão, Libertadores, Champions League, Premier League** e mais, com filtros (`Todos`, `Ao vivo`, `Brasil`, `Europa`) e tela de detalhes completa com **Estatísticas comparativas**, **Eventos minuto a minuto** e **Escalações**.
-- **Player de Música Revisado:** barra central de reprodução perfeitamente centralizada e simétrica (anterior / play-pause / próxima + barra de progresso alinhada) com ícones nítidos, capa/vinil, metadados técnicos (FLAC/MP3, kHz, kbps) e painel alternável de **Letras sincronizadas (.LRC)**, **Fila** e **Pasta**.
-- **Pastas Dedicadas (carregamento ultrarrápido):** sem varrer o cartão SD inteiro nem passar por ROMs/BIOS/saves. O KPlayer indexa exclusivamente:
-  - **Músicas:** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
-  - **Vídeos:** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
-- **IPTV desbloqueado e categorizado (Canais · Filmes · Séries · Usuário):** sem limite de canais/filmes/episódios e com carregamento sob demanda categoria por categoria — **245 Canais de TV** em 12 categorias (`catalogo.txt` + reservas em `https://canais-saimo.pages.dev/`), **Filmes** (~30.000+ filmes por destaques, animes/kids, gêneros TMDB e A–Z), **Séries** (~13.000+ séries com seleção completa de temporadas e todos os episódios de `https://filmes-saimo.pages.dev/`) e **IPTV do Usuário** (teclado virtual para digitar URLs `.m3u`/`.m3u8` ou leitura automática de arquivos na pasta `ports/kplayer/iptv_usuario/`).
-- **Capa do Port e Metadados XML para dArkOS / EmulationStation:** o pacote `KPlayer-v2.0.3-R36S.zip` já inclui a capa oficial 640×480 (`images/KPlayer-image.png`), `gamelist.xml` pronto para uso e `kplayer/KPlayer-metadata.xml` para mesclar com seus outros ports.
-- **R36S & Android Adaptativos ao Dispositivo (Lado a Lado):** ambas as edições se adaptam automaticamente à tela do usuário. A edição principal de **R36S** escala de 640×480 até monitores 1080p, enquanto o app nativo **Android** (`android/` — **Kotlin + Jetpack Compose + Material 3 + Media3**) adapta-se a smartphones em retrato/paisagem, dobráveis e tablets (Barra Inferior ↔ Trilho Lateral, grades multi-coluna e Now Playing em 2 painéis) com paridade total da v2.0.3. Veja [docs/ANDROID.md](docs/ANDROID.md).
+- **Nova Aba `Notícias` (antes do `Placar da Bola`) e Card Unificado `Músicas e Vídeos`:**
+  - Os cards de músicas e vídeos foram unidos em **`Músicas e Vídeos`** (`LRC & Cinema`), liberando espaço para a nova aba **`Notícias`** (manchetes do Brasil em português nas categorias **Urgente**, **Mundo**, **Polícia**, **Entretenimento** e **Esportes**) integrada à API **NewsData.io** (`news.cfg` no R36S ou `NEWSDATA_API_KEY`) com fallback automático para feeds RSS brasileiros ao vivo.
+- **Gradientes Suaves sem Listras em Todos os 14 Temas do R36S:**
+  - Corrigido o artefato de listras horizontais nas caixas translúcidas e painéis do protetor de tela em todo o aplicativo: caixas e HUDs agora usam preenchimento sem sobreposição de transparência, gradiente vertical suave fiel ao tema e borda nítida de 1px.
+- **10 Visualizadores Reativos ao Áudio (+ Modo Automático) no Protetor de Tela:**
+  - Os 5 clássicos inspirados no Windows Media Player foram aprimorados: **Barras e Ondas**, **Alquimia**, **Bateria / Pulso**, **Plenitude** e **Ambience / Cosmos**.
+  - **5 novos efeitos em tempo real:** **Túnel Neon** (túnel 3D com raios laser), **Chuva Matrix** (colunas digitais luminosas), **Chama / Fogo** (cortinas de plasma com brasas subindo), **Prisma 3D** (cubo wireframe 3D rotativo com anéis holográficos) e **Galáxia Espiral** (nebulosa em 4 braços).
+  - Ativado por padrão após **30 segundos** de inatividade durante Músicas ou Rádio Online, com opção de **Relógio / Data / Clima** e **Letras sincronizadas (`.LRC`)** sobre o visualizador (`L1`/`R1` troca o efeito na hora).
+- **14 Temas Exclusivos no R36S:**
+  - Todos os 7 temas originais preservados (`Preto e verde`, `Preto e branco`, `Branco e preto`, `Verde e preto`, `Preto e azul`, `Preto e roxo`, `Preto e vermelho`) + **7 novos temas:** **Preto e dourado**, **Preto e ciano**, **Preto e laranja**, **Preto e rosa**, **Meia-noite Neon**, **Retrô Game Boy** e **Oceano Profundo** — com troca instantânea nas Boas-Vindas ou em `SELECT → Tema`.
+- **Sons Táteis das Teclas (`Sons das teclas`):**
+  - Sintetizador PCM procedural leve (sem arquivos WAV externos) que emite cliques suaves ao navegar no direcional, confirmar (`B`), voltar (`A`) e alternar abas. Ativado por padrão e configurável em **`SELECT → Sons das teclas`**.
+- **Mais Animações em Toda a Interface:**
+  - Transições suaves entre telas, aura de foco deslizante com elevação sutil nos cards da Home, setas animadas, fundo bokeh ambiente em movimento, barra lateral pulsante em cards focados, mini-equalizador animado nas faixas em reprodução e toasts deslizantes.
+- **Lançador Estável, Artes PNG Transparentes e Auto-Update Seguro:**
+  - Lançador fixo **`KPlayer.sh`** (sem espaços, versão atualizada internamente, reinício automático seguro via `bash`) sem jamais alterar seus arquivos `gamelist.xml`.
+  - Artes em alta resolução fiéis ao disco de vinil K em `kplayer/scraper/` (Capa PNG transparente `1200×1200`, Marquee PNG transparente `1600×490`, Boxart `900×1200` e Fanart Full HD `1920×1080`).
+  - **Atualizador interno (`SELECT → [A] Verificar atualizações`)** com barra de progresso ao vivo (0%–100%), validação SHA-256, fallback no GitHub Releases, tela de Changelog pós-atualização exibida uma única vez e preservação total de favoritos, histórico, listas e ajustes.
+- **Clima Open-Meteo (`X`) e Tela Inicial Inteligente:**
+  - Aplicativo completo de Clima via IP ou busca manual de cidade, card grande de clima na Home (layout invertível nas Opções) e saudação climática dinâmica com sugestões descontraídas aleatórias (ou *"Seu som. Sua tela."* quando o clima está desativado).
 
 ---
 
-## Capturas de Tela (640 × 480 — R36S)
+## Recursos Principais
 
-| Tela de Boot Animada | Boas-Vindas Slim (Idioma + Cores) |
-| :---: | :---: |
-| ![Splash animada v2.0.3](docs/images/readme-splash.png) | ![Boas-vindas slim v2.0.3](docs/images/readme-welcome.png) |
-| **Dashboard Principal** | **Player de Música & Letras (.LRC)** |
-| ![Dashboard v2.0.3](docs/images/readme-home.png) | ![Player de música v2.0.3](docs/images/readme-audio.png) |
-| **Placar da Bola — Jogos ao Vivo** | **Placar da Bola — Estatísticas da Partida** |
-| ![Placar da Bola](docs/images/readme-football.png) | ![Detalhes da partida](docs/images/readme-football-detail.png) |
-| **Rádio Online** | **IPTV (Canais · Filmes · Séries · Usuário)** |
-| ![Rádio Online](docs/images/readme-radio.png) | ![IPTV](docs/images/readme-iptv.png) |
-| **Pastas Dedicadas (SD1 / SD2)** | **Player de Vídeo (libVLC)** |
-| ![Biblioteca dedicada](docs/images/readme-library.png) | ![Player de vídeo](docs/images/readme-video.png) |
-| **Configurações & 7 Temas** | **Capa Oficial do Port (dArkOS / EmulationStation)** |
-| ![Opções e temas](docs/images/readme-options.png) | ![Capa KPlayer v2.0.3](docs/images/port-cover.png) |
+| Módulo | Destaques |
+| :--- | :--- |
+| **Player de Música** | Tags ID3 locais, capa embutida/sidecar, **Letras `.LRC` sincronizadas**, painéis de Fila e Pasta, Favoritas, Velocidade, Repetição, Aleatório, Timer de sono, Equalizador libVLC e **Protetor de Tela com 10 visualizadores**. |
+| **Player de Vídeo** | Reprodução via libVLC, Formato da imagem (`Original / Preencher / Esticar`), Velocidade, Repetição e controles OSD que se ocultam automaticamente. |
+| **Rádio Online** | Diretório aberto **Radio-Browser** (Brasil, Mais ouvidas, Pop, Rock, Notícias, Favoritas) + estações pessoais em `ports/kplayer/radios_usuario/`. |
+| **IPTV + EPG ao Vivo** | Catálogo ilimitado por categorias: **Canais** (com guia EPG ao vivo), **Filmes**, **Séries** (todas as temporadas e episódios) e **IPTV do Usuário** (teclado virtual + pasta `ports/kplayer/iptv_usuario/`). |
+| **Notícias (Brasil)** | Manchetes em português (**Todas, Urgente, Mundo, Polícia, Entretenimento, Esportes**) via **NewsData.io** (`ports/kplayer/news.cfg` ou `NEWSDATA_API_KEY`) com fallback RSS ao vivo e leitor completo pelo controle. |
+| **Placar da Bola** | Jogos ao vivo, encerrados e futuros do Brasileirão, Libertadores, Champions League, Premier League e mais, com **Estatísticas**, **Eventos** e **Escalações**. |
+| **Clima Open-Meteo** | Pressione **`X`** na tela inicial para previsão completa por hora e 7 dias, detecção por IP ou busca manual de cidade. |
 
 ---
 
 ## Instalação no R36S (dArkOS / PortMaster)
 
-1. Baixe **`KPlayer-v2.0.3-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
-2. Extraia o arquivo e copie para `/roms/ports/` (ou `/roms2/ports/` no SD2):
-   - `KPlayer.sh`
-   - pasta `kplayer/`
-   - `images/KPlayer-image.png` *(capa do port no EmulationStation)*
-   - `gamelist.xml` *(se ainda não tiver um em `ports/`; caso já possua outros ports, copie apenas o bloco `<game>...</game>` de `kplayer/KPlayer-metadata.xml` para dentro do seu `gamelist.xml` existente)*.
-3. Coloque suas mídias nas pastas dedicadas:
+1. Baixe **`KPlayer-v2.1.0-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
+2. Extraia e copie **`KPlayer.sh`** e a pasta **`kplayer/`** para `/roms/ports/` (ou `/roms2/ports/` no SD2).
+3. Coloque suas mídias nas pastas dedicadas (boot rápido — sem varrer ROMs/BIOS/saves):
 
 | Tipo de Mídia | Cartão SD1 | Cartão SD2 | Formatos reconhecidos |
 | :--- | :--- | :--- | :--- |
@@ -74,26 +75,10 @@
 | **Rádios pessoais** | `ports/kplayer/radios_usuario/` | — | `.pls`, `.m3u`, `.m3u8`, `.asx` |
 | **IPTV do Usuário** | `ports/kplayer/iptv_usuario/` | — | `.m3u`, `.m3u8`, `.txt` (ou link pelo teclado virtual) |
 
-4. Reinicie o EmulationStation (ou atualize a lista de jogos) e abra **Ports → KPlayer v2.0.3**.
+4. Abra **Ports → KPlayer** no R36S.
+5. Para futuras versões, basta atualizar por dentro do próprio player em **`SELECT → [A] Verificar atualizações`**.
 
-> **Requisitos (R36S):** R36S ARM64 com dArkOS e PortMaster, SDL2, ALSA e plugins VLC compatíveis em `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Rádio Online, IPTV e Placar da Bola exigem conexão com a internet. Veja o guia completo em [docs/INSTALL.md](docs/INSTALL.md).
-
----
-
-## Edição Android v2.0.3 (Adaptativa — Lado a Lado)
-
-Além da edição principal de **R36S**, o repositório mantém lado a lado o **KPlayer Android** (`android/`), um aplicativo nativo **adaptativo** para smartphones Android 8.0+ (API 26–35) em retrato ou paisagem, dobráveis e tablets com visual moderno e paridade total de recursos:
-
-- **Player de Música Moderno e Adaptativo:** alterna automaticamente entre Barra Inferior de 5 abas em celulares retrato (`< 600dp`) e Trilho Lateral (`≥ 600dp` compacto / `≥ 840dp` expandido) em paisagem, dobráveis e tablets — com Mini-Player flutuante, **Now Playing** em 1 ou 2 painéis, capa em alta resolução, **Letras sincronizadas (`.LRC`) com toque para pular**, Fila, Favoritas, velocidade (`0.75x–1.5x`), Timer de Sono e **Equalizador de hardware (5 bandas / 6 presets)**.
-- **Vídeos, IPTV Desbloqueado, Rádio Online e Placar da Bola:** grades responsivas em 1, 2 ou 3 colunas com todas as mesmas fontes e recursos do R36S — incluindo os **245 canais de TV** em 12 categorias, **Filmes e Séries** completos sob demanda, **IPTV do Usuário** (teclado nativo + importação `.m3u`), **Rádio Online (Radio-Browser)**, **Placar da Bola** (Estatísticas, Eventos e Escalações), **Tela de Aviso de Transparência**, **7 temas** e **3 idiomas**.
-- **Instalação:** baixe **`KPlayer-v2.0.3-Android.apk`** na aba **[Releases](../../releases)** (compilado automaticamente junto com o ZIP do R36S pelo GitHub Actions).
-
-| Edição | Plataforma | Motor | Empacotamento |
-| :--- | :--- | :--- | :--- |
-| **KPlayer R36S (Principal)** | R36S / dArkOS / PortMaster (Adaptativo, D-Pad) | C + SDL2 + libVLC (ARM64) | `KPlayer-v2.0.3-R36S.zip` |
-| **KPlayer Android (Lado a Lado)** | Android 8.0+ (Adaptativo: Celular, Paisagem, Dobrável & Tablet) | Kotlin + Jetpack Compose + Media3 | `KPlayer-v2.0.3-Android.apk` |
-
-Veja a documentação completa, permissões e instruções de compilação em **[docs/ANDROID.md](docs/ANDROID.md)**.
+> **Requisitos:** R36S ARM64 com dArkOS e PortMaster, SDL2, ALSA e plugins VLC compatíveis em `/usr/lib/aarch64-linux-gnu/vlc/plugins`. Veja o guia completo em [docs/INSTALL.md](docs/INSTALL.md).
 
 ---
 
@@ -104,38 +89,19 @@ Veja a documentação completa, permissões e instruções de compilação em **
 | **Direcional** | Navegar menus, alternar abas, mudar idioma/tema ou avançar ±10s |
 | **B** | Confirmar / Abrir / Tocar / Detalhes da partida |
 | **A** | Voltar / Cancelar |
-| **X** | Alternar Fila/Pasta na música · Trocar filtro no Placar/IPTV · Favoritar rádio · Ocultar OSD no vídeo |
-| **Y** | Letras na música · Atualizar dados (Rádio / IPTV / Placar / Biblioteca) · Termos nas Boas-Vindas |
-| **L1 / R1** | Faixa, vídeo ou estação anterior / seguinte |
+| **X** | Clima na Home · Fila/Pasta na música · Filtro no Placar/IPTV · Favoritar rádio · Letras no Protetor de Tela |
+| **Y** | Letras na música · Atualizar dados · Relógio/Clima no Protetor de Tela · Termos nas Boas-Vindas |
+| **L1 / R1** | Faixa, vídeo ou estação anterior/seguinte · Trocar Visualizador ao vivo no Protetor de Tela |
 | **START** | Pausar / Retomar reprodução |
-| **SELECT** | Abrir / Fechar Opções |
+| **SELECT** | Abrir / Fechar Opções contextuais |
 
-O volume é controlado diretamente pelos botões físicos do console. Confira o mapa completo por tela em [docs/CONTROLS.md](docs/CONTROLS.md).
-
----
-
-## Recursos Técnicos
-
-- **Motor nativo em C + SDL2 + libVLC** compilado especificamente para `aarch64-linux-gnu` em 640×480.
-- **7 temas de cores** com troca instantânea nas Boas-Vindas ou em Opções: *Verde Spotify*, *Noite Azul*, *Claro Menta*, *Claro Quente*, *Vermelho Neon*, *Roxo Synth* e *Âmbar Retrô*.
-- **3 idiomas integrados:** Português (BR), English e Español.
-- **Metadados ID3 locais:** lê título, artista, álbum, capa embutida (JPEG/PNG) e letras sincronizadas/embutidas (`.lrc` / USLT) sem depender de internet.
-- **Fila, Repetição, Aleatório, Favoritas, Timer de sono, Retomar mídia e Equalizador libVLC.**
-- **IPTV ilimitado e por categorias:** `Canais` (`https://canais-saimo.pages.dev/`), `Filmes` e `Séries` completos (`https://filmes-saimo.pages.dev/` com todas as temporadas/episódios sob demanda) + `IPTV do Usuário` via teclado virtual ou pasta `ports/kplayer/iptv_usuario/`, com reprodução direta via libVLC.
+Veja o mapa completo tela por tela em [docs/CONTROLS.md](docs/CONTROLS.md).
 
 ---
 
-## Transparência, Fontes Abertas e Termos de Uso
+## Transparência, Fontes Abertas e Licenças
 
-- **Origem dos dados (IPTV e Rádio Online):** todos os dados, listas e metadados de IPTV e Rádio Online exibidos no KPlayer foram retirados de **agregadores públicos da internet ou de fontes abertas** (como o diretório aberto **Radio-Browser** e catálogos web públicos). O KPlayer atua estritamente como **reprodutor de mídia** e **não hospeda, armazena nem transmite conteúdo próprio**.
-- **Aviso antes de entrar no player:** antes de acessar as funções de **Rádio Online** ou **IPTV**, o KPlayer apresenta uma **Tela de Aviso de Transparência** deixando clara a origem pública dos dados e o acesso aos Termos completos.
-- **Direito de colocar seu próprio link:** demonstrando total transparência com o usuário, você tem o direito e a liberdade de usar suas próprias listas e links a qualquer momento — seja digitando URLs `.m3u`/`.m3u8` pelo **teclado virtual na tela**, copiando arquivos em `ports/kplayer/iptv_usuario/` (IPTV) ou em `ports/kplayer/radios_usuario/` (Rádio).
-- Leia os termos completos em **[TERMS.md](TERMS.md)** (também disponíveis dentro do aplicativo em **Termos de uso**).
-
----
-
-## Compilação, Testes e Licenças
-
-- **Compilar binário ARM64 e gerar ZIP instalável:** consulte [docs/BUILD.md](docs/BUILD.md) e [PUBLICAR_NO_GITHUB.md](PUBLICAR_NO_GITHUB.md).
-- **Licença:** o código original do KPlayer é distribuído sob **GPL-2.0-or-later** ([LICENSE](LICENSE)). VLC/libVLC, SDL2, stb e fontes seguem suas respectivas licenças listadas em [THIRD_PARTY.md](THIRD_PARTY.md) e `ports/kplayer/licencas/`.
-- KPlayer é um projeto independente, sem afiliação oficial com VideoLAN, PortMaster ou SofaScore.
+- **Agregadores Públicos e Liberdade do Usuário:** todos os dados de IPTV e Rádio Online vêm de agregadores públicos ou fontes abertas (como **Radio-Browser**). O KPlayer atua apenas como reprodutor, não hospeda conteúdo, exibe um **Aviso de Transparência** antes de entrar em streaming e garante liberdade total para usar seus próprios links e listas. Leia **[TERMS.md](TERMS.md)**.
+- **Compilação e Empacotamento:** consulte [docs/BUILD.md](docs/BUILD.md) e [PUBLICAR_NO_GITHUB.md](PUBLICAR_NO_GITHUB.md).
+- **Licença:** código original sob **GPL-2.0-or-later** ([LICENSE](LICENSE)). VLC/libVLC, SDL2, stb e fontes seguem suas licenças em [THIRD_PARTY.md](THIRD_PARTY.md) e `ports/kplayer/licencas/`.
+- Projeto independente, sem afiliação com VideoLAN, PortMaster, Open-Meteo ou SofaScore.

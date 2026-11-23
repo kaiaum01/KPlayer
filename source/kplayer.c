@@ -220,15 +220,34 @@ static void rect(int x, int y, int w, int h, SDL_Color c) {
   SDL_RenderFillRect(renderer, &r);
 }
 static void rounded(int x, int y, int w, int h, int r, SDL_Color c) {
-  rect(x + r, y, w - 2 * r, h, c);
-  rect(x, y + r, r, h - 2 * r, c);
-  rect(x + w - r, y + r, r, h - 2 * r, c);
+  if (w <= 0 || h <= 0 || c.a == 0)
+    return;
+  if (r < 0)
+    r = 0;
+  if (r * 2 > w)
+    r = w / 2;
+  if (r * 2 > h)
+    r = h / 2;
+  if (r == 0) {
+    rect(x, y, w, h, c);
+    return;
+  }
+  int mid_h = h - 2 * r;
+  if (mid_h > 0)
+    rect(x, y + r, w, mid_h, c);
   color(c);
   for (int d = 0; d < r; d++) {
     int dx = (int)sqrt((double)r * r - (r - d - .5) * (r - d - .5));
-    SDL_RenderDrawLine(renderer, x + r - dx, y + d, x + w - r + dx - 1, y + d);
-    SDL_RenderDrawLine(renderer, x + r - dx, y + h - 1 - d, x + w - r + dx - 1,
-                       y + h - 1 - d);
+    int x0 = x + r - dx;
+    int x1 = x + w - r + dx - 1;
+    if (x0 < x)
+      x0 = x;
+    if (x1 > x + w - 1)
+      x1 = x + w - 1;
+    if (x0 <= x1) {
+      SDL_RenderDrawLine(renderer, x0, y + d, x1, y + d);
+      SDL_RenderDrawLine(renderer, x0, y + h - 1 - d, x1, y + h - 1 - d);
+    }
   }
 }
 static void triangle(int x, int y, int size, SDL_Color c) {
@@ -239,6 +258,7 @@ static void triangle(int x, int y, int size, SDL_Color c) {
                        y + size / 2 + half);
   }
 }
+static bool preview_mode;
 #include "modern.h"
 static const unsigned char *decode(const unsigned char *s, int *cp) {
   unsigned a = *s++;
@@ -872,19 +892,27 @@ static void size_string(long long bytes, char *out, size_t n) {
     snprintf(out, n, "%.1f MB", bytes / (1024.0 * 1024));
 }
 #include "sprites.h"
+#include "sfx.h"
 #include "skin.h"
 typedef struct {
   const char *name;
   SDL_Color background, panel_color, raised, text, secondary, highlight, subdued;
 } KpTheme;
 static const KpTheme themes[] = {
-  {"Preto e verde", {18,18,18,255}, {24,24,24,255}, {36,36,36,255}, {255,255,255,255}, {179,179,179,255}, {29,185,84,255}, {145,145,145,255}},
-  {"Preto e branco", {15,15,15,255}, {28,28,28,255}, {45,45,45,255}, {255,255,255,255}, {190,190,190,255}, {245,245,245,255}, {150,150,150,255}},
-  {"Branco e preto", {248,248,248,255}, {233,233,233,255}, {218,218,218,255}, {20,20,20,255}, {70,70,70,255}, {25,25,25,255}, {90,90,90,255}},
-  {"Verde e preto", {133,218,150,255}, {166,231,179,255}, {190,239,199,255}, {12,35,18,255}, {32,78,43,255}, {10,45,20,255}, {39,91,50,255}},
-  {"Preto e azul", {11,17,29,255}, {19,29,46,255}, {31,45,68,255}, {245,249,255,255}, {178,193,212,255}, {102,182,255,255}, {149,165,184,255}},
-  {"Preto e roxo", {22,15,30,255}, {35,24,45,255}, {52,38,65,255}, {252,245,255,255}, {204,187,215,255}, {211,153,255,255}, {170,150,184,255}},
-  {"Preto e vermelho", {24,14,15,255}, {39,23,24,255}, {59,35,36,255}, {255,246,246,255}, {218,185,185,255}, {255,139,139,255}, {185,149,149,255}}
+  {"Preto e verde",    {18,18,18,255},   {24,24,24,255},   {36,36,36,255},   {255,255,255,255}, {179,179,179,255}, {29,185,84,255},   {145,145,145,255}},
+  {"Preto e branco",   {15,15,15,255},   {28,28,28,255},   {45,45,45,255},   {255,255,255,255}, {190,190,190,255}, {245,245,245,255}, {150,150,150,255}},
+  {"Branco e preto",   {248,248,248,255},{233,233,233,255},{218,218,218,255},{20,20,20,255},    {70,70,70,255},    {25,25,25,255},    {90,90,90,255}},
+  {"Verde e preto",    {133,218,150,255},{166,231,179,255},{190,239,199,255},{12,35,18,255},    {32,78,43,255},    {10,45,20,255},    {39,91,50,255}},
+  {"Preto e azul",     {11,17,29,255},   {19,29,46,255},   {31,45,68,255},   {245,249,255,255}, {178,193,212,255}, {102,182,255,255}, {149,165,184,255}},
+  {"Preto e roxo",     {22,15,30,255},   {35,24,45,255},   {52,38,65,255},   {252,245,255,255}, {204,187,215,255}, {211,153,255,255}, {170,150,184,255}},
+  {"Preto e vermelho", {24,14,15,255},   {39,23,24,255},   {59,35,36,255},   {255,246,246,255}, {218,185,185,255}, {255,139,139,255}, {185,149,149,255}},
+  {"Preto e dourado",  {16,14,10,255},   {26,22,15,255},   {40,34,22,255},   {255,250,235,255}, {198,186,156,255}, {245,183,49,255},  {148,136,108,255}},
+  {"Preto e ciano",    {9,18,22,255},    {15,28,35,255},   {24,43,53,255},   {240,253,255,255}, {162,202,212,255}, {34,211,238,255},  {116,155,166,255}},
+  {"Preto e laranja",  {22,14,10,255},   {35,22,15,255},   {52,33,22,255},   {255,248,242,255}, {210,182,164,255}, {251,146,60,255},  {166,134,114,255}},
+  {"Preto e rosa",     {24,13,22,255},   {38,20,34,255},   {56,30,50,255},   {255,244,252,255}, {214,178,205,255}, {244,114,182,255}, {170,132,160,255}},
+  {"Meia-noite Neon",  {11,11,26,255},   {19,19,42,255},   {31,31,66,255},   {242,248,255,255}, {166,178,214,255}, {45,212,191,255},  {122,134,172,255}},
+  {"Retrô Game Boy",   {155,188,15,255}, {139,172,15,255}, {122,156,16,255}, {15,56,15,255},    {40,86,36,255},    {15,56,15,255},    {48,98,48,255}},
+  {"Oceano Profundo",  {7,19,32,255},    {12,31,52,255},   {20,46,74,255},   {240,249,255,255}, {158,192,220,255}, {56,189,248,255},  {114,150,180,255}}
 };
 #define THEME_COUNT ((int)(sizeof(themes) / sizeof(themes[0])))
 static int theme_index;
@@ -901,6 +929,7 @@ extern char **environ;
 // Online radio uses the same skin primitives and libVLC player.
 #include "radio.h"
 #include "iptv.h"
+#include "news.h"
 #include "football.h"
 #include "updater.h"
 #include "weather.h"
@@ -1042,9 +1071,9 @@ static int opt_scroll = 0;
 
 /* General Root order (strict A-Z, then penultimate [A] Verificar atualizacoes, then last Sair):
  * 18=Adaptacao de tela, 22=Clima e Localizacao, 5=Idioma, 24=Layout da tela inicial,
- * 25=Protetor de tela, 20=Rever comandos, 9=Tema, 6=Termos de uso, 15=Timer de sono,
- * 19=[A] Verificar atualizacoes (penultimate), 8=Sair (last). */
-static const int opt_root_ids[] = {18, 22, 5, 24, 25, 20, 9, 6, 15, 19, 8};
+ * 25=Protetor de tela, 20=Rever comandos, 26=Sons das teclas, 9=Tema, 6=Termos de uso,
+ * 15=Timer de sono, 19=[A] Verificar atualizacoes (penultimate), 8=Sair (last). */
+static const int opt_root_ids[] = {18, 22, 5, 24, 25, 20, 26, 9, 6, 15, 19, 8};
 #define OPT_ROOT_COUNT ((int)(sizeof(opt_root_ids) / sizeof(opt_root_ids[0])))
 
 static const int opt_weather_ids[] = {30, 31, 32, 11, 33, -99};
@@ -1157,11 +1186,11 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Nova Capa transparente (1200x1200) e Marquee transparente (1600x490) fieis ao disco de vinil K.",
-        "Pacote em alta resolucao em kplayer/scraper/: Capa, Marquee, Boxart (900x1200) e Fanart Full HD.",
-        "Corrigido lancador KPlayer.sh (nome fixo, versao atualizada internamente e reinicio seguro via bash).",
-        "Sem edicao automatica no gamelist.xml — seus arquivos XML permanecem 100% intactos.",
-        "Visualizador de 30s ativado por padrao e saudacao climatica inteligente na tela inicial.",
+        "Nova aba Noticias na Dashboard (antes do Placar da Bola) e aba unificada Musicas e Videos.",
+        "Caixas e temas do R36S corrigidos com gradientes suaves sem listras ou sobreposicao de bordas.",
+        "10 visualizadores reativos no Protetor de Tela (+ Auto) e 14 temas exclusivos no R36S.",
+        "Sons de cliques tateis ao apertar teclas (ativavel em Opcoes -> Sons das teclas).",
+        "Mais animacoes em toda a interface e documentacao completa atualizada no GitHub.",
     };
     int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
     for (int i = 0; i < n && changelog_count < 6; i++)
@@ -1272,6 +1301,7 @@ static const char *opt_label_for(int id) {
   case 22: return "Clima e Localização";
   case 24: return "Layout da tela inicial";
   case 25: return "Protetor de tela";
+  case 26: return "Sons das teclas";
   case 30: return "Abrir aplicativo de Clima";
   case 31: return "Usar localização do meu IP";
   case 32: return "Pesquisar cidade manualmente";
@@ -1393,6 +1423,9 @@ static void opt_value_for(int id, char *value, size_t cap) {
     break;
   case 25:
     snprintf(value, cap, "%s ›", ss_timeout_labels[ss_timeout_idx % SS_TIMEOUT_COUNT]);
+    break;
+  case 26:
+    snprintf(value, cap, "%s", tr(ui_sfx_enabled ? "Ativada" : "Desativada"));
     break;
   case 30:
     snprintf(value, cap, "Open-Meteo ›");
@@ -1758,6 +1791,12 @@ static void change_option(int dir) {
   case 25:
     opt_enter_section(OPT_SEC_SCREENSAVER);
     break;
+  case 26:
+    ui_sfx_enabled = !ui_sfx_enabled;
+    save_settings();
+    if (ui_sfx_enabled) sfx_play(SFX_CONFIRM);
+    notify(ui_sfx_enabled ? "Sons das teclas ativados" : "Sons das teclas desativados");
+    break;
   case 30:
     weather_open(2);
     break;
@@ -1875,6 +1914,9 @@ static void open_options(void) {
   opt_enter_section(opt_entry_section);
 }
 static void key(SDL_Keycode k, bool repeat) {
+  ui_anim_kick(320);
+  if (!repeat || k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT || k == SDLK_RIGHT)
+    sfx_play_for_key(k);
   if (radio_play_is_busy()) {
     if (mode == 8 && !repeat) { iptv_key(k); return; }
     if (mode == 7 && k != SDLK_ESCAPE && k != SDLK_F1 && k != SDLK_TAB)
@@ -1986,14 +2028,14 @@ static void key(SDL_Keycode k, bool repeat) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
-          option == 24 || option == 52 || option == 61 ||
+          option == 24 || option == 26 || option == 52 || option == 61 ||
           option == 70 || option == 71 || option == 72 || option == 73)
         change_option(-1);
     } else if (k == SDLK_RIGHT) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
-          option == 24 || option == 52 || option == 61 ||
+          option == 24 || option == 26 || option == 52 || option == 61 ||
           option == 70 || option == 71 || option == 72 || option == 73)
         change_option(1);
     } else if (k == SDLK_RETURN && !repeat) {
@@ -2014,22 +2056,24 @@ static void key(SDL_Keycode k, bool repeat) {
       favorites_view = false;
       menu_search[0] = 0;
       menu_search_kb = false;
-      category = dash_focus == 0 ? 1 : dash_focus == 1 ? 2 : 0;
-      if (dash_focus < 2)
+      category = 0;
+      if (dash_focus == 0)
         scan_automatic_media();
-      else if (dash_focus == 2)
+      else if (dash_focus == 1)
         show_locations();
-      else if (dash_focus == 3) {
+      else if (dash_focus == 2) {
         if (stream_notice_accepted)
           radio_open();
         else
           open_stream_notice(7, 3);
-      } else if (dash_focus == 4) {
+      } else if (dash_focus == 3) {
         if (stream_notice_accepted)
           iptv_open();
         else
           open_stream_notice(8, 3);
-      } else if (dash_focus == 5)
+      } else if (dash_focus == 4)
+        news_open();
+      else if (dash_focus == 5)
         football_open();
     } else if (k == SDLK_SPACE && !repeat) {
       /* Button X on Home opens the Open-Meteo Weather App */
@@ -2050,6 +2094,10 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (mode == 9) {
     if (!repeat) football_key(k);
+    return;
+  }
+  if (mode == 15) {
+    if (!repeat) news_key(k);
     return;
   }
   if (mode == 0) {
@@ -2222,13 +2270,13 @@ static void save_settings(void) {
           "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\n"
           "location %d\nrepeat %d\nshuffle %d\ndisplay %d\n"
           "home_inv %d\ntutorial %d\nss_sec %d\nss_viz %d\nss_clock %d\nss_lyrics %d\n"
-          "seen_ver %s\n",
+          "seen_ver %s\nui_sfx %d\n",
           fit, loop_video, rate, theme_index,
           network_location_enabled ? 1 : 0, repeat_mode,
           shuffle_enabled ? 1 : 0, display_mode,
           home_layout_inverted ? 1 : 0, tutorial_done ? 1 : 0,
           ss_timeout_idx, ss_viz_style, ss_show_clock ? 1 : 0, ss_show_lyrics ? 1 : 0,
-          seen_version[0] ? seen_version : "-");
+          seen_version[0] ? seen_version : "-", ui_sfx_enabled ? 1 : 0);
   if (fclose(f) == 0)
     rename("settings.tmp", "settings.cfg");
 }
@@ -2243,7 +2291,7 @@ static void load_settings(void) {
                                 saved_display = 0, saved_home_inv = 0,
                                 saved_tutorial = 0, saved_ss_sec = 1,
                                 saved_ss_viz = 0, saved_ss_clock = 1,
-                                saved_ss_lyrics = 1;
+                                saved_ss_lyrics = 1, saved_ui_sfx = 1;
   float r;
   bool valid = false;
   if (fgets(line, sizeof(line), f)) {
@@ -2261,6 +2309,7 @@ static void load_settings(void) {
       if (valid && fscanf(f, "\nss_clock %d", &saved_ss_clock) != 1) saved_ss_clock = 1;
       if (valid && fscanf(f, "\nss_lyrics %d", &saved_ss_lyrics) != 1) saved_ss_lyrics = 1;
       if (valid && fscanf(f, "\nseen_ver %31s", saved_seen) != 1) saved_seen[0] = 0;
+      if (valid && fscanf(f, "\nui_sfx %d", &saved_ui_sfx) != 1) saved_ui_sfx = 1;
     } else
       valid = sscanf(line, "%d %d %d %f", &legacy_setting, &ft, &loop, &r) == 4;
   }
@@ -2278,6 +2327,7 @@ static void load_settings(void) {
     ss_viz_style = (saved_ss_viz >= 0 && saved_ss_viz < SS_VIZ_COUNT) ? saved_ss_viz : 0;
     ss_show_clock = saved_ss_clock != 0;
     ss_show_lyrics = saved_ss_lyrics != 0;
+    ui_sfx_enabled = saved_ui_sfx != 0;
     if (saved_seen[0] && strcmp(saved_seen, "-") != 0)
       snprintf(seen_version, sizeof(seen_version), "%.31s", saved_seen);
     else
@@ -2453,6 +2503,15 @@ int main(int argc, char **argv) {
         iptv_cats[2].count = 3;
       }
       draw_iptv();
+    } else if (!strcmp(argv[1], "--preview-news")) {
+      news_count = 1;
+      snprintf(news_articles[0].category, sizeof(news_articles[0].category), "breaking");
+      snprintf(news_articles[0].cat_label, sizeof(news_articles[0].cat_label), "Urgente");
+      snprintf(news_articles[0].title, sizeof(news_articles[0].title), "Manchete demonstrativa do Brasil");
+      snprintf(news_articles[0].source, sizeof(news_articles[0].source), "Notícias BR");
+      snprintf(news_articles[0].date, sizeof(news_articles[0].date), "Hoje");
+      snprintf(news_articles[0].summary, sizeof(news_articles[0].summary), "Resumo das últimas notícias do Brasil e do mundo.");
+      draw_news();
     } else if (!strcmp(argv[1], "--preview-football")) {
       football_count = 1;
       snprintf(football_matches[0].league, sizeof(football_matches[0].league), "Campeonato exemplo");
@@ -2590,6 +2649,7 @@ int main(int argc, char **argv) {
         }
       }
     }
+    ui_trans_check_mode(mode);
     if (mode == 1)
       draw_video();
     else if (mode == 2)
@@ -2618,16 +2678,22 @@ int main(int argc, char **argv) {
       draw_screensaver();
     else if (mode == 14)
       draw_changelog();
+    else if (mode == 15)
+      draw_news();
     else
       draw_menu();
+    ui_trans_overlay();
     SDL_RenderPresent(renderer);
     uint32_t elapsed = SDL_GetTicks() - frame;
-    /* Keep video, animated welcome, screensaver and active update loading bar at ~30 FPS. */
+    /* Smooth ~35 FPS during animations, transitions, focus glides, playback, and visualizers; 20 FPS calm idle. */
     bool fast_anim = (mode == 5 || mode == 13 ||
+                      ui_trans_tick != 0 ||
+                      (int32_t)(ui_anim_active_until - frame) > 0 ||
+                      (frame < note_until) ||
+                      (active && !paused) ||
                       (mode == 2 && opt_section == OPT_SEC_UPDATE &&
-                       (kp_upd_checking || kp_upd_applying)) ||
-                      (active && !playing_audio && !playing_radio));
-    uint32_t frame_ms = fast_anim ? 33 : 100;
+                       (kp_upd_checking || kp_upd_applying)));
+    uint32_t frame_ms = fast_anim ? 28 : 50;
     if (elapsed < frame_ms)
       SDL_Delay(frame_ms - elapsed);
   }
@@ -2653,6 +2719,7 @@ int main(int argc, char **argv) {
   if (radio_art_texture)
     SDL_DestroyTexture(radio_art_texture);
   kp_sprites_free();
+  sfx_quit();
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();

@@ -56,22 +56,25 @@ import {
 } from './components/R36SIcons';
 import { R36SControls, type R36SButton } from './components/R36SControls';
 import { VideoScreen } from './components/VideoScreen';
+import { Newspaper } from 'lucide-react';
 import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/PlacarDaBolaScreen';
+import { NewsScreen, type NewsScreenHandle } from './components/NewsScreen';
 import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
 import { AndroidPlayerApp } from './components/AndroidPlayerApp';
+import { playSfxForButton, playUiSfx, setUiSfxEnabled } from './utils/sfx';
 import scraperCoverImg from './assets/images/kplayer_cover_transparent_v208.png';
 import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_1795391407681.jpg';
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.0.9';
+const APP_VERSION = '2.1.0';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Novas artes em alta resolução baseadas no disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490).',
-  'Pacote completo salvo em kplayer/scraper/ com Capa (PNG transparente), Marquee (PNG transparente), Boxart (900×1200) e Fanart Full HD (1920×1080).',
-  'Edição automática de metadados no gamelist.xml removida — seus arquivos XML permanecem 100% intactos.',
-  'Corrigido lançador KPlayer.sh (nome fixo, versão atualizada internamente e reinício seguro via bash, limpando atalhos antigos quebrados).',
-  'Protetor de tela com visualizadores (30s padrão), saudação climática inteligente na tela inicial e barra de progresso de atualização.',
+  'Nova aba Notícias (antes do Placar da Bola) com cobertura do Brasil em português (Urgente, Mundo, Polícia, Entretenimento e Esportes) e leitor completo no controle.',
+  'Dashboard reorganizada: Músicas e Vídeos unificados em um único card, mantendo acesso rápido a Arquivos, Rádio Online, IPTV, Notícias e Placar da Bola.',
+  'Correção visual definitiva em todos os 14 temas do R36S: eliminadas listras internas em caixas translúcidas e HUD do protetor de tela, agora com gradiente suave real e borda nítida.',
+  '10 visualizadores reativos ao áudio no Protetor de Tela (+ Automático) e sons táteis de clique ao navegar pelos menus.',
+  'Mais animações em toda a interface e documentação atualizada no GitHub.',
 ];
 
 const RADIO_CATEGORIES = [
@@ -192,6 +195,17 @@ export default function App() {
   const [screensaverShowLyrics, setScreensaverShowLyrics] = useState<boolean>(() =>
     loadStorage('kp_ss_lyrics', true)
   );
+  const [uiSfxEnabled, setUiSfxEnabledState] = useState<boolean>(() =>
+    loadStorage('kp_ui_sfx', true)
+  );
+  useEffect(() => {
+    setUiSfxEnabled(uiSfxEnabled);
+    try {
+      localStorage.setItem('kp_ui_sfx', JSON.stringify(uiSfxEnabled));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [uiSfxEnabled]);
   const [screensaverActive, setScreensaverActive] = useState<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
   const [weatherMoodSeed] = useState<number>(() => Math.floor(Math.random() * 100000));
@@ -313,6 +327,7 @@ export default function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const placarRef = useRef<PlacarDaBolaHandle | null>(null);
+  const newsRef = useRef<NewsScreenHandle | null>(null);
   const iptvRef = useRef<IptvScreenHandle | null>(null);
   const optionsRef = useRef<OptionsMenuHandle | null>(null);
   const weatherRef = useRef<WeatherScreenHandle | null>(null);
@@ -1314,29 +1329,28 @@ export default function App() {
     (idx: number) => {
       setDashFocus(idx);
       if (idx === 0) {
-        if (!activeTrack && audioTracks[0]) setActiveTrack(audioTracks[0]);
-        setScreen('music');
-      } else if (idx === 1) {
         setLibFavoritesOnly(false);
         setLibLocationsView(false);
-        setLibFilter(2);
+        setLibFilter(0);
         setLibSelected(0);
         setScreen('library');
-      } else if (idx === 2) {
+      } else if (idx === 1) {
         setLibFavoritesOnly(false);
         setLibLocationsView(true);
         setLibFilter(0);
         setLibLocationSelected(0);
         setScreen('library');
-      } else if (idx === 3) {
+      } else if (idx === 2) {
         openStreamingScreen('radio', 'home');
-      } else if (idx === 4) {
+      } else if (idx === 3) {
         openStreamingScreen('iptv', 'home');
+      } else if (idx === 4) {
+        setScreen('news');
       } else if (idx === 5) {
         setScreen('football');
       }
     },
-    [activeTrack, audioTracks, openStreamingScreen]
+    [openStreamingScreen]
   );
 
   const openOptionsScreen = useCallback(
@@ -1425,6 +1439,7 @@ export default function App() {
     (btn: R36SButton) => {
       lastActivityRef.current = Date.now();
       if (screen === 'boot') return;
+      playSfxForButton(btn);
 
       if (screensaverActive) {
         if (btn === 'L1') {
@@ -1686,6 +1701,11 @@ export default function App() {
 
       if (screen === 'iptv') {
         iptvRef.current?.handleButton(btn);
+        return;
+      }
+
+      if (screen === 'news') {
+        newsRef.current?.handleButton(btn);
         return;
       }
 
@@ -2067,9 +2087,9 @@ export default function App() {
               />
             )}
 
-            {/* ==================== WELCOME / ONBOARDING (ANIMATED BOOT STYLE v2.0.3) ==================== */}
+            {/* ==================== WELCOME / ONBOARDING (ANIMATED BOOT STYLE v2.1.0) ==================== */}
             {screen === 'welcome' && (
-              <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center">
+              <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center kp-screen-enter">
                 <ModernBackdrop theme={theme} />
 
                 {/* Ambient central aura matching Boot Splash */}
@@ -2161,7 +2181,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.0.9 • R36S
+                      v2.1.0 • R36S
                     </div>
                   </div>
 
@@ -2235,12 +2255,12 @@ export default function App() {
                       style={{ color: welcomeFocus === 1 ? theme.accent : theme.muted }}
                       className="text-[10px] font-bold tracking-wider uppercase mb-1.5 transition-colors"
                     >
-                      {tr('Tema', language)} • {tr(theme.name, language)}
+                      {tr('Tema', language)} • {tr(theme.name, language)} ({themeIndex + 1}/{KP_THEMES.length})
                     </div>
                     <div
                       style={{
                         ...modernPanelStyle(theme, 23),
-                        height: 46,
+                        minHeight: 46,
                         borderColor:
                           welcomeFocus === 1
                             ? rgbToRgba(theme.accent, 0.65)
@@ -2250,11 +2270,11 @@ export default function App() {
                             ? `0 0 14px ${rgbToRgba(theme.accent, 0.22)}`
                             : undefined,
                       }}
-                      className="w-full max-w-[348px] px-3 @min-[420px]:px-4 flex items-center justify-between transition-all"
+                      className="w-full max-w-[532px] px-2.5 py-1.5 flex items-center justify-between gap-1 flex-wrap transition-all"
                     >
                       {KP_THEMES.map((tItem, idx) => {
                         const chosen = idx === themeIndex;
-                        const isLight = idx === 2 || idx === 3;
+                        const isLight = idx === 2 || idx === 3 || idx === 12;
                         const outerColor = isLight ? tItem.bg : tItem.accent;
                         const innerColor = isLight ? tItem.accent : tItem.bg;
                         return (
@@ -2264,34 +2284,35 @@ export default function App() {
                             title={tr(tItem.name, language)}
                             aria-label={tr(tItem.name, language)}
                             onClick={() => {
+                              playUiSfx('move');
                               setWelcomeFocus(1);
                               setThemeIndex(idx);
                             }}
                             style={{
-                              width: 32,
-                              height: 32,
+                              width: 28,
+                              height: 28,
                               boxShadow: chosen
                                 ? `0 0 0 2px ${theme.text}, 0 0 14px ${rgbToRgba(theme.accent, 0.65)}`
                                 : 'none',
                             }}
                             className={`rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 ${
-                              chosen ? 'scale-110' : 'hover:scale-110 opacity-85 hover:opacity-100'
+                              chosen ? 'scale-115' : 'hover:scale-110 opacity-85 hover:opacity-100'
                             }`}
                           >
                             <span
                               style={{
-                                width: 22,
-                                height: 22,
+                                width: 20,
+                                height: 20,
                                 backgroundColor: outerColor,
                                 border: `1px solid ${rgbToRgba(theme.text, 0.22)}`,
                               }}
                               className="rounded-full flex items-center justify-center"
                             >
-                              {(isLight || idx === 1) && (
+                              {(isLight || idx === 1 || idx === 11 || idx === 13) && (
                                 <span
                                   style={{
-                                    width: 8,
-                                    height: 8,
+                                    width: 7,
+                                    height: 7,
                                     backgroundColor: innerColor,
                                   }}
                                   className="rounded-full"
@@ -2704,7 +2725,7 @@ export default function App() {
                 : tr('Pronto para dar o play', language);
 
               return (
-              <div className="w-full h-full relative overflow-hidden flex flex-col">
+              <div className="w-full h-full relative overflow-hidden flex flex-col kp-screen-enter">
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
                   theme={theme}
@@ -2863,18 +2884,11 @@ export default function App() {
                     {(
                       [
                         {
-                          kind: 'music',
+                          kind: 'media',
                           spriteCol: 0,
-                          tag: tr('LRC Sync', language),
-                          name: tr('Músicas', language),
-                          desc: tr('Sua trilha sonora,', language),
-                        },
-                        {
-                          kind: 'video',
-                          spriteCol: 1,
-                          tag: tr('Ocultar auto.', language),
-                          name: tr('Vídeos', language),
-                          desc: tr('Cinema na palma', language),
+                          tag: tr('LRC & Cinema', language),
+                          name: tr('Músicas e Vídeos', language),
+                          desc: tr('Áudio, vídeo e letras', language),
                         },
                         {
                           kind: 'folder',
@@ -2898,6 +2912,13 @@ export default function App() {
                           desc: tr('Canais ao vivo', language),
                         },
                         {
+                          kind: 'news',
+                          spriteCol: -1,
+                          tag: tr('Brasil • Hoje', language),
+                          name: tr('Notícias', language),
+                          desc: tr('Últimas do dia', language),
+                        },
+                        {
                           kind: 'football',
                           spriteCol: 5,
                           tag: tr('Placar ao vivo', language),
@@ -2913,7 +2934,10 @@ export default function App() {
                           key={cardItem.kind}
                           type="button"
                           onMouseEnter={() => setDashFocus(i)}
-                          onClick={() => openDashboardCard(i)}
+                          onClick={() => {
+                            playUiSfx('confirm');
+                            openDashboardCard(i);
+                          }}
                           style={{
                             borderRadius: 16,
                             border: focused
@@ -2921,10 +2945,12 @@ export default function App() {
                               : `1px solid ${themeHairline(theme)}`,
                             background: `linear-gradient(180deg, ${gradTop} 0%, ${theme.panel} 100%)`,
                             boxShadow: focused
-                              ? `0 0 18px ${rgbToRgba(theme.accent, 0.36)}`
+                              ? `0 6px 22px ${rgbToRgba(theme.accent, 0.38)}`
                               : undefined,
                           }}
-                          className="relative text-left p-2.5 @min-[520px]:p-3 min-h-[86px] @min-[520px]:min-h-[96px] @min-[820px]:min-h-[112px] flex flex-col justify-between cursor-pointer transition-all"
+                          className={`relative text-left p-2.5 @min-[520px]:p-3 min-h-[86px] @min-[520px]:min-h-[96px] @min-[820px]:min-h-[112px] flex flex-col justify-between cursor-pointer kp-tile-anim active:scale-[0.98] ${
+                            focused ? '-translate-y-[2px]' : 'hover:-translate-y-[1px]'
+                          }`}
                         >
                           <div className="flex items-start gap-2 @min-[520px]:gap-2.5">
                             <div
@@ -2937,12 +2963,16 @@ export default function App() {
                               }}
                               className="flex items-center justify-center shrink-0"
                             >
-                              <KpSprite
-                                sheet="categorias"
-                                col={cardItem.spriteCol}
-                                themeIndex={themeIndex}
-                                size={24}
-                              />
+                              {cardItem.spriteCol < 0 ? (
+                                <Newspaper style={{ color: theme.accent }} className="w-5 h-5" />
+                              ) : (
+                                <KpSprite
+                                  sheet="categorias"
+                                  col={cardItem.spriteCol}
+                                  themeIndex={themeIndex}
+                                  size={24}
+                                />
+                              )}
                             </div>
                             <div className="min-w-0 flex-1 pt-0.5">
                               <div
@@ -3165,7 +3195,11 @@ export default function App() {
                 <ModernBackdrop theme={theme} />
                 <HeaderBar
                   theme={theme}
-                  section={tr('BIBLIOTECA', language)}
+                  section={
+                    libLocationsView
+                      ? tr('ARQUIVOS', language)
+                      : tr('Músicas e Vídeos', language).toUpperCase()
+                  }
                   location={locationLabel}
                 />
 
@@ -4041,6 +4075,18 @@ export default function App() {
               />
             )}
 
+            {/* ==================== NOTÍCIAS (NEWSDATA.IO + RSS BRASIL) ==================== */}
+            {screen === 'news' && (
+              <NewsScreen
+                ref={newsRef}
+                theme={theme}
+                language={language}
+                locationLabel={locationLabel}
+                toast={toast}
+                onBack={() => setScreen('home')}
+              />
+            )}
+
             {/* ==================== PLACAR DA BOLA (SOFASCORE STYLE) ==================== */}
             {screen === 'football' && (
               <PlacarDaBolaScreen
@@ -4120,6 +4166,7 @@ export default function App() {
                 screensaverVizStyle={screensaverVizStyle}
                 screensaverShowClock={screensaverShowClock}
                 screensaverShowLyrics={screensaverShowLyrics}
+                uiSfxEnabled={uiSfxEnabled}
                 onSetThemeIndex={setThemeIndex}
                 onSetLanguage={setLanguage}
                 onSetDisplayMode={setR36sDisplayMode}
@@ -4131,6 +4178,15 @@ export default function App() {
                         ? 'Início invertido: Clima no topo e Player embaixo'
                         : 'Início padrão: Mini player no topo e Clima grande embaixo'
                     );
+                    return next;
+                  });
+                }}
+                onToggleUiSfx={() => {
+                  setUiSfxEnabledState((prev) => {
+                    const next = !prev;
+                    setUiSfxEnabled(next);
+                    if (next) playUiSfx('confirm');
+                    notify(`Sons das teclas: ${next ? 'Ativado' : 'Desativado'}`);
                     return next;
                   });
                 }}
@@ -4408,7 +4464,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.0.9 — Edição R36S
+                  KPlayer v2.1.0 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4424,7 +4480,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.0.9 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.1.0 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4433,13 +4489,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.0.9-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.1.0-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer.sh (v2.0.9 estável)
+                    KPlayer.sh (v2.1.0 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4503,7 +4559,7 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.9-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.0-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
@@ -4516,22 +4572,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.0.9, lançador KPlayer.sh corrigido e estável, Capa transparente (1200×1200), Marquee transparente (1600×490), Boxart e Fanart Full HD do disco K, changelog pós-atualização e visualizador 30s.
+                Inclui binário ARM64 nativo v2.1.0, 10 visualizadores reativos (+ Automático), 14 temas R36S, sons táteis das teclas, interface animada, lançador KPlayer.sh estável e artes PNG transparentes em kplayer/scraper/.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.0.9-R36S.zip"
+                download="KPlayer-v2.1.0-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.0.9-R36S.zip
+                ⬇ Baixar KPlayer-v2.1.0-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.0.9-R36S.zip.sha256"
+                download="KPlayer-v2.1.0-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

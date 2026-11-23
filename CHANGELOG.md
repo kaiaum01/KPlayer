@@ -1,5 +1,49 @@
 # Changelog
 
+## v2.1.0 — Aba Notícias, Músicas e Vídeos Unificados, Correção de Gradientes nos Temas, 10 Visualizadores & 14 Temas
+
+- **Nova Aba `Notícias` (antes do `Placar da Bola`) (`source/news.h`, `ports/kplayer/news_fetch.py`, `src/components/NewsScreen.tsx` & `/api/news`):** Leitor completo de notícias do Brasil em português integrado à API **NewsData.io** (`country=br`, `language=pt`, categorias `Urgente`, `Mundo`, `Polícia`, `Entretenimento` e `Esportes`), com fallback automático para feeds RSS brasileiros quando a chave `NEWSDATA_API_KEY` / `news.cfg` não estiver configurada, leitura completa no controle (`B` abrir, `↑/↓` rolar, `L1/R1` próxima/anterior, `Y` atualizar) e cache local.
+- **Dashboard Reorganizada (`Músicas e Vídeos` Unificados):** Os antigos cards separados de *Músicas* e *Vídeos* foram fundidos em **`Músicas e Vídeos`** (`LRC & Cinema`), deixando os 6 cards da Home como: `Músicas e Vídeos`, `Arquivos`, `Rádio Online`, `IPTV`, `Notícias` e `Placar da Bola`.
+- **Correção Visual Definitiva em Todos os 14 Temas do R36S (`source/kplayer.c`, `source/modern.h`, `source/screensaver.h`, `source/skin.h`, `source/onboarding.h`):** Eliminado o bug de double-blend (listras horizontais claras no topo e rodapé interno das caixas translúcidas) reescrevendo `rounded()` sem sobreposição de pixels, convertendo `glow_rect()` para contornos vazados (`rounded_outline()`) e aplicando `rounded_gradient()` com cores fiéis ao tema ativo em todas as caixas, cards e HUDs do protetor de tela.
+- **10 Visualizadores Reativos ao Áudio (+ Automático) no Protetor de Tela (`source/screensaver.h` & Web):** Aprimorados os 5 clássicos estilo Windows Media Player (`Barras e Ondas`, `Alquimia`, `Bateria / Pulso`, `Plenitude`, `Ambience / Cosmos`) e adicionados **5 novos efeitos em tempo real**: `Túnel Neon`, `Chuva Matrix`, `Chama / Fogo`, `Prisma 3D` e `Galáxia Espiral`. Troca ao vivo via `L1`/`R1`, com relógio/data/clima (`Y`) e letras `.LRC` sincronizadas (`X`).
+- **14 Temas Exclusivos no R36S (`source/kplayer.c`, `source/sprites.h`, `source/onboarding.h` & `src/themes.ts`):** Mantidos os 7 temas originais e adicionados **7 novos temas**: `Preto e dourado`, `Preto e ciano`, `Preto e laranja`, `Preto e rosa`, `Meia-noite Neon`, `Retrô Game Boy` e `Oceano Profundo`, com seletor expandido nas Boas-Vindas e tintagem automática de ícones.
+- **Sons Táteis das Teclas (`source/sfx.h`, `source/dynamic.h` & `src/utils/sfx.ts`):** Novo sintetizador PCM procedural (sem arquivos WAV externos) com feedback sonoro distinto para navegação, confirmação, voltar e troca de abas. Toggle persistente **`Sons das teclas`** em `SELECT → Opções` (ativado por padrão).
+- **Mais Animações em Toda a Interface (`source/modern.h`, `source/skin.h` & CSS):** Transições suaves de tela, foco deslizante interpolado + elevação sutil nos cards da Home, seta animada, fundo bokeh vivo, barra lateral pulsante nos cards focados, equalizador animado na lista de músicas e toasts com entrada/saída suave.
+- **Documentação GitHub Atualizada:** `README.md`, `README.pt-BR.md`, `CHANGELOG.md`, `releases/RELEASE_NOTES.md`, `docs/INSTALL.md`, `docs/CONTROLS.md`, `docs/MEDIA.md` e `docs/BUILD.md` atualizados para a v2.1.0.
+
+## v2.0.9 — Correção Crítica do Lançador `KPlayer.sh` & Novas Artes Transparentes do Disco K
+
+- **Correção do Lançador `.sh` (`ports/KPlayer.sh` & `ports/kplayer/updater.py`):** Restaurado o nome fixo **`KPlayer.sh`** (sem espaços) com a versão atualizada internamente, reinício seguro via `exec bash "$script_dir/KPlayer.sh"`, proteção FAT32/exFAT e limpeza automática de sobras quebradas `KPlayer v*.sh`.
+- **Novas Artes em Alta Resolução Fiéis ao Disco de Vinil K (`kplayer/scraper/`):** Capa PNG transparente (`1200×1200`), Marquee PNG transparente (`1600×490`), Boxart vertical (`900×1200`) e Fanart Full HD (`1920×1080`).
+- **Zero Edição de XML:** Removida a edição automática de `gamelist.xml` — os arquivos XML do usuário permanecem 100% intactos.
+
+## v2.0.8 — Pacote de Imagens de Scraper
+
+- Adicionada pasta dedicada `kplayer/scraper/` com artes de capa, marquee, boxart e fanart para frontends EmulationStation/dArkOS.
+
+## v2.0.7 — Changelog Pós-Atualização, Visualizador 30s Padrão & Home Climática Inteligente
+
+- **Changelog Pós-Atualização (Uma Única Vez):** Tela dedicada *"Novidades da versão vX.Y.Z"* exibida automaticamente na primeira inicialização após cada atualização.
+- **Protetor de Tela em 30s por Padrão:** Visualizadores estilo Windows Media Player ativados automaticamente após 30 segundos tocando música ou rádio (configurável em `SELECT → Protetor de tela`), com relógio, data, clima e letras `.LRC`.
+- **Saudação Climática Inteligente na Home:** Substitui *"Seu som. Sua tela."* por mensagens dinâmicas baseadas no clima atual + sugestões descontraídas aleatórias quando o clima está ativo; mantém o texto padrão quando desativado.
+- **Barra de Carregamento do Atualizador:** Progresso ao vivo (0%–100%) com etapas detalhadas ao verificar e baixar atualizações.
+
+## v2.0.6 — Layout Invertível na Home & Tutorial de Comandos
+
+- Nova organização da tela inicial com Clima Open-Meteo ampliado embaixo e Mini Player compacto no topo (invertível em `SELECT → Layout da tela inicial`).
+- Tutorial visual de **Comandos** na primeira inicialização e acessível a qualquer momento em `SELECT → Rever comandos`.
+
+## v2.0.5 — Paridade Nativa R36S & Auto-Updater Refinado
+
+- Aplicadas todas as novidades da série 2.0.2–2.0.4 no binário nativo C/SDL2 do R36S.
+- Auto-updater R36S reforçado com cache-busting, retries, espelho GitHub Releases, verificação SHA-256 e auto-reload.
+- Workflow de `updates/` e GitHub Releases focado 100% na edição R36S.
+
+## v2.0.4 — Clima Open-Meteo (`X`), Opções em Ordem Alfabética & Barra Inferior Removida
+
+- Adicionado aplicativo nativo de **Clima Open-Meteo** no botão **`X`** da Home (detecção via IP ou busca manual de cidade) + widget de clima na tela inicial.
+- Menu de **Opções (`SELECT`)** reorganizado em ordem alfabética direta (com `[A] Verificar atualizações` em penúltimo e `Sair` por último) e barra de atalhos inferior removida para visual mais limpo.
+
 ## v2.0.3 — Adaptive R36S & Android Displays, CI Sanitizer Hardening & Cross-Device Scaling
 
 - **Adaptive R36S Display & Viewport Scaling (Native C/SDL2 + Web):** Upgraded the primary R36S edition (`source/kplayer.c`) to detect the user's actual screen resolution via `SDL_GetDesktopDisplayMode` / `SDL_GetRendererOutputSize`, use `SDL_WINDOW_FULLSCREEN_DESKTOP` + `SDL_RenderSetLogicalSize(renderer, W, H)` with smooth linear filtering, and adapt `format_video()` decode resolution dynamically up to `1920×1080` while preserving crisp aspect ratios on 640×480 handhelds, 720p/1080p screens, and external displays. Updated the web R36S stage with a responsive adaptive viewport (`Auto`, `4:3`, `1:1`, `16:9`) powered by CSS container queries (`@container`).

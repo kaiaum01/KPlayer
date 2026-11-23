@@ -92,10 +92,12 @@ export interface OptionsMenuProps {
   screensaverVizStyle: number;
   screensaverShowClock: boolean;
   screensaverShowLyrics: boolean;
+  uiSfxEnabled: boolean;
   onSetThemeIndex: (idx: number) => void;
   onSetLanguage: (lang: LanguageCode) => void;
   onSetDisplayMode: (mode: 'auto' | 'r36s' | 'square' | 'wide') => void;
   onToggleHomeLayout: () => void;
+  onToggleUiSfx: () => void;
   onCycleScreensaverTimeout: () => void;
   onCycleScreensaverViz: () => void;
   onToggleScreensaverClock: () => void;
@@ -193,10 +195,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     screensaverVizStyle,
     screensaverShowClock,
     screensaverShowLyrics,
+    uiSfxEnabled,
     onSetThemeIndex,
     onSetLanguage,
     onSetDisplayMode,
     onToggleHomeLayout,
+    onToggleUiSfx,
     onCycleScreensaverTimeout,
     onCycleScreensaverViz,
     onToggleScreensaverClock,
@@ -575,7 +579,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         : undefined;
       const updValue = updateStatus?.updateAvailable
         ? `Nova v${updateStatus.latestVersion}`
-        : `v${updateStatus?.currentVersion ?? '2.0.9'}`;
+        : `v${updateStatus?.currentVersion ?? '2.1.0'}`;
 
       return [
         {
@@ -613,6 +617,13 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           label: 'Rever comandos',
           value: 'Tutorial do controle',
           onSelect: onOpenCommandsTutorial,
+        },
+        {
+          id: 'ui-sfx',
+          label: tr('Sons das teclas', language),
+          value: tr(uiSfxEnabled ? 'Ativada' : 'Desativada', language),
+          selected: uiSfxEnabled,
+          onSelect: onToggleUiSfx,
         },
         {
           id: 'theme',
@@ -938,6 +949,8 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     onToggleScreensaverClock,
     onToggleScreensaverLyrics,
     onStartScreensaverNow,
+    uiSfxEnabled,
+    onToggleUiSfx,
     goBack,
   ]);
 
@@ -987,7 +1000,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
   };
 
   return (
-    <div className="w-full h-full relative overflow-hidden flex flex-col">
+    <div className="w-full h-full relative overflow-hidden flex flex-col kp-screen-enter">
       <ModernBackdrop theme={theme} />
       <HeaderBar theme={theme} section={tr('OPÇÕES', language)} location={locationLabel} />
 
@@ -1047,12 +1060,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 <div style={{ color: theme.accent }} className="text-[12.5px] font-extrabold">
                   {updateStatus?.updateAvailable
                     ? `Nova versão disponível: v${updateStatus.latestVersion}`
-                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.0.9'}`}
+                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.1.0'}`}
                 </div>
                 <div style={{ color: theme.muted }} className="text-[11.5px] mt-0.5">
                   {updateStatus?.updateAvailable
                     ? 'Pronta para baixar da pasta updates/ do GitHub e reiniciar automaticamente.'
-                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.0.10'} e próximas versões na pasta updates/.`}
+                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.1.1'} e próximas versões na pasta updates/.`}
                 </div>
               </div>
               <span
@@ -1200,7 +1213,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         )}
 
         {/* Pure Vertical Select-First Menu List */}
-        <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-2">
+        <div key={section} className="mt-2.5 flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 space-y-2 kp-screen-enter">
           {entries.map((entry, idx) => {
             const focused = idx === cursor;
             return (
@@ -1213,7 +1226,9 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                   ...modernCardStyle(theme, focused, 11, theme.panel),
                   minHeight: 46,
                 }}
-                className="w-full px-4 py-2.5 flex items-center justify-between gap-3 text-left cursor-pointer transition-all"
+                className={`w-full px-4 py-2.5 flex items-center justify-between gap-3 text-left cursor-pointer kp-tile-anim active:scale-[0.985] ${
+                  focused ? 'translate-x-[2px]' : ''
+                }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   {entry.leadingTag && (

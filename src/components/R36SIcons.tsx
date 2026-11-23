@@ -78,12 +78,21 @@ export function modernPillStyle(theme: KpTheme, active: boolean): React.CSSPrope
 export function ModernBackdrop({ theme }: { theme: KpTheme }) {
   return (
     <div
-      className="absolute inset-0 pointer-events-none"
+      className="absolute inset-0 pointer-events-none overflow-hidden"
       style={{
         backgroundColor: theme.bg,
-        backgroundImage: `radial-gradient(ellipse 85% 65% at 0% 0%, ${rgbToRgba(theme.accent, 0.19)} 0%, transparent 72%), radial-gradient(ellipse 60% 50% at 100% 100%, ${rgbToRgba(theme.accent, 0.1)} 0%, transparent 70%)`,
+        backgroundImage: `radial-gradient(ellipse 85% 65% at 0% 0%, ${rgbToRgba(theme.accent, 0.21)} 0%, transparent 72%), radial-gradient(ellipse 60% 50% at 100% 100%, ${rgbToRgba(theme.accent, 0.12)} 0%, transparent 70%)`,
       }}
-    />
+    >
+      <div
+        className="absolute -top-12 left-[14%] w-48 h-48 rounded-full blur-3xl kp-orb-drift"
+        style={{ backgroundColor: rgbToRgba(theme.accent, 0.14) }}
+      />
+      <div
+        className="absolute -bottom-16 right-[10%] w-56 h-56 rounded-full blur-3xl kp-orb-drift-rev"
+        style={{ backgroundColor: rgbToRgba(theme.accent, 0.11) }}
+      />
+    </div>
   );
 }
 
@@ -107,7 +116,13 @@ export function KpSprite({
   className?: string;
 }) {
   const meta = SHEET_META[sheet];
-  const row = KP_SPRITE_THEME_ROWS[themeIndex] ?? 3;
+  // Extended themes (7..13) map cleanly onto the white/dark sprite rows with CSS accent hue polish
+  const row =
+    themeIndex < KP_SPRITE_THEME_ROWS.length
+      ? KP_SPRITE_THEME_ROWS[themeIndex]
+      : themeIndex === 12
+      ? 2
+      : 0;
   return (
     <span
       aria-hidden="true"
@@ -559,7 +574,7 @@ export function FooterBar({
         border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
         boxShadow: `0 4px 18px ${rgbToRgba(theme.bg, 0.55)}`,
       }}
-      className="absolute left-4 right-4 max-w-[520px] mx-auto bottom-3 z-30 flex items-center justify-center text-[12px] font-semibold px-4 pointer-events-none"
+      className="kp-toast-in absolute left-4 right-4 max-w-[520px] mx-auto bottom-3 z-30 flex items-center justify-center text-[12px] font-semibold px-4 pointer-events-none"
     >
       <span className="truncate">{toast}</span>
     </div>

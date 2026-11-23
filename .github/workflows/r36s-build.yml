@@ -67,8 +67,8 @@ jobs:
           file ports/kplayer/kplayer
       - name: Testar scripts Python e placares
         run: |
-          python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py
-          python3 -m unittest discover -s tests -p test_football.py -v
+          python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py ports/kplayer/news_fetch.py
+          python3 -m unittest discover -s tests -p "test_*.py" -v
       - name: Gravar repositório do canal de auto-update
         run: echo "${{ github.repository }}" > ports/kplayer/update-repo.txt
       - name: Criar pacote instalável

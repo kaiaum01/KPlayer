@@ -1,20 +1,32 @@
 {
   "schemaVersion": 2,
-  "latest": "2.0.9",
+  "latest": "2.1.0",
   "releases": [
+    {
+      "version": "2.1.0",
+      "releaseTag": "v2.1.0",
+      "releasedAt": "2026-11-23T01:00:00Z",
+      "r36s": "updates/v2.1.0/KPlayer-v2.1.0-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Nova aba Notícias (antes do Placar da Bola) com manchetes do Brasil em português (Urgente, Mundo, Polícia, Entretenimento e Esportes) via NewsData.io com fallback RSS ao vivo",
+        "Dashboard reorganizada com Músicas e Vídeos unificados em um só card (Músicas e Vídeos, Arquivos, Rádio Online, IPTV, Notícias e Placar da Bola)",
+        "Correção definitiva das listras internas em caixas translúcidas e HUD do protetor de tela em todos os 14 temas do R36S, agora com gradiente suave real e borda nítida",
+        "10 visualizadores reativos ao áudio no Protetor de Tela (+ Automático), 14 temas exclusivos e sons táteis das teclas",
+        "Mais animações em toda a interface e documentação completa atualizada no GitHub"
+      ]
+    },
     {
       "version": "2.0.9",
       "releaseTag": "v2.0.9",
-      "releasedAt": "2026-11-23T02:12:43Z",
+      "releasedAt": "2026-11-22T23:59:00Z",
       "r36s": "updates/v2.0.9/KPlayer-v2.0.9-R36S.zip",
-      "sha256": "7b48ca0c736431c9b0e4c304db97030b1ffc48694a1461c8ae3ed8af2f694464",
+      "sha256": "25454bafb8f73a05ab8215170bae376ac2b6f245429329eb7f889f428be2a08f",
       "notes": [
-        "Correção Crítica do Lançador KPlayer.sh (Abre e Reinicia Sempre):",
-        "Corrigido o problema da v2.0.8 em que o script .sh mudava de nome (KPlayer v2.0.8.sh), procurava um arquivo versionado e impedia o EmulationStation de abrir o KPlayer.",
-        "Restaurado o lançador fixo KPlayer.sh (sem espaços no nome, com a versão v2.0.9 gravada internamente), reinício seguro via exec bash \"$script_dir/KPlayer.sh\", proteção contra erros",
-        "Novas Imagens de Alta Resolução Fiéis ao Disco de Vinil K Original (dentro de kplayer/scraper/):",
-        "Capa Principal (Fundo Transparente PNG32): kplayer/scraper/kplayer-image.png (1200×1200 RGBA) — disco de vinil preto com centro verde esmeralda K, anel duplo branco e legenda PLAYE",
-        "Marquee / Logo (Fundo Transparente PNG32): kplayer/scraper/kplayer-marquee.png (1600×490 RGBA) — logo horizontal grande com o disco de vinil K + tipografia K PLAYER com contorno es"
+        "Corrigido bug do lançador .sh que procurava arquivo versionado e impedia abrir o app: restaurado KPlayer.sh estável com versão atualizada internamente e limpeza de KPlayer v*.sh",
+        "Novas artes de alta resolução fiéis ao disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490)",
+        "Boxart vertical (900×1200) e Fanart Full HD (1920×1080) do disco K salvos em kplayer/scraper/",
+        "Edição automática de metadados no gamelist.xml removida — seus XMLs não são mais alterados pelo player"
       ]
     },
     {

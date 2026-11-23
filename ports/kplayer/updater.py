@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Safe atomic auto-updater for KPlayer R36S (v2.0.9).
+"""Safe atomic auto-updater for KPlayer R36S (v2.1.0).
 
 Checks the GitHub updates/latest.json channel (with GitHub Releases fallback)
-for any version newer than the installed one (e.g. 2.0.8 -> 2.0.9 -> 2.0.10),
+for any version newer than the installed one (e.g. 2.0.9 -> 2.1.0 -> 2.1.1),
 downloads and SHA-256 verifies the R36S ZIP package, applies updated binaries
 and assets atomically while strictly preserving all user data, gamelist.xml,
 and history, keeps `KPlayer.sh` stable (updating the version inside it and
@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-CURRENT_FALLBACK = "2.0.9"
+CURRENT_FALLBACK = "2.1.0"
 UA = f"KPlayer-Updater/{CURRENT_FALLBACK}"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",
@@ -48,6 +48,7 @@ PRESERVE_PREFIXES = (
     "kplayer/settings.cfg",
     "kplayer/preferences.cfg",
     "kplayer/weather.cfg",
+    "kplayer/news.cfg",
     "kplayer/history.txt",
     "kplayer/favorites.txt",
     "kplayer/radio-favorites.tsv",
@@ -62,6 +63,7 @@ EXECUTABLE_NAMES = {
     "iptv_fetch.py",
     "football_fetch.py",
     "weather_fetch.py",
+    "news_fetch.py",
     "updater.py",
 }
 

@@ -380,12 +380,40 @@ int main(void) {
   snprintf(folder, sizeof(folder), "midias");
   mode = 3;
   dash_focus = 0;
+  key(SDLK_RETURN, false);
+  assert(mode == 0 && category == 0 && automatic_view);
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 3 && !automatic_view);
   key(SDLK_RIGHT, false);
   assert(dash_focus == 1);
   key(SDLK_RETURN, false);
-  assert(mode == 0 && category == 2 && automatic_view);
+  assert(mode == 0 && locations_view);
   key(SDLK_BACKSPACE, false);
-  assert(mode == 3 && !automatic_view);
+  assert(mode == 3);
+  /* Verify Notícias tile (index 4, right before Placar da Bola) & renderer */
+  dash_focus = 4;
+  mode = 15;
+  news_count = 1;
+  news_filter = 0;
+  snprintf(news_articles[0].category, sizeof(news_articles[0].category), "breaking");
+  snprintf(news_articles[0].cat_label, sizeof(news_articles[0].cat_label), "Urgente");
+  snprintf(news_articles[0].title, sizeof(news_articles[0].title), "Teste de manchete nacional");
+  snprintf(news_articles[0].source, sizeof(news_articles[0].source), "G1 Brasil");
+  snprintf(news_articles[0].date, sizeof(news_articles[0].date), "23/11 08:30");
+  snprintf(news_articles[0].summary, sizeof(news_articles[0].summary), "Resumo de teste sem listras.");
+  snprintf(news_articles[0].body, sizeof(news_articles[0].body), "Corpo completo da notícia de teste.");
+  news_selected = 0;
+  news_offset = 0;
+  news_detail_open = false;
+  news_busy = false;
+  draw_news();
+  key(SDLK_RETURN, false);
+  assert(news_detail_open);
+  draw_news();
+  key(SDLK_BACKSPACE, false);
+  assert(!news_detail_open);
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 3);
   /* Storage navigation uses actual temporary folders, never /roms on the host.
    */
   char temp[] = "/tmp/kplayer-storage-XXXXXX";

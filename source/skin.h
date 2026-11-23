@@ -50,7 +50,8 @@ static void draw_header(const char *section) {
   update_status();
   rect(0, 0, 640, 32, alpha(panel, 215));
   rect(0, 32, 640, 1, hairline());
-  glow_circle(18, 16, 4, accent, 4);
+  float dot_p = preview_mode ? 0.5f : (0.5f + 0.5f * sinf((float)SDL_GetTicks() * 0.004f));
+  glow_circle(18, 16, 4, alpha(accent, (int)(175.0f + dot_p * 80.0f)), 4 + (int)(dot_p * 2.0f));
   fill_circle(18, 16, 4, accent);
   label("K PLAYER", 30, 8, 15, textc, 85);
   label(KPLAYER_VERSION, 113, 10, 11, dim, 34);
@@ -117,10 +118,21 @@ static void footer_hints(const FooterHint *hints, int count) {
    * Keep only floating status toasts cleanly at the bottom edge. */
   (void)hints;
   (void)count;
-  if (SDL_GetTicks() < note_until) {
-    glow_rect(30, 434, 580, 32, 16, accent, 4);
-    rounded(30, 434, 580, 32, 16, elevated);
-    centered(status_note, 40, 442, 560, 13, accent);
+  uint32_t now = SDL_GetTicks();
+  if (now < note_until) {
+    uint32_t rem = note_until - now;
+    uint32_t age = (rem <= 4000u) ? (4000u - rem) : 4000u;
+    float enter = age < 220u ? ((float)age / 220.0f) : 1.0f;
+    float leave = rem < 320u ? ((float)rem / 320.0f) : 1.0f;
+    float ease_in = 1.0f - (1.0f - enter) * (1.0f - enter);
+    float vis = ease_in * leave;
+    int ty = 434 + (int)((1.0f - ease_in) * 26.0f) + (int)((1.0f - leave) * 14.0f);
+    int ta = (int)(vis * 255.0f);
+    if (ta > 8) {
+      glow_rect(30, ty, 580, 32, 16, alpha(accent, ta), 4);
+      rounded(30, ty, 580, 32, 16, alpha(elevated, ta));
+      centered(status_note, 40, ty + 8, 560, 13, alpha(accent, ta));
+    }
   }
 }
 static void progress(int x, int y, int w) {
@@ -129,6 +141,7 @@ static void progress(int x, int y, int w) {
   rounded(x, y, w, 4, 2, track_color());
   int fill = (int)(w * p);
   if (fill > 0) rounded(x, y, fill > 4 ? fill : 4, 4, 2, accent);
+  glow_circle(x + fill, y + 2, 5, alpha(accent, 190), 3);
   fill_circle(x + fill, y + 2, 5, textc);
 }
 /* Small arrow used on home tiles. */
@@ -199,31 +212,63 @@ static void draw_home(void) {
     draw_home_weather_widget();
   else
     draw_home_mini_player();
-  const char *names[] = {tr("Músicas"), tr("Vídeos"), tr("Arquivos"),
-                         tr("Rádio Online"), tr("IPTV"), tr("Placar da Bola")},
-             *desc[] = {tr("Sua trilha sonora"), tr("Cinema na palma"),
-                        tr("Explore as pastas"), tr("Estações do mundo"),
-                        tr("Canais ao vivo"), tr("Jogos e estatísticas")},
-             *tags[] = {tr("LRC Sync"), tr("Pesquisa"), tr("Mídias locais"),
-                        tr("Radio Browser"), tr("TV & EPG"), tr("Ao vivo")};
+  const char *names[] = {tr("Músicas e Vídeos"), tr("Arquivos"), tr("Rádio Online"),
+                         tr("IPTV"), tr("Notícias"), tr("Placar da Bola")},
+             *desc[] = {tr("Áudio, vídeo e letras"), tr("Explore as pastas"),
+                        tr("Estações do mundo"), tr("Canais ao vivo"),
+                        tr("Últimas do dia"), tr("Jogos e estatísticas")},
+             *tags[] = {tr("LRC & Cinema"), tr("Mídias locais"), tr("Radio Browser"),
+                        tr("TV & EPG"), tr("Brasil • Hoje"), tr("Ao vivo")};
+  static const int tile_sprite_col[6] = {0, 2, 3, 4, -1, 5};
+  static float home_aura_x = -1.0f, home_aura_y = -1.0f;
+  float target_ax = (float)(16 + (dash_focus % 3) * 208);
+  float target_ay = (float)(104 + (dash_focus / 3) * 112);
+  if (preview_mode || home_aura_x < 0.0f) {
+    home_aura_x = target_ax;
+    home_aura_y = target_ay;
+  } else {
+    home_aura_x += (target_ax - home_aura_x) * 0.34f;
+    home_aura_y += (target_ay - home_aura_y) * 0.34f;
+    if (fabsf(target_ax - home_aura_x) > 0.6f || fabsf(target_ay - home_aura_y) > 0.6f)
+      ui_anim_kick(160);
+  }
+  float home_pulse = preview_mode ? 0.5f : (0.5f + 0.5f * sinf((float)SDL_GetTicks() * 0.0055f));
+  glow_rect((int)lroundf(home_aura_x), (int)lroundf(home_aura_y) - 2, 192, 102, 16,
+            alpha(accent, (int)(185.0f + home_pulse * 70.0f)), 7);
   for (int i = 0; i < 6; i++) {
-    int x = 16 + (i % 3) * 208, y = 104 + (i / 3) * 112;
+    int x = 16 + (i % 3) * 208;
     bool focus = i == dash_focus;
-    if (focus) {
-      glow_rect(x, y, 192, 102, 16, accent, 6);
-      rounded(x, y, 192, 102, 16, accent);
-    } else
-      rounded(x, y, 192, 102, 16, hairline());
+    int lift = (focus && !preview_mode) ? -2 : 0;
+    int y = 104 + (i / 3) * 112 + lift;
     rounded_gradient(x + (focus ? 2 : 1), y + (focus ? 2 : 1), 192 - (focus ? 4 : 2),
                      102 - (focus ? 4 : 2), focus ? 14 : 15,
-                     mix(elevated, accent, focus ? 0.22f : 0.10f), panel);
-    rounded(x + 12, y + 12, 38, 38, 12, mix(panel, textc, 0.08f));
+                     mix(elevated, accent, focus ? (0.22f + home_pulse * 0.06f) : 0.10f), panel);
+    if (focus) {
+      SDL_Color fc = mix(accent, textc, home_pulse * 0.14f);
+      rounded_outline(x, y, 192, 102, 16, fc);
+      rounded_outline(x + 1, y + 1, 190, 100, 15, fc);
+    } else {
+      rounded_outline(x, y, 192, 102, 16, hairline());
+    }
     rounded(x + 13, y + 13, 36, 36, 11, alpha(bg, 165));
-    if (!kp_sprite(KP_SPR_CATEGORIES, i, x + 18, y + 18, 26, 26))
-      icon(i == 3 ? 2 : i >= 4 ? 1 : i, x + 19, y + 19, 24, accent);
+    rounded_outline(x + 12, y + 12, 38, 38, 12, mix(panel, textc, 0.10f));
+    if (i == 4) {
+      /* Crisp custom vector newspaper icon for Notícias */
+      int ix = x + 20, iy = y + 20;
+      rounded_outline(ix, iy, 22, 20, 4, accent);
+      rounded_outline(ix + 1, iy + 1, 20, 18, 3, accent);
+      rect(ix + 4, iy + 5, 7, 6, accent);
+      rect(ix + 13, iy + 5, 5, 2, accent);
+      rect(ix + 13, iy + 9, 5, 2, accent);
+      rect(ix + 4, iy + 13, 14, 2, mix(accent, textc, 0.25f));
+    } else if (tile_sprite_col[i] < 0 ||
+               !kp_sprite(KP_SPR_CATEGORIES, tile_sprite_col[i], x + 18, y + 18, 26, 26)) {
+      icon(i == 1 ? 2 : i == 3 ? 1 : 0, x + 19, y + 19, 24, accent);
+    }
     label(tags[i], x + 60, y + 15, 11, accent, 104);
-    tile_arrow(x + 170, y + 14, focus ? accent : dim);
-    label(names[i], x + 14, y + 56, 18, textc, 168);
+    int arrow_shift = (focus && !preview_mode) ? (int)(home_pulse * 2.5f) : 0;
+    tile_arrow(x + 170 + arrow_shift, y + 14 - arrow_shift, focus ? accent : dim);
+    label(names[i], x + 14, y + 56, 17, textc, 168);
     label(desc[i], x + 14, y + 80, 11, muted, 168);
   }
   /* Bottom large section: Weather (v2.0.6 default) or Full Player (inverted). */
@@ -239,7 +284,10 @@ static void draw_menu(void) {
     return;
   }
   backdrop();
-  draw_header(category == 2 ? tr("VÍDEOS") : tr("ARQUIVOS"));
+  draw_header(locations_view ? tr("ARQUIVOS")
+              : category == 2 ? tr("VÍDEOS")
+              : category == 1 ? tr("MÚSICAS")
+                              : tr("MÚSICAS E VÍDEOS"));
   panel_card(14, 38, 612, 66, 14);
   icon(2, 26, 48, 22, accent);
   label(favorites_view   ? tr("Minhas favoritas")
@@ -390,9 +438,13 @@ static void draw_audio_rows(bool files) {
     if (dir)
       icon(2, 282, y + 12, 18, accent);
     else if (playing) {
-      rect(284, y + 15, 3, 12, accent);
-      rect(289, y + 10, 3, 17, accent);
-      rect(294, y + 13, 3, 14, accent);
+      float et = preview_mode ? 0.5f : (float)SDL_GetTicks() * 0.008f;
+      int h1 = 6 + (int)(fabsf(sinf(et * 1.1f)) * 12.0f);
+      int h2 = 6 + (int)(fabsf(sinf(et * 1.7f + 1.3f)) * 14.0f);
+      int h3 = 6 + (int)(fabsf(sinf(et * 1.4f + 2.6f)) * 11.0f);
+      rect(284, y + 29 - h1, 3, h1, accent);
+      rect(289, y + 29 - h2, 3, h2, accent);
+      rect(294, y + 29 - h3, 3, h3, accent);
     } else
       triangle(285, y + 12, 14, muted);
     label(playing ? title : base, 310, y + 6, 14, playing ? accent : textc,
@@ -526,10 +578,13 @@ static void draw_video(void) {
   if (show_osd && (SDL_GetTicks() < osd_until || paused || preview_mode)) {
     draw_header(tr("VÍDEOS"));
     rounded(16, 46, 88, 28, 14, alpha(panel, 225));
+    rounded_outline(16, 46, 88, 28, 14, alpha(textc, 30));
     label(tr("A  Voltar"), 29, 54, 13, textc, 66);
     rounded(450, 46, 174, 28, 14, alpha(panel, 225));
+    rounded_outline(450, 46, 174, 28, 14, alpha(textc, 30));
     label(tr("Controles ocultam em 3s"), 461, 54, 11, muted, 158);
-    rounded(16, 328, 608, 100, 18, alpha(panel, 235));
+    rounded_gradient(16, 328, 608, 100, 18, alpha(elevated, 232), alpha(panel, 224));
+    rounded_outline(16, 328, 608, 100, 18, alpha(textc, 32));
     label(media_name, 32, 340, 18, textc, 400);
     char a[32], b[32], s[80];
     time_string(now_ms(), a, sizeof(a));

@@ -214,7 +214,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.0.9' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.1.0' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -869,7 +869,7 @@ async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<s
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-EPG/2.0.9' },
+      headers: { 'User-Agent': 'KPlayer-EPG/2.1.0' },
     });
     clearTimeout(timer);
     if (!res.ok) return '';
@@ -1648,7 +1648,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.0.9' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.1.0' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1669,7 +1669,7 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipFilename = 'KPlayer-v2.0.9-R36S.zip';
+  const r36sZipFilename = 'KPlayer-v2.1.0-R36S.zip';
   const r36sZipPath = path.join(__dirname, 'releases', r36sZipFilename);
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
@@ -1684,14 +1684,14 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.0.9',
+        version: '2.1.0',
         filename: r36sZipFilename,
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
       });
     } catch {
-      return res.status(404).json({ ready: false, version: '2.0.9', filename: r36sZipFilename });
+      return res.status(404).json({ ready: false, version: '2.1.0', filename: r36sZipFilename });
     }
   });
 
@@ -1746,7 +1746,7 @@ async function createServer() {
 
   function nextPatchVersion(ver: string): string {
     const m = ver.trim().replace(/^v/i, '').match(SEMVER_RE);
-    if (!m) return '2.0.10';
+    if (!m) return '2.1.1';
     return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
   }
 
@@ -1772,7 +1772,7 @@ async function createServer() {
     } catch {
       // Fallback below
     }
-    return '2.0.9';
+    return '2.1.0';
   }
 
   async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
@@ -2471,7 +2471,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.9' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.0' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -2582,7 +2582,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.0.9' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.0' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -2780,7 +2780,7 @@ async function createServer() {
     try {
       const r = await fetch('https://ipwho.is/', {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.9' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.0' },
       });
       const data = (await r.json()) as {
         success?: boolean;
@@ -2875,7 +2875,7 @@ async function createServer() {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=pt&format=json`;
       const upstream = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.9' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.0' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ results: [], error: 'geocoding_unavailable' });
@@ -2938,7 +2938,7 @@ async function createServer() {
         `&timezone=auto&forecast_days=7`;
       const upstream = await fetch(apiUrl, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.0.9' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.0' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ error: 'weather_unavailable' });
@@ -3040,6 +3040,267 @@ async function createServer() {
     }
   });
 
+  // ==================== NOTÍCIAS BRASIL (NEWSDATA.IO + PUBLIC RSS FALLBACK) ====================
+  interface NormalizedNewsArticle {
+    id: string;
+    title: string;
+    description: string;
+    content: string;
+    source: string;
+    pubDate: string;
+    category: 'breaking' | 'world' | 'crime' | 'entertainment' | 'sports';
+    categoryLabel: string;
+    imageUrl: string;
+    link: string;
+  }
+
+  const NEWS_ALLOWED_CATS = new Set(['all', 'breaking', 'world', 'crime', 'entertainment', 'sports']);
+  const NEWS_DEFAULT_CATS = 'world,breaking,crime,entertainment,sports';
+  const NEWS_CAT_LABELS: Record<string, string> = {
+    breaking: 'Urgente',
+    world: 'Mundo',
+    crime: 'Polícia',
+    entertainment: 'Entretenimento',
+    sports: 'Esportes',
+  };
+  const NEWS_RSS_FEEDS: Array<{ cat: NormalizedNewsArticle['category']; source: string; url: string }> = [
+    { cat: 'breaking', source: 'G1 Brasil', url: 'https://g1.globo.com/rss/g1/' },
+    { cat: 'world', source: 'G1 Mundo', url: 'https://g1.globo.com/rss/g1/mundo/' },
+    { cat: 'crime', source: 'G1 Brasil', url: 'https://g1.globo.com/rss/g1/brasil/' },
+    { cat: 'entertainment', source: 'G1 Pop & Arte', url: 'https://g1.globo.com/rss/g1/pop-arte/' },
+    { cat: 'sports', source: 'GE Esportes', url: 'https://ge.globo.com/rss/ge/' },
+  ];
+  const newsCache = new Map<
+    string,
+    { ts: number; provider: 'newsdata' | 'rss'; articles: NormalizedNewsArticle[] }
+  >();
+
+  const stripHtmlNews = (raw: string, limit: number): string =>
+    decodeXmlEntities(raw.replace(/<[^>]+>/g, ' '))
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, limit);
+
+  const formatNewsDateBr = (raw: string): string => {
+    const s = (raw || '').trim();
+    if (!s) return '';
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    if (iso) return `${iso[3]}/${iso[2]} ${iso[4]}:${iso[5]}`;
+    const parsed = Date.parse(s);
+    if (!Number.isNaN(parsed)) {
+      try {
+        return new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+          .format(new Date(parsed))
+          .replace(',', '');
+      } catch {
+        return '';
+      }
+    }
+    return s.slice(0, 20);
+  };
+
+  const normalizeNewsCategory = (
+    rawCats: unknown,
+    fallback: NormalizedNewsArticle['category']
+  ): NormalizedNewsArticle['category'] => {
+    const list = Array.isArray(rawCats) ? rawCats : typeof rawCats === 'string' ? [rawCats] : [];
+    for (const c of list) {
+      const low = String(c ?? '').trim().toLowerCase();
+      if (low === 'breaking' || low === 'world' || low === 'crime' || low === 'entertainment' || low === 'sports') {
+        return low;
+      }
+    }
+    return fallback;
+  };
+
+  const parseNewsRssXml = (
+    xml: string,
+    cat: NormalizedNewsArticle['category'],
+    sourceLabel: string
+  ): NormalizedNewsArticle[] => {
+    const out: NormalizedNewsArticle[] = [];
+    const itemRe = /<item>([\s\S]*?)<\/item>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = itemRe.exec(xml)) !== null && out.length < 14) {
+      const body = m[1];
+      const titleM = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const descM = body.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
+      const dateM = body.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
+      const linkM = body.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
+      const imgM =
+        body.match(/<media:content[^>]*url="([^"]+)"/i) ||
+        body.match(/<enclosure[^>]*url="([^"]+)"/i) ||
+        body.match(/<img[^>]*src="([^"]+)"/i);
+
+      const title = titleM ? stripHtmlNews(titleM[1], 220) : '';
+      if (!title) continue;
+      const desc = descM ? stripHtmlNews(descM[1], 480) : title;
+      const rawLink = linkM ? decodeXmlEntities(linkM[1]).trim() : '';
+      const rawImg = imgM ? decodeXmlEntities(imgM[1]).trim() : '';
+
+      out.push({
+        id: `rss-${cat}-${out.length}-${title.slice(0, 24)}`,
+        title,
+        description: desc || title,
+        content: desc || title,
+        source: sourceLabel,
+        pubDate: dateM ? formatNewsDateBr(decodeXmlEntities(dateM[1])) : '',
+        category: cat,
+        categoryLabel: NEWS_CAT_LABELS[cat] ?? 'Brasil',
+        imageUrl: rawImg && isSafeExternalUrl(rawImg) ? rawImg : '',
+        link: rawLink && isSafeExternalUrl(rawLink) ? rawLink : '',
+      });
+    }
+    return out;
+  };
+
+  app.get('/api/news', async (req, res) => {
+    const rawCat = String(req.query.category ?? 'all').trim().toLowerCase();
+    const cat = NEWS_ALLOWED_CATS.has(rawCat) ? rawCat : 'all';
+    const force = req.query.refresh === '1' || req.query.refresh === 'true';
+
+    const cached = newsCache.get(cat);
+    if (!force && cached && Date.now() - cached.ts < 5 * 60_000) {
+      return res.json({
+        ok: true,
+        provider: cached.provider,
+        category: cat,
+        fetchedAt: cached.ts,
+        cached: true,
+        articles: cached.articles,
+      });
+    }
+
+    const apiKey = (process.env.NEWSDATA_API_KEY || '').trim();
+    let articles: NormalizedNewsArticle[] = [];
+    let provider: 'newsdata' | 'rss' = 'newsdata';
+
+    if (apiKey) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+      try {
+        const params = new URLSearchParams({
+          apikey: apiKey,
+          country: 'br',
+          language: 'pt',
+          category: cat === 'all' ? NEWS_DEFAULT_CATS : cat,
+        });
+        const upstream = await fetch(`https://newsdata.io/api/1/latest?${params.toString()}`, {
+          signal: controller.signal,
+          headers: { 'User-Agent': 'KPlayer-R36S/2.1.0', Accept: 'application/json' },
+        });
+        clearTimeout(timer);
+        if (upstream.ok) {
+          const json = (await upstream.json()) as {
+            status?: string;
+            results?: Array<{
+              article_id?: string;
+              title?: string;
+              description?: string | null;
+              content?: string | null;
+              pubDate?: string | null;
+              source_name?: string | null;
+              source_id?: string | null;
+              category?: string[] | string | null;
+              image_url?: string | null;
+              link?: string | null;
+            }>;
+          };
+          if (json.status === 'success' && Array.isArray(json.results)) {
+            const seen = new Set<string>();
+            const fallbackCat = (cat === 'all' ? 'breaking' : cat) as NormalizedNewsArticle['category'];
+            for (const item of json.results.slice(0, 40)) {
+              const title = stripHtmlNews(String(item.title ?? ''), 220);
+              if (!title || seen.has(title.toLowerCase())) continue;
+              seen.add(title.toLowerCase());
+              const normCat = normalizeNewsCategory(item.category, fallbackCat);
+              const desc = stripHtmlNews(String(item.description ?? ''), 520) || title;
+              const rawContent = stripHtmlNews(String(item.content ?? ''), 1800);
+              const content =
+                !rawContent || rawContent.toUpperCase().includes('ONLY AVAILABLE IN PAID PLANS')
+                  ? desc
+                  : rawContent;
+              const rawImg = String(item.image_url ?? '').trim();
+              const rawLink = String(item.link ?? '').trim();
+              articles.push({
+                id: String(item.article_id || `nd-${articles.length}`),
+                title,
+                description: desc,
+                content,
+                source: stripHtmlNews(String(item.source_name || item.source_id || 'Brasil'), 64),
+                pubDate: formatNewsDateBr(String(item.pubDate ?? '')),
+                category: normCat,
+                categoryLabel: NEWS_CAT_LABELS[normCat] ?? 'Brasil',
+                imageUrl: rawImg && isSafeExternalUrl(rawImg) ? rawImg : '',
+                link: rawLink && isSafeExternalUrl(rawLink) ? rawLink : '',
+              });
+            }
+          }
+        }
+      } catch {
+        clearTimeout(timer);
+      }
+    }
+
+    if (articles.length === 0) {
+      provider = 'rss';
+      const feeds = cat === 'all' ? NEWS_RSS_FEEDS : NEWS_RSS_FEEDS.filter((f) => f.cat === cat);
+      const seen = new Set<string>();
+      const chunks = await Promise.all(
+        feeds.map(async (f) => {
+          try {
+            const xml = await fetchTextTimeout(f.url, 9_000);
+            return parseNewsRssXml(xml, f.cat, f.source);
+          } catch {
+            return [] as NormalizedNewsArticle[];
+          }
+        })
+      );
+      for (const chunk of chunks) {
+        for (const a of chunk) {
+          if (!seen.has(a.title.toLowerCase())) {
+            seen.add(a.title.toLowerCase());
+            articles.push(a);
+          }
+        }
+      }
+      articles = articles.slice(0, 45);
+    }
+
+    if (articles.length > 0) {
+      const ts = Date.now();
+      newsCache.set(cat, { ts, provider, articles });
+      return res.json({
+        ok: true,
+        provider,
+        category: cat,
+        fetchedAt: ts,
+        cached: false,
+        articles,
+      });
+    }
+
+    if (cached && cached.articles.length > 0) {
+      return res.json({
+        ok: true,
+        provider: cached.provider,
+        category: cat,
+        fetchedAt: cached.ts,
+        cached: true,
+        articles: cached.articles,
+      });
+    }
+
+    return res.status(502).json({ ok: false, error: 'news_fetch_failed', articles: [] });
+  });
+
   app.get('/api/stream', async (req, res) => {
     const target = String(req.query.url ?? '');
     if (!isSafeExternalUrl(target)) {
@@ -3057,7 +3318,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.0.9',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.0',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -3153,7 +3414,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.0.9 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.1.0 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

@@ -56,8 +56,15 @@ static bool kp_sprite(int atlas, int id, int x, int y, int w, int h) {
       w<=0 || h<=0 || !kp_atlases[atlas]) return false;
   int cell=kp_sprite_cell[atlas];
   int palette=kp_sprite_palette;
-  if (palette<0 || palette>=7) palette=0;
-  int row=kp_sprite_theme_rows[palette];
+  int row=0;
+  if (palette>=0 && palette<7) {
+    row=kp_sprite_theme_rows[palette];
+    SDL_SetTextureColorMod(kp_atlases[atlas], 255, 255, 255);
+  } else {
+    /* For v2.1.0+ extended themes (7..13), tint the white icon row with active accent */
+    row=0;
+    SDL_SetTextureColorMod(kp_atlases[atlas], accent.r, accent.g, accent.b);
+  }
   SDL_Rect source={id*cell,row*cell,cell,cell};
   SDL_Rect dest={x,y,w,h};
   SDL_Rect bounds=kp_sprite_bounds[atlas][row][id];
@@ -70,6 +77,8 @@ static bool kp_sprite(int atlas, int id, int x, int y, int w, int h) {
     dest.x=x+(w-dest.w)/2; dest.y=y+(h-dest.h)/2;
   }
   SDL_RenderCopy(renderer,kp_atlases[atlas],&source,&dest);
+  if (palette < 0 || palette >= 7)
+    SDL_SetTextureColorMod(kp_atlases[atlas], 255, 255, 255);
   return true;
 }
 static void kp_sprites_free(void) {

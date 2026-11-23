@@ -38,7 +38,7 @@ EPG_BR_URLS = (
     "https://www.open-epg.com/files/brazil1.xml.gz",
 )
 FILMES_BASE = "https://filmes-saimo.pages.dev/"
-UA = "KPlayer-R36S/2.0.9"
+UA = "KPlayer-R36S/2.1.0"
 
 CACHE_DIR = Path("iptv/.cache")
 USER_DIR = Path("iptv_usuario")

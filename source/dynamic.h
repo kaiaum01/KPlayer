@@ -73,6 +73,21 @@ static __typeof__(SDL_RWFromFile) *p_SDL_RWFromFile;
 #define SDL_RWFromFile p_SDL_RWFromFile
 static __typeof__(SDL_SaveBMP_RW) *p_SDL_SaveBMP_RW;
 #define SDL_SaveBMP_RW p_SDL_SaveBMP_RW
+/* Optional SDL2 audio symbols for procedural UI keypress click sounds (v2.1.0) */
+static __typeof__(SDL_InitSubSystem) *p_SDL_InitSubSystem;
+#define SDL_InitSubSystem p_SDL_InitSubSystem
+static __typeof__(SDL_OpenAudioDevice) *p_SDL_OpenAudioDevice;
+#define SDL_OpenAudioDevice p_SDL_OpenAudioDevice
+static __typeof__(SDL_CloseAudioDevice) *p_SDL_CloseAudioDevice;
+#define SDL_CloseAudioDevice p_SDL_CloseAudioDevice
+static __typeof__(SDL_PauseAudioDevice) *p_SDL_PauseAudioDevice;
+#define SDL_PauseAudioDevice p_SDL_PauseAudioDevice
+static __typeof__(SDL_QueueAudio) *p_SDL_QueueAudio;
+#define SDL_QueueAudio p_SDL_QueueAudio
+static __typeof__(SDL_ClearQueuedAudio) *p_SDL_ClearQueuedAudio;
+#define SDL_ClearQueuedAudio p_SDL_ClearQueuedAudio
+static __typeof__(SDL_GetQueuedAudioSize) *p_SDL_GetQueuedAudioSize;
+#define SDL_GetQueuedAudioSize p_SDL_GetQueuedAudioSize
 static __typeof__(libvlc_errmsg) *p_libvlc_errmsg;
 #define libvlc_errmsg p_libvlc_errmsg
 static __typeof__(libvlc_new) *p_libvlc_new;
@@ -270,6 +285,14 @@ static int load_sdl(void) {
     fprintf(stderr, "Símbolo ausente: SDL_SaveBMP_RW\n");
     return 0;
   }
+  /* Optional audio APIs for UI SFX: never fail startup if absent */
+  *(void **)(&p_SDL_InitSubSystem) = dlsym(handle, "SDL_InitSubSystem");
+  *(void **)(&p_SDL_OpenAudioDevice) = dlsym(handle, "SDL_OpenAudioDevice");
+  *(void **)(&p_SDL_CloseAudioDevice) = dlsym(handle, "SDL_CloseAudioDevice");
+  *(void **)(&p_SDL_PauseAudioDevice) = dlsym(handle, "SDL_PauseAudioDevice");
+  *(void **)(&p_SDL_QueueAudio) = dlsym(handle, "SDL_QueueAudio");
+  *(void **)(&p_SDL_ClearQueuedAudio) = dlsym(handle, "SDL_ClearQueuedAudio");
+  *(void **)(&p_SDL_GetQueuedAudioSize) = dlsym(handle, "SDL_GetQueuedAudioSize");
   return 1;
 }
 static __typeof__(libvlc_audio_get_track) *p_libvlc_audio_get_track;

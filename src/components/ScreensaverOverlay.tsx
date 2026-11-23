@@ -20,6 +20,11 @@ export const SCREENSAVER_VIZ_LABELS = [
   'Bateria / Pulso',
   'Plenitude',
   'Ambience / Cosmos',
+  'Túnel Neon',
+  'Chuva Matrix',
+  'Chama / Fogo',
+  'Prisma 3D',
+  'Galáxia Espiral',
 ] as const;
 
 // Cache Web Audio analyser per HTMLAudioElement so reopening never fails
@@ -127,7 +132,7 @@ export const ScreensaverOverlay: React.FC<ScreensaverOverlayProps> = ({
   useEffect(() => {
     if (vizStyle !== 0) return;
     const id = window.setInterval(() => {
-      setAutoCycleIdx((i) => (i % 5) + 1);
+      setAutoCycleIdx((i) => (i % 10) + 1);
     }, 18000);
     return () => window.clearInterval(id);
   }, [vizStyle]);
@@ -442,7 +447,7 @@ export const ScreensaverOverlay: React.FC<ScreensaverOverlayProps> = ({
           ctx.lineWidth = 10;
           ctx.stroke();
         }
-      } else {
+      } else if (effectiveViz === 5) {
         // 5. WMP Ambience / Cosmos (Pulsing Nebula Blooms & Starlight Field)
         ctx.fillStyle = '#04050d';
         ctx.fillRect(0, 0, w, h);
@@ -462,7 +467,7 @@ export const ScreensaverOverlay: React.FC<ScreensaverOverlayProps> = ({
           ctx.fill();
         }
 
-        for (let s = 0; s < 48; s++) {
+        for (let s = 0; s < 56; s++) {
           const speed = 0.08 + (s % 5) * 0.045;
           const fx = (((s * 97) % 640) / 640 * w + t * speed * 120) % w;
           const fy = (((s * 61 + (s % 7) * 23) % 480) / 480) * h + Math.sin(t * 1.4 + s) * 8;
@@ -485,6 +490,223 @@ export const ScreensaverOverlay: React.FC<ScreensaverOverlayProps> = ({
         ctx.strokeStyle = `hsla(${(hue0 + 90) % 360}, 92%, 68%, 0.72)`;
         ctx.lineWidth = 2.4;
         ctx.stroke();
+      } else if (effectiveViz === 6) {
+        // 6. NEW v2.1.0: Túnel Neon (3D Hyperspace Octagon Tunnel + Laser Rays)
+        ctx.fillStyle = '#05040e';
+        ctx.fillRect(0, 0, w, h);
+        const vx = cx + Math.sin(t * 0.9) * w * 0.07;
+        const vy = cy + Math.cos(t * 0.7) * h * 0.06;
+        const hue0 = (t * 32) % 360;
+
+        for (let r = 0; r < 16; r++) {
+          const ang = (r / 16) * Math.PI * 2 + t * 0.35;
+          ctx.strokeStyle = `hsla(${(hue0 + r * 22) % 360}, 95%, 60%, ${0.16 + high * 0.22})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(vx, vy);
+          ctx.lineTo(vx + Math.cos(ang) * w * 0.85, vy + Math.sin(ang) * h * 0.85);
+          ctx.stroke();
+        }
+
+        const rings = 14;
+        const sides = 8;
+        for (let k = 0; k < rings; k++) {
+          const depth = ((k / rings + t * (0.4 + bass * 0.34)) % 1 + 1) % 1;
+          const sc = depth * depth * (Math.min(w, h) * 0.78 + bass * 55);
+          if (sc < 6) continue;
+          const rot = t * 0.6 + depth * 1.8 * Math.sin(t * 0.5);
+          const ox = vx + Math.sin(depth * 3.2 + t) * (1 - depth) * 32;
+          const oy = vy + Math.cos(depth * 2.6 - t) * (1 - depth) * 22;
+          ctx.beginPath();
+          for (let s = 0; s <= sides; s++) {
+            const ang = rot + (s / sides) * Math.PI * 2;
+            const bi = (k * 2 + s) % 32;
+            const wob = 1 + bands[bi] * 0.14;
+            const px = ox + Math.cos(ang) * sc * 1.18 * wob;
+            const py = oy + Math.sin(ang) * sc * 0.86 * wob;
+            if (s === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.strokeStyle = `hsla(${(hue0 + depth * 180) % 360}, 95%, 62%, ${Math.min(1, depth * 1.1)})`;
+          ctx.lineWidth = 1.4 + depth * 2.6;
+          ctx.stroke();
+        }
+      } else if (effectiveViz === 7) {
+        // 7. NEW v2.1.0: Chuva Matrix (Luminous Cascading Neon Digital Rain)
+        ctx.fillStyle = '#030a08';
+        ctx.fillRect(0, 0, w, h);
+        const hue0 = (132 + Math.sin(t * 0.25) * 34 + 360) % 360;
+        const cols = 32;
+        const colW = w / cols;
+        const glyphs = '01KPLAYER<>#@*+=79';
+
+        ctx.font = `bold ${Math.max(10, Math.floor(colW * 0.68))}px monospace`;
+        ctx.textAlign = 'center';
+        for (let c = 0; c < cols; c++) {
+          const speed = 0.26 + ((c * 37) % 11) * 0.045 + bands[c] * 0.26;
+          const headY = (((t * speed + ((c * 73) % 100) * 0.01) % 1.35) * h) - 48;
+          const tail = 9 + (c % 6) * 2 + Math.floor(bands[c] * 10);
+          const x = c * colW + colW * 0.5;
+          for (let step = 0; step < tail; step++) {
+            const y = headY - step * 15;
+            if (y < -14 || y > h + 14) continue;
+            const fade = 1 - step / tail;
+            const ch = glyphs[(c * 13 + step * 7 + Math.floor(t * 8)) % glyphs.length];
+            if (step === 0) {
+              ctx.fillStyle = 'rgba(235, 255, 242, 0.96)';
+            } else {
+              ctx.fillStyle = `hsla(${(hue0 + step * 3) % 360}, 92%, 58%, ${fade * fade * (0.72 + mid * 0.28)})`;
+            }
+            ctx.fillText(ch, x, y);
+          }
+        }
+        const hg = ctx.createLinearGradient(0, h - 90, 0, h);
+        hg.addColorStop(0, 'transparent');
+        hg.addColorStop(1, `hsla(${hue0}, 90%, 45%, ${0.22 + bass * 0.28})`);
+        ctx.fillStyle = hg;
+        ctx.fillRect(0, h - 90, w, 90);
+      } else if (effectiveViz === 8) {
+        // 8. NEW v2.1.0: Chama / Fogo (Layered Plasma Flames + Soaring Embers)
+        ctx.fillStyle = '#0e0504';
+        ctx.fillRect(0, 0, w, h);
+
+        for (let layer = 0; layer < 5; layer++) {
+          const hue = 4 + layer * 11;
+          const baseH = h * (0.42 - layer * 0.06);
+          ctx.beginPath();
+          ctx.moveTo(0, h);
+          for (let x = 0; x <= w; x += 8) {
+            const nx = x / w;
+            const bi = Math.min(31, Math.floor(nx * 31));
+            const flick =
+              Math.sin(nx * (11 + layer * 3) + t * (4.2 + layer * 1.1)) +
+              0.6 * Math.cos(nx * 23 - t * (6.5 + layer * 1.4));
+            const fh = Math.max(
+              14,
+              baseH * (0.45 + bands[bi] * 0.95 + bass * 0.45) + flick * (16 + mid * 22)
+            );
+            ctx.lineTo(x, h - Math.min(h - 24, fh));
+          }
+          ctx.lineTo(w, h);
+          ctx.closePath();
+          const fg = ctx.createLinearGradient(0, h - baseH * 1.6, 0, h);
+          fg.addColorStop(0, `hsla(${hue + 22}, 100%, 62%, ${0.24 + layer * 0.12})`);
+          fg.addColorStop(1, `hsla(${hue}, 96%, 45%, ${0.38 + layer * 0.12})`);
+          ctx.fillStyle = fg;
+          ctx.fill();
+        }
+
+        for (let i = 0; i < 42; i++) {
+          const speed = 0.22 + (i % 6) * 0.065 + bass * 0.2;
+          const p = ((t * speed + i * 0.29) % 1 + 1) % 1;
+          const ex = ((((i * 67) % 640) / 640) * w + Math.sin(t * 2.5 + i) * 34 + w) % w;
+          const ey = h - p * (h + 24);
+          ctx.fillStyle = `hsla(${28 + (i % 5) * 8}, 98%, 68%, ${(1 - p) * (0.72 + high * 0.28)})`;
+          ctx.beginPath();
+          ctx.arc(ex, ey, i % 3 === 0 ? 2.8 : 1.7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (effectiveViz === 9) {
+        // 9. NEW v2.1.0: Prisma 3D (Real-time Projected 3D Neon Wireframe Cube + Holo Rings)
+        ctx.fillStyle = '#060712';
+        ctx.fillRect(0, 0, w, h);
+        const hue0 = (t * 26 + 190) % 360;
+
+        for (let r = 0; r < 3; r++) {
+          const tilt = 0.35 + r * 0.25;
+          const rad = Math.min(w, h) * (0.24 + r * 0.075) + bass * 34;
+          const rot = t * (0.65 + r * 0.3) * (r % 2 === 0 ? 1 : -1);
+          ctx.beginPath();
+          for (let s = 0; s <= 40; s++) {
+            const a = (s / 40) * Math.PI * 2;
+            const x3 = Math.cos(a) * rad;
+            const y3 = Math.sin(a) * rad * tilt;
+            const sx = cx + x3 * Math.cos(rot) - y3 * Math.sin(rot);
+            const sy = cy + x3 * Math.sin(rot) + y3 * Math.cos(rot);
+            if (s === 0) ctx.moveTo(sx, sy);
+            else ctx.lineTo(sx, sy);
+          }
+          ctx.strokeStyle = `hsla(${(hue0 + r * 75) % 360}, 92%, 65%, 0.45)`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        const verts: Array<[number, number, number]> = [
+          [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+          [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+        ];
+        const edges: Array<[number, number]> = [
+          [0, 1], [1, 2], [2, 3], [3, 0],
+          [4, 5], [5, 6], [6, 7], [7, 4],
+          [0, 4], [1, 5], [2, 6], [3, 7],
+        ];
+        const ax = t * 0.95;
+        const ay = t * 1.25;
+        const az = t * 0.55;
+        const ca = Math.cos(ax), sa = Math.sin(ax);
+        const cb = Math.cos(ay), sb = Math.sin(ay);
+        const cc = Math.cos(az), sc = Math.sin(az);
+        const scale = Math.min(w, h) * 0.17 + bass * 42 + mid * 18;
+        const pts = verts.map(([x, y, z]) => {
+          const y1 = y * ca - z * sa;
+          const z1 = y * sa + z * ca;
+          const x2 = x * cb + z1 * sb;
+          const z2 = -x * sb + z1 * cb;
+          const x3 = x2 * cc - y1 * sc;
+          const y3 = x2 * sc + y1 * cc;
+          const persp = 3.6 / (3.6 - z2 * 0.85);
+          return [cx + x3 * scale * persp, cy + y3 * scale * persp] as const;
+        });
+
+        edges.forEach(([a, b], idx) => {
+          ctx.strokeStyle = `hsla(${(hue0 + idx * 28) % 360}, 95%, 66%, 0.92)`;
+          ctx.lineWidth = 2.6;
+          ctx.beginPath();
+          ctx.moveTo(pts[a][0], pts[a][1]);
+          ctx.lineTo(pts[b][0], pts[b][1]);
+          ctx.stroke();
+        });
+        pts.forEach(([px, py], idx) => {
+          ctx.fillStyle = `hsla(${(hue0 + idx * 42) % 360}, 95%, 80%, 0.95)`;
+          ctx.beginPath();
+          ctx.arc(px, py, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      } else {
+        // 10. NEW v2.1.0: Galáxia Espiral (4-Arm Cosmic Spiral + Star Clusters)
+        ctx.fillStyle = '#04040e';
+        ctx.fillRect(0, 0, w, h);
+        const hue0 = (t * 16 + 220) % 360;
+
+        const cg = ctx.createRadialGradient(cx, cy, 4, cx, cy, 90 + bass * 65);
+        cg.addColorStop(0, `hsla(${(hue0 + 35) % 360}, 90%, 80%, 0.72)`);
+        cg.addColorStop(0.45, `hsla(${hue0}, 88%, 55%, 0.25)`);
+        cg.addColorStop(1, 'transparent');
+        ctx.fillStyle = cg;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 90 + bass * 65, 0, Math.PI * 2);
+        ctx.fill();
+
+        const arms = 4;
+        const starsPerArm = 34;
+        for (let arm = 0; arm < arms; arm++) {
+          const armOff = (arm / arms) * Math.PI * 2;
+          for (let s = 1; s <= starsPerArm; s++) {
+            const u = s / starsPerArm;
+            const bi = (s + arm * 5) % 32;
+            const ang = armOff + u * 4.4 - t * (0.65 + (1 - u) * 0.55);
+            const rad = u * (Math.min(w, h) * 0.52 + bass * 40) + bands[bi] * 24;
+            const scatter = Math.sin(s * 17 + arm * 31) * (10 + u * 22);
+            const sx = cx + Math.cos(ang) * (rad + scatter) * 1.18;
+            const sy = cy + Math.sin(ang) * (rad + scatter) * 0.78;
+            const alpha = Math.min(1, (1.15 - u * 0.65) * (0.68 + high * 0.32));
+            const sr = s % 5 === 0 ? 3.5 : u < 0.4 ? 2.5 : 1.7;
+            ctx.fillStyle = `hsla(${(hue0 + u * 130 + arm * 24) % 360}, 88%, 72%, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
       }
 
       raf = window.requestAnimationFrame(draw);
@@ -767,7 +989,7 @@ export const ScreensaverOverlay: React.FC<ScreensaverOverlayProps> = ({
               }}
               className="px-3 py-1 rounded-lg text-[11px] font-extrabold shrink-0 cursor-pointer"
             >
-              WMP · {SCREENSAVER_VIZ_LABELS[effectiveViz]}
+              {effectiveViz}/10 · {SCREENSAVER_VIZ_LABELS[effectiveViz]}
             </button>
           </div>
         </div>

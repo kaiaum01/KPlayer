@@ -13,6 +13,7 @@ export type ScreenMode =
   | 'video'
   | 'radio'
   | 'iptv'
+  | 'news'
   | 'football'
   | 'weather'
   | 'options';
@@ -255,5 +256,21 @@ export interface WeatherData {
   hourly: WeatherHourlyPoint[];
   daily: WeatherDailyPoint[];
 }
+
+export type NewsCategoryKey = 'all' | 'breaking' | 'world' | 'crime' | 'entertainment' | 'sports';
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  description: string;
+  content: string;
+  source: string;
+  pubDate: string;
+  category: Exclude<NewsCategoryKey, 'all'>;
+  categoryLabel: string;
+  imageUrl: string;
+  link: string;
+}
+
 
 

@@ -25,10 +25,10 @@ class UpdaterLauncherTest(unittest.TestCase):
                 '#!/bin/bash\n# KPlayer v2.0.8 - dArkOS\nKPLAYER_VERSION="2.0.8"\necho old\n',
                 encoding="utf-8",
             )
-            # Bundled fresh template from the v2.0.9 update package
+            # Bundled fresh template from the v2.1.0 update package
             tmpl = gamedir / "KPlayer.sh.tmpl"
             tmpl.write_text(
-                '#!/bin/bash\n# KPlayer v2.0.9 - dArkOS / Debian 13 ARM64 / PortMaster\nKPLAYER_VERSION="2.0.9"\nexec bash "$script_dir/KPlayer.sh"\n',
+                '#!/bin/bash\n# KPlayer v2.1.0 - dArkOS / Debian 13 ARM64 / PortMaster\nKPLAYER_VERSION="2.1.0"\nexec bash "$script_dir/KPlayer.sh"\n',
                 encoding="utf-8",
             )
 
@@ -36,7 +36,7 @@ class UpdaterLauncherTest(unittest.TestCase):
             gamelist = ports / "gamelist.xml"
             gamelist.write_text(existing_xml, encoding="utf-8")
 
-            res = updater.ensure_stable_launcher(ports, gamedir, "2.0.9")
+            res = updater.ensure_stable_launcher(ports, gamedir, "2.1.0")
             self.assertIsNotNone(res)
 
             stable_sh = ports / "KPlayer.sh"
@@ -44,8 +44,8 @@ class UpdaterLauncherTest(unittest.TestCase):
             self.assertFalse(broken_sh.exists())
 
             sh_text = stable_sh.read_text(encoding="utf-8")
-            self.assertIn('KPLAYER_VERSION="2.0.9"', sh_text)
-            self.assertIn("# KPlayer v2.0.9", sh_text)
+            self.assertIn('KPLAYER_VERSION="2.1.0"', sh_text)
+            self.assertIn("# KPlayer v2.1.0", sh_text)
             self.assertIn('exec bash "$script_dir/KPlayer.sh"', sh_text)
 
             # Confirm gamelist.xml is 100% untouched byte-for-byte

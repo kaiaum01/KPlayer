@@ -1,5 +1,5 @@
 export interface KpTheme {
-  id: string;
+  id: number;
   name: string;
   bg: string;
   panel: string;
@@ -8,12 +8,13 @@ export interface KpTheme {
   muted: string;
   accent: string;
   dim: string;
+  isLight?: boolean;
 }
 
-// Exact 7 RGB themes from source/kplayer.c lines 756-764
+// 14 R36S themes matching source/kplayer.c themes[] 1:1 (v2.1.0)
 export const KP_THEMES: KpTheme[] = [
   {
-    id: 'black-green',
+    id: 0,
     name: 'Preto e verde',
     bg: 'rgb(18, 18, 18)',
     panel: 'rgb(24, 24, 24)',
@@ -24,7 +25,7 @@ export const KP_THEMES: KpTheme[] = [
     dim: 'rgb(145, 145, 145)',
   },
   {
-    id: 'black-white',
+    id: 1,
     name: 'Preto e branco',
     bg: 'rgb(15, 15, 15)',
     panel: 'rgb(28, 28, 28)',
@@ -35,7 +36,7 @@ export const KP_THEMES: KpTheme[] = [
     dim: 'rgb(150, 150, 150)',
   },
   {
-    id: 'white-black',
+    id: 2,
     name: 'Branco e preto',
     bg: 'rgb(248, 248, 248)',
     panel: 'rgb(233, 233, 233)',
@@ -44,9 +45,10 @@ export const KP_THEMES: KpTheme[] = [
     muted: 'rgb(70, 70, 70)',
     accent: 'rgb(25, 25, 25)',
     dim: 'rgb(90, 90, 90)',
+    isLight: true,
   },
   {
-    id: 'green-black',
+    id: 3,
     name: 'Verde e preto',
     bg: 'rgb(133, 218, 150)',
     panel: 'rgb(166, 231, 179)',
@@ -55,9 +57,10 @@ export const KP_THEMES: KpTheme[] = [
     muted: 'rgb(32, 78, 43)',
     accent: 'rgb(10, 45, 20)',
     dim: 'rgb(39, 91, 50)',
+    isLight: true,
   },
   {
-    id: 'black-blue',
+    id: 4,
     name: 'Preto e azul',
     bg: 'rgb(11, 17, 29)',
     panel: 'rgb(19, 29, 46)',
@@ -68,7 +71,7 @@ export const KP_THEMES: KpTheme[] = [
     dim: 'rgb(149, 165, 184)',
   },
   {
-    id: 'black-purple',
+    id: 5,
     name: 'Preto e roxo',
     bg: 'rgb(22, 15, 30)',
     panel: 'rgb(35, 24, 45)',
@@ -79,7 +82,7 @@ export const KP_THEMES: KpTheme[] = [
     dim: 'rgb(170, 150, 184)',
   },
   {
-    id: 'black-red',
+    id: 6,
     name: 'Preto e vermelho',
     bg: 'rgb(24, 14, 15)',
     panel: 'rgb(39, 23, 24)',
@@ -88,5 +91,83 @@ export const KP_THEMES: KpTheme[] = [
     muted: 'rgb(218, 185, 185)',
     accent: 'rgb(255, 139, 139)',
     dim: 'rgb(185, 149, 149)',
+  },
+  {
+    id: 7,
+    name: 'Preto e dourado',
+    bg: 'rgb(16, 14, 10)',
+    panel: 'rgb(26, 22, 15)',
+    elevated: 'rgb(40, 34, 22)',
+    text: 'rgb(255, 250, 235)',
+    muted: 'rgb(198, 186, 156)',
+    accent: 'rgb(245, 183, 49)',
+    dim: 'rgb(148, 136, 108)',
+  },
+  {
+    id: 8,
+    name: 'Preto e ciano',
+    bg: 'rgb(9, 18, 22)',
+    panel: 'rgb(15, 28, 35)',
+    elevated: 'rgb(24, 43, 53)',
+    text: 'rgb(240, 253, 255)',
+    muted: 'rgb(162, 202, 212)',
+    accent: 'rgb(34, 211, 238)',
+    dim: 'rgb(116, 155, 166)',
+  },
+  {
+    id: 9,
+    name: 'Preto e laranja',
+    bg: 'rgb(22, 14, 10)',
+    panel: 'rgb(35, 22, 15)',
+    elevated: 'rgb(52, 33, 22)',
+    text: 'rgb(255, 248, 242)',
+    muted: 'rgb(210, 182, 164)',
+    accent: 'rgb(251, 146, 60)',
+    dim: 'rgb(166, 134, 114)',
+  },
+  {
+    id: 10,
+    name: 'Preto e rosa',
+    bg: 'rgb(24, 13, 22)',
+    panel: 'rgb(38, 20, 34)',
+    elevated: 'rgb(56, 30, 50)',
+    text: 'rgb(255, 244, 252)',
+    muted: 'rgb(214, 178, 205)',
+    accent: 'rgb(244, 114, 182)',
+    dim: 'rgb(170, 132, 160)',
+  },
+  {
+    id: 11,
+    name: 'Meia-noite Neon',
+    bg: 'rgb(11, 11, 26)',
+    panel: 'rgb(19, 19, 42)',
+    elevated: 'rgb(31, 31, 66)',
+    text: 'rgb(242, 248, 255)',
+    muted: 'rgb(166, 178, 214)',
+    accent: 'rgb(45, 212, 191)',
+    dim: 'rgb(122, 134, 172)',
+  },
+  {
+    id: 12,
+    name: 'Retrô Game Boy',
+    bg: 'rgb(155, 188, 15)',
+    panel: 'rgb(139, 172, 15)',
+    elevated: 'rgb(122, 156, 16)',
+    text: 'rgb(15, 56, 15)',
+    muted: 'rgb(40, 86, 36)',
+    accent: 'rgb(15, 56, 15)',
+    dim: 'rgb(48, 98, 48)',
+    isLight: true,
+  },
+  {
+    id: 13,
+    name: 'Oceano Profundo',
+    bg: 'rgb(7, 19, 32)',
+    panel: 'rgb(12, 31, 52)',
+    elevated: 'rgb(20, 46, 74)',
+    text: 'rgb(240, 249, 255)',
+    muted: 'rgb(158, 192, 220)',
+    accent: 'rgb(56, 189, 248)',
+    dim: 'rgb(114, 150, 180)',
   },
 ];

@@ -56,8 +56,8 @@ static void draw_welcome(void) {
   centered(tr("Idioma"), 20, 240, 600, 11, welcome_focus == 0 ? accent : muted);
   if (welcome_focus == 0) {
     glow_rect(96, 258, 448, 38, 19, accent, 3);
-    rounded(96, 258, 448, 38, 19, alpha(accent, 140));
-    rounded(97, 259, 446, 36, 18, panel);
+    rounded_gradient(97, 259, 446, 36, 18, mix(panel, textc, 0.03f), panel);
+    rounded_outline(96, 258, 448, 38, 19, alpha(accent, 185));
   } else {
     panel_card(96, 258, 448, 38, 19);
   }
@@ -71,32 +71,34 @@ static void draw_welcome(void) {
     centered(language_names[i], sx + 4, 270, 136, 13, chosen ? bg : muted);
   }
 
-  /* Row 1: Slim Theme color selector dots ("bolinhas") */
+  /* Row 1: Slim Theme color selector dots ("bolinhas" — 14 R36S themes) */
   char theme_hdr[96];
-  snprintf(theme_hdr, sizeof(theme_hdr), "%s  •  %s", tr("Tema"),
-           tr(themes[theme_index].name));
+  snprintf(theme_hdr, sizeof(theme_hdr), "%s (%d/%d)  •  %s", tr("Tema"),
+           theme_index + 1, THEME_COUNT, tr(themes[theme_index].name));
   centered(theme_hdr, 20, 314, 600, 11, welcome_focus == 1 ? accent : muted);
   if (welcome_focus == 1) {
-    glow_rect(146, 332, 348, 46, 23, accent, 3);
-    rounded(146, 332, 348, 46, 23, alpha(accent, 140));
-    rounded(147, 333, 346, 44, 22, panel);
+    glow_rect(54, 332, 532, 46, 23, accent, 3);
+    rounded_gradient(55, 333, 530, 44, 22, mix(panel, textc, 0.03f), panel);
+    rounded_outline(54, 332, 532, 46, 23, alpha(accent, 185));
   } else {
-    panel_card(146, 332, 348, 46, 23);
+    panel_card(54, 332, 532, 46, 23);
   }
+  int dot_step = THEME_COUNT > 1 ? 468 / (THEME_COUNT - 1) : 44;
+  int dot_start = (W - dot_step * (THEME_COUNT - 1)) / 2;
   for (int i = 0; i < THEME_COUNT; i++) {
-    int dcx = 179 + i * 47;
+    int dcx = dot_start + i * dot_step;
     int dcy = 355;
     bool chosen = i == theme_index;
-    bool is_light = (i == 2 || i == 3);
+    bool is_light = (i == 2 || i == 3 || i == 12);
     SDL_Color outer = is_light ? themes[i].background : themes[i].highlight;
     SDL_Color inner = is_light ? themes[i].highlight : themes[i].background;
     if (chosen) {
-      glow_circle(dcx, dcy, 15, alpha(accent, 210), 4);
-      ring(dcx, dcy, 16, 14, textc);
+      glow_circle(dcx, dcy, 13, alpha(accent, 210), 4);
+      ring(dcx, dcy, 14, 12, textc);
     }
-    fill_circle(dcx, dcy, chosen ? 12 : 11, outer);
+    fill_circle(dcx, dcy, chosen ? 11 : 9, outer);
     if (is_light || i == 1)
-      fill_circle(dcx, dcy, 4, inner);
+      fill_circle(dcx, dcy, 3, inner);
   }
 
   /* Minimal borderless pulsing prompt (R36S physical button only — no touch) */
