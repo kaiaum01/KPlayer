@@ -5,15 +5,16 @@
     {
       "version": "2.1.0",
       "releaseTag": "v2.1.0",
-      "releasedAt": "2026-11-23T01:00:00Z",
+      "releasedAt": "2026-11-23T11:51:37Z",
       "r36s": "updates/v2.1.0/KPlayer-v2.1.0-R36S.zip",
-      "sha256": "",
+      "sha256": "b6bebf53a523e73a48fc6cac6ac37d29e6d1f2f3f6677ed3950fdb316a362551",
       "notes": [
-        "Nova aba Notícias (antes do Placar da Bola) com manchetes do Brasil em português (Urgente, Mundo, Polícia, Entretenimento e Esportes) via NewsData.io com fallback RSS ao vivo",
-        "Dashboard reorganizada com Músicas e Vídeos unificados em um só card (Músicas e Vídeos, Arquivos, Rádio Online, IPTV, Notícias e Placar da Bola)",
-        "Correção definitiva das listras internas em caixas translúcidas e HUD do protetor de tela em todos os 14 temas do R36S, agora com gradiente suave real e borda nítida",
-        "10 visualizadores reativos ao áudio no Protetor de Tela (+ Automático), 14 temas exclusivos e sons táteis das teclas",
-        "Mais animações em toda a interface e documentação completa atualizada no GitHub"
+        "Nova Aba Notícias (antes do Placar da Bola):",
+        "Manchetes do Brasil em português com filtros rápidos (Todas, Urgente, Mundo, Polícia, Entretenimento e Esportes) via API NewsData.io (configurável por news.cfg no R36S ou NEWSDATA_",
+        "Dashboard Reorganizada (Músicas e Vídeos Unificados):",
+        "Os cards de músicas e vídeos foram unidos em Músicas e Vídeos, deixando a Home com Músicas e Vídeos, Arquivos, Rádio Online, IPTV, Notícias e Placar da Bola.",
+        "Correção Visual em Todos os 14 Temas do R36S:",
+        "Eliminado o artefato de listras horizontais dentro das caixas translúcidas e dos painéis do Protetor de Tela (relógio/clima, barra \"tocando agora\", letras e badges). Todas as caixa"
       ]
     },
     {
