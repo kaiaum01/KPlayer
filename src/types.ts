@@ -269,6 +269,7 @@ export interface NewsArticle {
   category: Exclude<NewsCategoryKey, 'all'>;
   categoryLabel: string;
   imageUrl: string;
+  videoUrl?: string;
   link: string;
 }
 

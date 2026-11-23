@@ -1193,6 +1193,24 @@ export default function App() {
     [recordHistory]
   );
 
+  const playNewsVideo = useCallback(
+    (videoUrl: string, title: string, source: string) => {
+      audioRef.current?.pause();
+      setActiveRadio(null);
+      setActiveVideoTitle(title || 'Notícias');
+      setActiveVideoSrc(videoUrl);
+      setActiveVideoFallbacks([]);
+      setActiveVideoLive(false);
+      setActiveVideoSection(source || 'Notícias');
+      setIsPaused(false);
+      setShowVideoOsd(true);
+      recordHistory('video', title || 'Notícias', source || 'Notícias');
+      setPrevScreen('news');
+      setScreen('video');
+    },
+    [recordHistory]
+  );
+
   // Handle local media / LRC upload
   const handleFilesSelected = useCallback(
     async (files: FileList | null) => {
@@ -4084,6 +4102,7 @@ export default function App() {
                 locationLabel={locationLabel}
                 toast={toast}
                 onBack={() => setScreen('home')}
+                onPlayVideo={playNewsVideo}
               />
             )}
 

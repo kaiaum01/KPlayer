@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Newspaper, RefreshCw, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Newspaper, RefreshCw, Clock, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import type { KpTheme } from '../themes';
 import type { LanguageCode, NewsArticle, NewsCategoryKey } from '../types';
 import type { R36SButton } from './R36SControls';
@@ -26,6 +26,7 @@ interface NewsScreenProps {
   locationLabel: string;
   toast: string | null;
   onBack: () => void;
+  onPlayVideo?: (videoUrl: string, title: string, source: string) => void;
 }
 
 const NEWS_FILTERS: Array<{ key: NewsCategoryKey; label: string }> = [
@@ -38,7 +39,7 @@ const NEWS_FILTERS: Array<{ key: NewsCategoryKey; label: string }> = [
 ];
 
 export const NewsScreen = forwardRef<NewsScreenHandle, NewsScreenProps>(
-  ({ theme, language, locationLabel, toast, onBack }, ref) => {
+  ({ theme, language, locationLabel, toast, onBack, onPlayVideo }, ref) => {
     const [filterIdx, setFilterIdx] = useState(0);
     const [articles, setArticles] = useState<NewsArticle[]>([]);
     const [loading, setLoading] = useState(true);
@@ -140,6 +141,10 @@ export const NewsScreen = forwardRef<NewsScreenHandle, NewsScreenProps>(
               if (readerRef.current) readerRef.current.scrollTop = 0;
               return;
             }
+            if (btn === 'X' && selectedArticle?.videoUrl && onPlayVideo) {
+              onPlayVideo(selectedArticle.videoUrl, selectedArticle.title, selectedArticle.source);
+              return;
+            }
             if (btn === 'Y') {
               loadNews(activeCategory, true);
               return;
@@ -173,13 +178,17 @@ export const NewsScreen = forwardRef<NewsScreenHandle, NewsScreenProps>(
             setSelectedIdx((i) => (i + 1) % visibleArticles.length);
             return;
           }
+          if (btn === 'START' && selectedArticle?.videoUrl && onPlayVideo) {
+            onPlayVideo(selectedArticle.videoUrl, selectedArticle.title, selectedArticle.source);
+            return;
+          }
           if (btn === 'B' && visibleArticles.length > 0) {
             setDetailOpen(true);
             if (readerRef.current) readerRef.current.scrollTop = 0;
           }
         },
       }),
-      [detailOpen, visibleArticles.length, activeCategory, loadNews, onBack]
+      [detailOpen, visibleArticles.length, activeCategory, loadNews, onBack, onPlayVideo, selectedArticle]
     );
 
     return (
@@ -271,22 +280,56 @@ export const NewsScreen = forwardRef<NewsScreenHandle, NewsScreenProps>(
 
               <div style={{ backgroundColor: themeHairline(theme) }} className="h-[1px] w-full mb-2.5 shrink-0" />
 
-              {/* Scrollable body + optional thumbnail */}
+              {/* Scrollable body + optional thumbnail / video button */}
               <div ref={readerRef} className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2.5">
                 {selectedArticle.imageUrl && (
                   <div
                     style={{ border: `1px solid ${themeHairline(theme)}` }}
-                    className="w-full max-h-[148px] rounded-xl overflow-hidden bg-black/30"
+                    className="relative w-full max-h-[160px] rounded-xl overflow-hidden bg-black/30"
                   >
                     <img
                       src={selectedArticle.imageUrl}
                       alt=""
-                      className="w-full max-h-[148px] object-cover"
+                      referrerPolicy="no-referrer"
+                      className="w-full max-h-[160px] object-cover"
                       onError={(e) => {
                         (e.currentTarget.parentElement as HTMLElement | null)?.classList.add('hidden');
                       }}
                     />
+                    {selectedArticle.videoUrl && onPlayVideo && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onPlayVideo(selectedArticle.videoUrl!, selectedArticle.title, selectedArticle.source)
+                        }
+                        style={{
+                          backgroundColor: rgbToRgba(theme.bg, 0.85),
+                          border: `1px solid ${theme.accent}`,
+                          color: theme.accent,
+                        }}
+                        className="absolute bottom-2 left-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold cursor-pointer"
+                      >
+                        <Play className="w-3 h-3 fill-current" />
+                        <span>X: Assistir vídeo</span>
+                      </button>
+                    )}
                   </div>
+                )}
+                {!selectedArticle.imageUrl && selectedArticle.videoUrl && onPlayVideo && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onPlayVideo(selectedArticle.videoUrl!, selectedArticle.title, selectedArticle.source)
+                    }
+                    style={{
+                      backgroundColor: theme.accent,
+                      color: theme.bg,
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11.5px] font-extrabold cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>X: Assistir vídeo da notícia</span>
+                  </button>
                 )}
                 <p style={{ color: theme.text }} className="text-[13px] leading-relaxed font-medium">
                   {selectedArticle.description}
@@ -304,7 +347,11 @@ export const NewsScreen = forwardRef<NewsScreenHandle, NewsScreenProps>(
                 style={{ borderTop: `1px solid ${themeHairline(theme)}`, color: theme.dim }}
                 className="pt-2 mt-2 flex items-center justify-between text-[10.5px] shrink-0"
               >
-                <span>A: Voltar à lista • Cima/Baixo: Rolar • L1/R1: Próxima</span>
+                <span>
+                  {selectedArticle.videoUrl
+                    ? 'A: Voltar • X: Assistir vídeo • Cima/Baixo: Rolar • L1/R1: Próxima'
+                    : 'A: Voltar à lista • Cima/Baixo: Rolar • L1/R1: Próxima'}
+                </span>
                 <button
                   type="button"
                   onClick={() => setDetailOpen(false)}
@@ -453,16 +500,26 @@ export const NewsScreen = forwardRef<NewsScreenHandle, NewsScreenProps>(
                       {art.imageUrl ? (
                         <div
                           style={{ border: `1px solid ${themeHairline(theme)}` }}
-                          className="w-16 h-14 rounded-lg overflow-hidden shrink-0 bg-black/30"
+                          className="relative w-20 h-14 rounded-lg overflow-hidden shrink-0 bg-black/30"
                         >
                           <img
                             src={art.imageUrl}
                             alt=""
+                            referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               (e.currentTarget.parentElement as HTMLElement | null)?.classList.add('hidden');
                             }}
                           />
+                          {art.videoUrl && (
+                            <span
+                              style={{ backgroundColor: rgbToRgba(theme.bg, 0.85), color: theme.accent }}
+                              className="absolute bottom-0.5 left-0.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8.5px] font-extrabold"
+                            >
+                              <Play className="w-2.5 h-2.5 fill-current" />
+                              VID
+                            </span>
+                          )}
                         </div>
                       ) : null}
                       <div className="min-w-0 flex-1">
@@ -477,6 +534,15 @@ export const NewsScreen = forwardRef<NewsScreenHandle, NewsScreenProps>(
                             >
                               {art.categoryLabel}
                             </span>
+                            {art.videoUrl && !art.imageUrl && (
+                              <span
+                                style={{ backgroundColor: rgbToRgba(theme.accent, 0.2), color: theme.accent }}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold shrink-0"
+                              >
+                                <Play className="w-2.5 h-2.5 fill-current" />
+                                VÍDEO
+                              </span>
+                            )}
                             <span style={{ color: theme.muted }} className="text-[10.5px] font-medium truncate">
                               {art.source}
                             </span>

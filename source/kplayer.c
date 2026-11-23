@@ -152,6 +152,7 @@ static void radio_cancel_retries(void);
 static int repeat_mode = 0;
 static bool shuffle_enabled = false;
 static bool playing_iptv = false;
+static bool playing_news_video = false;
 static long long resume_pending_ms = -1;
 static uint32_t resume_deadline;
 static uint32_t sleep_end;
@@ -711,6 +712,7 @@ static void stop_media(void) {
   active = false;
   playing_radio = false;
   playing_iptv = false;
+  playing_news_video = false;
   if (player)
     libvlc_media_player_stop(player);
   pthread_mutex_lock(&video.mutex);
@@ -2204,9 +2206,10 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (k == SDLK_BACKSPACE && !repeat) {
     bool was_iptv = playing_iptv;
+    bool was_news = playing_news_video;
     if (mode == 1)
       stop_media();
-    mode = was_iptv ? 8 : 3;
+    mode = was_news ? 15 : was_iptv ? 8 : 3;
     return;
   }
   if (k == SDLK_RETURN && !repeat)
@@ -2622,12 +2625,14 @@ int main(int argc, char **argv) {
       else if (playing_radio) radio_stable_since = 0;
       if (state == libvlc_Error) {
         bool was_iptv = playing_iptv;
+        bool was_news = playing_news_video;
         bool was_radio = playing_radio;
         if (was_radio) { active = false; playing_radio = false; paused = false; radio_schedule_retry(); }
         else stop_media();
         notify(tr("Falha na reprodução. Consulte log.txt"));
         if (was_radio)
           mode = 7;
+        else if (was_news) mode = 15;
         else if (was_iptv) mode = 8;
       } else if (state == libvlc_Ended) {
         if (playing_radio) {
@@ -2636,6 +2641,9 @@ int main(int argc, char **argv) {
           paused = false;
           radio_schedule_retry();
           mode = 7;
+        } else if (playing_news_video) {
+          stop_media();
+          mode = 15;
         } else if (playing_iptv) {
           stop_media();
           mode = 8;
@@ -2718,6 +2726,7 @@ int main(int argc, char **argv) {
     SDL_DestroyTexture(cover_texture);
   if (radio_art_texture)
     SDL_DestroyTexture(radio_art_texture);
+  news_clear_textures();
   kp_sprites_free();
   sfx_quit();
   SDL_DestroyRenderer(renderer);

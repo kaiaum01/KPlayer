@@ -402,6 +402,13 @@ int main(void) {
   snprintf(news_articles[0].date, sizeof(news_articles[0].date), "23/11 08:30");
   snprintf(news_articles[0].summary, sizeof(news_articles[0].summary), "Resumo de teste sem listras.");
   snprintf(news_articles[0].body, sizeof(news_articles[0].body), "Corpo completo da notícia de teste.");
+  snprintf(news_articles[0].image_path, sizeof(news_articles[0].image_path), ".news-thumbs/nonexistent.jpg");
+  snprintf(news_articles[0].video_url, sizeof(news_articles[0].video_url), "https://cdn.example.com/news.mp4");
+  assert(news_valid_thumb_path(".news-thumbs/abc12345.jpg"));
+  assert(!news_valid_thumb_path("../etc/passwd"));
+  assert(!news_valid_thumb_path(".news-thumbs/../secret.jpg"));
+  assert(news_valid_http_url("https://cdn.example.com/news.mp4"));
+  assert(!news_valid_http_url("file:///tmp/x.mp4"));
   news_selected = 0;
   news_offset = 0;
   news_detail_open = false;
@@ -414,6 +421,7 @@ int main(void) {
   assert(!news_detail_open);
   key(SDLK_BACKSPACE, false);
   assert(mode == 3);
+  news_clear_textures();
   /* Storage navigation uses actual temporary folders, never /roms on the host.
    */
   char temp[] = "/tmp/kplayer-storage-XXXXXX";

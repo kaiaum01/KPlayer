@@ -3051,6 +3051,7 @@ async function createServer() {
     category: 'breaking' | 'world' | 'crime' | 'entertainment' | 'sports';
     categoryLabel: string;
     imageUrl: string;
+    videoUrl: string;
     link: string;
   }
 
@@ -3135,15 +3136,24 @@ async function createServer() {
       const dateM = body.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
       const linkM = body.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
       const imgM =
-        body.match(/<media:content[^>]*url="([^"]+)"/i) ||
-        body.match(/<enclosure[^>]*url="([^"]+)"/i) ||
-        body.match(/<img[^>]*src="([^"]+)"/i);
+        body.match(/<media:thumbnail[^>]*url=["']([^"']+)["']/i) ||
+        body.match(/<media:content[^>]*medium=["']image["'][^>]*url=["']([^"']+)["']/i) ||
+        body.match(/<media:content[^>]*url=["']([^"']+)["'][^>]*medium=["']image["']/i) ||
+        body.match(/<media:content[^>]*url=["']([^"']+)["']/i) ||
+        body.match(/<enclosure[^>]*type=["']image\/[^"']+["'][^>]*url=["']([^"']+)["']/i) ||
+        body.match(/<img[^>]*src=["']([^"']+)["']/i);
+      const vidM =
+        body.match(/<media:content[^>]*medium=["']video["'][^>]*url=["']([^"']+)["']/i) ||
+        body.match(/<media:content[^>]*type=["']video\/[^"']+["'][^>]*url=["']([^"']+)["']/i) ||
+        body.match(/<enclosure[^>]*type=["']video\/[^"']+["'][^>]*url=["']([^"']+)["']/i) ||
+        body.match(/<(?:video|source)[^>]*src=["']([^"']+)["']/i);
 
       const title = titleM ? stripHtmlNews(titleM[1], 220) : '';
       if (!title) continue;
       const desc = descM ? stripHtmlNews(descM[1], 480) : title;
       const rawLink = linkM ? decodeXmlEntities(linkM[1]).trim() : '';
       const rawImg = imgM ? decodeXmlEntities(imgM[1]).trim() : '';
+      const rawVid = vidM ? decodeXmlEntities(vidM[1]).trim() : '';
 
       out.push({
         id: `rss-${cat}-${out.length}-${title.slice(0, 24)}`,
@@ -3155,6 +3165,7 @@ async function createServer() {
         category: cat,
         categoryLabel: NEWS_CAT_LABELS[cat] ?? 'Brasil',
         imageUrl: rawImg && isSafeExternalUrl(rawImg) ? rawImg : '',
+        videoUrl: rawVid && isSafeExternalUrl(rawVid) ? rawVid : '',
         link: rawLink && isSafeExternalUrl(rawLink) ? rawLink : '',
       });
     }
@@ -3210,6 +3221,7 @@ async function createServer() {
               source_id?: string | null;
               category?: string[] | string | null;
               image_url?: string | null;
+              video_url?: string | null;
               link?: string | null;
             }>;
           };
@@ -3228,6 +3240,7 @@ async function createServer() {
                   ? desc
                   : rawContent;
               const rawImg = String(item.image_url ?? '').trim();
+              const rawVid = String(item.video_url ?? '').trim();
               const rawLink = String(item.link ?? '').trim();
               articles.push({
                 id: String(item.article_id || `nd-${articles.length}`),
@@ -3239,6 +3252,7 @@ async function createServer() {
                 category: normCat,
                 categoryLabel: NEWS_CAT_LABELS[normCat] ?? 'Brasil',
                 imageUrl: rawImg && isSafeExternalUrl(rawImg) ? rawImg : '',
+                videoUrl: rawVid && isSafeExternalUrl(rawVid) ? rawVid : '',
                 link: rawLink && isSafeExternalUrl(rawLink) ? rawLink : '',
               });
             }

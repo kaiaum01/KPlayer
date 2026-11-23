@@ -34,4 +34,5 @@ __pycache__/
 .env.local
 /ports/kplayer/news.cfg
 /ports/kplayer/.news-cache.tsv
+/ports/kplayer/.news-thumbs/
 

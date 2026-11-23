@@ -12,6 +12,7 @@ typedef struct {
   char favicon[1024];
   int bitrate;
   bool is_iptv;
+  bool is_news_video;
 } RadioStation;
 
 static RadioStation radio_stations[RADIO_MAX_STATIONS];
@@ -618,6 +619,7 @@ static void radio_start_async(RadioStation station) {
   active = false;
   playing_radio = false;
   playing_iptv = false;
+  playing_news_video = false;
   paused = false;
   pthread_mutex_lock(&video.mutex);
   video.ready = false;
@@ -653,10 +655,12 @@ static void radio_poll_play(void) {
   pthread_mutex_unlock(&radio_play_mutex);
   if (queued) { radio_start_async(next); return; }
   if (!success) {
-    if (station.is_iptv) { notify(tr("Não foi possível abrir o canal")); mode = 8; }
+    if (station.is_news_video) { notify(tr("Não foi possível abrir o vídeo da notícia")); mode = 15; }
+    else if (station.is_iptv) { notify(tr("Não foi possível abrir o canal")); mode = 8; }
     else { radio_current_station = station; radio_schedule_retry(); }
     return;
   }
+  bool is_video_stream = station.is_iptv || station.is_news_video;
   radio_current_station = station;
   radio_nowplaying[0] = 0;
   radio_nowplaying_next = 0;
@@ -664,18 +668,19 @@ static void radio_poll_play(void) {
   snprintf(media_name, sizeof(media_name), "%s", station.name);
   snprintf(title, sizeof(title), "%s", station.name);
   snprintf(artist, sizeof(artist), "%s", station.tags[0] ? station.tags : station.country);
-  snprintf(album, sizeof(album), "%s", tr("Rádio Online"));
-  snprintf(media_format, sizeof(media_format), "%.15s", station.codec[0] ? station.codec : "STREAM");
+  snprintf(album, sizeof(album), "%s", station.is_news_video ? tr("Notícias") : tr("Rádio Online"));
+  snprintf(media_format, sizeof(media_format), "%.15s", station.codec[0] ? station.codec : (station.is_news_video ? "VIDEO" : "STREAM"));
   media_size_known = false; media_size_bytes = 0;
   media_sample_rate = media_channels = 0;
   media_bitrate_kbps = station.bitrate > 0 ? (unsigned)station.bitrate : 0;
   lyric_count = plain_count = 0;
   active = true;
-  playing_audio = playing_radio = !station.is_iptv;
+  playing_audio = playing_radio = !is_video_stream;
   playing_iptv = station.is_iptv;
-  if (station.is_iptv) { mode = 1; show_osd = true; osd_until = SDL_GetTicks() + 3000; }
+  playing_news_video = station.is_news_video;
+  if (is_video_stream) { mode = 1; show_osd = true; osd_until = SDL_GetTicks() + 3000; }
   paused = false;
-  if (!station.is_iptv) radio_register_click(station.uuid);
+  if (!is_video_stream) radio_register_click(station.uuid);
 }
 
 static void radio_play_selected(void) {
