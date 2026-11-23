@@ -5,9 +5,9 @@
     {
       "version": "2.1.0",
       "releaseTag": "v2.1.0",
-      "releasedAt": "2026-11-23T11:51:37Z",
+      "releasedAt": "2026-11-23T15:06:05Z",
       "r36s": "updates/v2.1.0/KPlayer-v2.1.0-R36S.zip",
-      "sha256": "b6bebf53a523e73a48fc6cac6ac37d29e6d1f2f3f6677ed3950fdb316a362551",
+      "sha256": "5a7db2c0474f5b8843e539e4046f07858d11c53993b757f16376de8595e693fa",
       "notes": [
         "Nova Aba Notícias (antes do Placar da Bola):",
         "Manchetes do Brasil em português com filtros rápidos (Todas, Urgente, Mundo, Polícia, Entretenimento e Esportes) via API NewsData.io (configurável por news.cfg no R36S ou NEWSDATA_",

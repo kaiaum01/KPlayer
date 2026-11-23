@@ -6,7 +6,7 @@
   "platform": "r36s",
   "releaseTag": "v2.1.0",
   "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.0",
-  "releasedAt": "2026-11-23T11:51:37Z",
+  "releasedAt": "2026-11-23T15:06:05Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -36,8 +36,8 @@
     "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.0/KPlayer-v2.1.0-R36S.zip",
     "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.0/KPlayer-v2.1.0-R36S.zip",
     "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.0/KPlayer-v2.1.0-R36S.zip.sha256",
-    "sha256": "b6bebf53a523e73a48fc6cac6ac37d29e6d1f2f3f6677ed3950fdb316a362551",
-    "sizeBytes": 16589496
+    "sha256": "5a7db2c0474f5b8843e539e4046f07858d11c53993b757f16376de8595e693fa",
+    "sizeBytes": 16593978
   },
   "web": {
     "version": "2.1.0",
