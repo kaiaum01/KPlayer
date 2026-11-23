@@ -70,7 +70,7 @@ const DEFAULT_CHANGELOG_NOTES: string[] = [
   'Novas artes em alta resolução baseadas no disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490).',
   'Pacote completo salvo em kplayer/scraper/ com Capa (PNG transparente), Marquee (PNG transparente), Boxart (900×1200) e Fanart Full HD (1920×1080).',
   'Edição automática de metadados no gamelist.xml removida — seus arquivos XML permanecem 100% intactos.',
-  'Atualização automática do nome da versão no lançador .sh (KPlayer v2.0.9.sh) a cada nova atualização.',
+  'Corrigido lançador KPlayer.sh (nome fixo, versão atualizada internamente e reinício seguro via bash, limpando atalhos antigos quebrados).',
   'Protetor de tela com visualizadores (30s padrão), saudação climática inteligente na tela inicial e barra de progresso de atualização.',
 ];
 
@@ -4439,7 +4439,7 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer v2.0.9.sh (auto-versionado)
+                    KPlayer.sh (v2.0.9 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4505,18 +4505,18 @@ export default function App() {
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
                 <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.0.9-R36S.zip</code>.</li>
                 <li>
-                  Copie <code className="text-zinc-100">KPlayer v2.0.9.sh</code> e a pasta{' '}
+                  Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
                   <code className="text-zinc-100">/roms/ports/</code> ou{' '}
                   <code className="text-zinc-100">/roms2/ports/</code>.
                 </li>
                 <li>
-                  Abra <strong className="text-zinc-100">Ports → KPlayer v2.0.9</strong>. As imagens de Capa/Marquee transparentes ficam disponíveis em{' '}
+                  Abra <strong className="text-zinc-100">Ports → KPlayer</strong>. As imagens de Capa/Marquee transparentes ficam disponíveis em{' '}
                   <code className="text-zinc-100">kplayer/scraper/</code> sem modificar nenhum <code className="text-zinc-100">gamelist.xml</code>.
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.0.9, Capa transparente (1200×1200), Marquee transparente (1600×490), Boxart e Fanart Full HD baseados no disco de vinil K, lançador .sh atualizado a cada versão, changelog pós-atualização e visualizador 30s.
+                Inclui binário ARM64 nativo v2.0.9, lançador KPlayer.sh corrigido e estável, Capa transparente (1200×1200), Marquee transparente (1600×490), Boxart e Fanart Full HD do disco K, changelog pós-atualização e visualizador 30s.
               </p>
             </div>
 

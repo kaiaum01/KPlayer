@@ -4,9 +4,9 @@
 
 1. Extraia `KPlayer-v2.0.9-R36S.zip`.
 2. Copie para `/roms/ports/` (ou `/roms2/ports/` no segundo cartão):
-   - `KPlayer v2.0.9.sh` (o nome da versão no `.sh` é atualizado automaticamente a cada atualização futura)
+   - `KPlayer.sh` (lançador fixo sem espaços, com a versão atualizada internamente a cada update)
    - pasta `kplayer/` (inclui as artes em alta resolução do disco K em `kplayer/scraper/`: Capa PNG transparente 1200×1200, Marquee PNG transparente 1600×490, Boxart 900×1200 e Fanart Full HD 1920×1080)
-3. No R36S, abra **Ports → KPlayer v2.0.9**.
+3. No R36S, abra **Ports → KPlayer**.
    - O KPlayer **não edita nem sobrescreve** o seu arquivo `gamelist.xml`. Você pode associar as imagens da pasta `kplayer/scraper/` quando quiser pelo menu do EmulationStation ou manualmente.
 
 ### Pastas de mídia (carregamento rápido sem sobrecarregar o console)
@@ -28,5 +28,5 @@ Se houver erro, consulte `ports/kplayer/log.txt`.
 ## English
 
 1. Extract `KPlayer-v2.0.9-R36S.zip`.
-2. Copy `KPlayer v2.0.9.sh` and the `kplayer/` folder into `/roms/ports/` (or `/roms2/ports/`).
-3. Open **Ports → KPlayer v2.0.9** on your R36S. High-resolution vinyl-disc scraper artwork (transparent 1200×1200 Cover, transparent 1600×490 Marquee, 900×1200 Boxart, and 1920×1080 Fanart) is stored in `kplayer/scraper/`. KPlayer never modifies your `gamelist.xml`, and automatically updates the version in the `.sh` launcher on every future update.
+2. Copy `KPlayer.sh` and the `kplayer/` folder into `/roms/ports/` (or `/roms2/ports/`).
+3. Open **Ports → KPlayer** on your R36S. High-resolution vinyl-disc scraper artwork (transparent 1200×1200 Cover, transparent 1600×490 Marquee, 900×1200 Boxart, and 1920×1080 Fanart) is stored in `kplayer/scraper/`. KPlayer keeps `KPlayer.sh` stable across updates and never modifies your `gamelist.xml`.

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Build the R36S install ZIP from an explicit runtime allowlist; no personal media.
 
-v2.0.8+:
-- Automatically stamps the versioned launcher script as `KPlayer v<VERSION>.sh`
-  (with updated version header and `KPLAYER_VERSION` inside) on every release.
+v2.0.9+:
+- Always ships the stable `KPlayer.sh` launcher (no spaces in filename, so
+  EmulationStation/dArkOS never breaks across updates), with the updated
+  `# KPlayer v<VERSION>` header and `KPLAYER_VERSION="<VERSION>"` stamped inside.
 - Bundles high-resolution vinyl-disc scraper artwork inside `kplayer/scraper/`
   (transparent 1200x1200 Cover, transparent 1600x490 Marquee, 900x1200 Boxart,
   1920x1080 Fanart) without touching or modifying any user `gamelist.xml`.
@@ -107,15 +108,15 @@ def stamp_launcher_text(raw: str, ver: str) -> bytes:
 
 
 with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out:
-    # Write dynamically versioned launcher script: `KPlayer v<VERSION>.sh`
-    launcher_arcname = f"KPlayer v{VERSION}.sh"
+    # Always write fixed `KPlayer.sh` (version stamped inside) so EmulationStation never loses the port
+    launcher_arcname = "KPlayer.sh"
     launcher_bytes = stamp_launcher_text(launcher_src.read_text(encoding="utf-8"), VERSION)
     linfo = zipfile.ZipInfo(launcher_arcname)
     linfo.compress_type = zipfile.ZIP_DEFLATED
     linfo.external_attr = (0o100000 | 0o755) << 16
     out.writestr(linfo, launcher_bytes)
 
-    # Also keep an internal template inside kplayer/ so updater.py can always stamp future .sh launchers
+    # Also keep an internal template inside kplayer/ so updater.py can always refresh KPlayer.sh
     tinfo = zipfile.ZipInfo("kplayer/KPlayer.sh.tmpl")
     tinfo.compress_type = zipfile.ZIP_DEFLATED
     tinfo.external_attr = (0o100000 | 0o644) << 16

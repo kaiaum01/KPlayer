@@ -1159,7 +1159,7 @@ static void changelog_ensure_loaded(void) {
     static const char *const builtin[] = {
         "Nova Capa transparente (1200x1200) e Marquee transparente (1600x490) fieis ao disco de vinil K.",
         "Pacote em alta resolucao em kplayer/scraper/: Capa, Marquee, Boxart (900x1200) e Fanart Full HD.",
-        "Nome da versao atualizado automaticamente no arquivo .sh (KPlayer v2.0.9.sh) a cada atualizacao.",
+        "Corrigido lancador KPlayer.sh (nome fixo, versao atualizada internamente e reinicio seguro via bash).",
         "Sem edicao automatica no gamelist.xml — seus arquivos XML permanecem 100% intactos.",
         "Visualizador de 30s ativado por padrao e saudacao climatica inteligente na tela inicial.",
     };

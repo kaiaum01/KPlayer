@@ -5,8 +5,9 @@ Checks the GitHub updates/latest.json channel (with GitHub Releases fallback)
 for any version newer than the installed one (e.g. 2.0.8 -> 2.0.9 -> 2.0.10),
 downloads and SHA-256 verifies the R36S ZIP package, applies updated binaries
 and assets atomically while strictly preserving all user data, gamelist.xml,
-and history, updates the versioned `KPlayer v<VERSION>.sh` launcher without
-modifying any XML files, and signals exit code 42 to restart immediately.
+and history, keeps `KPlayer.sh` stable (updating the version inside it and
+cleaning broken `KPlayer v*.sh` leftovers) without modifying any XML files,
+and signals exit code 42 to restart immediately.
 """
 from pathlib import Path
 import hashlib
@@ -100,14 +101,15 @@ def stamp_sh_content(content: str, version: str) -> str:
     return out
 
 
-def sync_versioned_launcher(ports_dir: Path, gamedir: Path, version: str) -> Path | None:
-    """Ensure `KPlayer v<version>.sh` exists with updated version text and clean up old KPlayer*.sh launchers.
+def ensure_stable_launcher(ports_dir: Path, gamedir: Path, version: str) -> Path | None:
+    """Keep a single fixed `KPlayer.sh` launcher (no spaces in filename) with the updated version inside.
 
+    Also cleans up broken `KPlayer v*.sh` leftovers from v2.0.8 ONLY after `KPlayer.sh` is safely written.
     Does NOT edit or create any gamelist.xml or XML metadata files.
     """
     if not ports_dir.is_dir() or not re.fullmatch(r"\d+\.\d+\.\d+", version or ""):
         return None
-    target_name = f"KPlayer v{version}.sh"
+    target_name = "KPlayer.sh"
     target_path = ports_dir / target_name
 
     existing: list[Path] = []
@@ -118,11 +120,12 @@ def sync_versioned_launcher(ports_dir: Path, gamedir: Path, version: str) -> Pat
     except OSError:
         return None
 
+    # Prefer fresh template bundled with the new version, then existing KPlayer.sh, then other KPlayer*.sh
     src_path: Path | None = None
-    if target_path.is_file():
-        src_path = target_path
-    elif (gamedir / "KPlayer.sh.tmpl").is_file():
+    if (gamedir / "KPlayer.sh.tmpl").is_file():
         src_path = gamedir / "KPlayer.sh.tmpl"
+    elif target_path.is_file():
+        src_path = target_path
     elif existing:
         existing.sort(key=lambda p: (parse_semver(p.name), p.stat().st_mtime), reverse=True)
         src_path = existing[0]
@@ -133,20 +136,29 @@ def sync_versioned_launcher(ports_dir: Path, gamedir: Path, version: str) -> Pat
     try:
         raw = src_path.read_text(encoding="utf-8", errors="replace")
         stamped = stamp_sh_content(raw, version)
-        tmp = ports_dir / f".{target_name}.tmp"
+        if not stamped.strip():
+            return None
+        tmp = ports_dir / ".KPlayer.sh.tmp"
         tmp.write_text(stamped, encoding="utf-8")
-        os.chmod(tmp, 0o755)
+        try:
+            os.chmod(tmp, 0o755)
+        except OSError:
+            pass
         os.replace(tmp, target_path)
     except OSError:
         return None
 
-    for old in existing:
-        if old.name != target_name:
-            try:
-                old.unlink()
-            except OSError:
-                pass
+    if target_path.is_file() and target_path.stat().st_size > 0:
+        for old in existing:
+            if old.name != target_name:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
     return target_path
+
+
+sync_versioned_launcher = ensure_stable_launcher
 
 
 def parse_semver(raw: str) -> tuple[int, int, int]:
@@ -589,7 +601,10 @@ def apply_update(gamedir: Path) -> int:
                         mode = 0o755
                     elif not mode:
                         mode = 0o644
-                    os.chmod(tmp_target, mode)
+                    try:
+                        os.chmod(tmp_target, mode)
+                    except OSError:
+                        pass
                     os.replace(tmp_target, target)
                     if fidx == 1 or fidx == total_files or fidx % 2 == 0:
                         pct = 86 + int((fidx / total_files) * 11)
@@ -604,15 +619,15 @@ def apply_update(gamedir: Path) -> int:
         if new_ver:
             (gamedir / "installed-version.txt").write_text(new_ver + "\n", encoding="utf-8")
             (gamedir / "app-version.txt").write_text(new_ver + "\n", encoding="utf-8")
-        # Update versioned `KPlayer v<new_ver>.sh` (never modifies any gamelist.xml)
+        # Keep fixed `KPlayer.sh` updated with new version inside (never modifies gamelist.xml)
         write_progress(
             gamedir,
             98,
-            "Atualizando lançador .sh...",
-            f"Atualizando atalho para KPlayer v{new_ver or CURRENT_FALLBACK}.sh",
+            "Atualizando lançador KPlayer.sh...",
+            f"Gravando versão v{new_ver or CURRENT_FALLBACK} em KPlayer.sh",
         )
         try:
-            sync_versioned_launcher(ports_dir, gamedir, new_ver or CURRENT_FALLBACK)
+            ensure_stable_launcher(ports_dir, gamedir, new_ver or CURRENT_FALLBACK)
         except Exception:
             pass
         write_progress(
