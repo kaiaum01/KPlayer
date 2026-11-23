@@ -5,13 +5,12 @@
   "channel": "stable",
   "platform": "r36s",
   "releaseTag": "v2.0.9",
-  "releasePageUrl": "",
-  "releasedAt": "2026-11-22T23:59:00Z",
-  "repository": "",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.0.9",
+  "releasedAt": "2026-11-23T02:12:43Z",
+  "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
   "preserveUserPaths": [
-    "gamelist.xml",
     "iptv_usuario/",
     "radios_usuario/",
     "midias/",
@@ -24,20 +23,21 @@
     "resume.cfg"
   ],
   "notes": [
-    "Corrigido bug do lançador .sh que impedia abrir o aplicativo após atualizar: restaurado KPlayer.sh fixo (sem espaços) com reinício seguro via bash e limpeza automática de KPlayer v*.sh",
-    "Novas artes em alta resolução fiéis ao disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490)",
-    "Pacote de scraper salvo em kplayer/scraper/ com Capa PNG transparente, Marquee PNG transparente, Boxart (900×1200) e Fanart Full HD (1920×1080)",
-    "Edição automática de metadados no gamelist.xml removida — seus arquivos XML permanecem 100% intactos",
-    "Compatibilidade reforçada com cartões FAT32/exFAT no auto-updater, changelog pós-atualização e visualizador de 30s"
+    "Correção Crítica do Lançador KPlayer.sh (Abre e Reinicia Sempre):",
+    "Corrigido o problema da v2.0.8 em que o script .sh mudava de nome (KPlayer v2.0.8.sh), procurava um arquivo versionado e impedia o EmulationStation de abrir o KPlayer.",
+    "Restaurado o lançador fixo KPlayer.sh (sem espaços no nome, com a versão v2.0.9 gravada internamente), reinício seguro via exec bash \"$script_dir/KPlayer.sh\", proteção contra erros",
+    "Novas Imagens de Alta Resolução Fiéis ao Disco de Vinil K Original (dentro de kplayer/scraper/):",
+    "Capa Principal (Fundo Transparente PNG32): kplayer/scraper/kplayer-image.png (1200×1200 RGBA) — disco de vinil preto com centro verde esmeralda K, anel duplo branco e legenda PLAYE",
+    "Marquee / Logo (Fundo Transparente PNG32): kplayer/scraper/kplayer-marquee.png (1600×490 RGBA) — logo horizontal grande com o disco de vinil K + tipografia K PLAYER com contorno es"
   ],
   "r36s": {
     "filename": "KPlayer-v2.0.9-R36S.zip",
     "path": "updates/v2.0.9/KPlayer-v2.0.9-R36S.zip",
-    "url": "",
-    "releaseUrl": "",
-    "sha256Url": "",
-    "sha256": "",
-    "sizeBytes": 0
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.9/KPlayer-v2.0.9-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.0.9/KPlayer-v2.0.9-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.9/KPlayer-v2.0.9-R36S.zip.sha256",
+    "sha256": "7b48ca0c736431c9b0e4c304db97030b1ffc48694a1461c8ae3ed8af2f694464",
+    "sizeBytes": 16570849
   },
   "web": {
     "version": "2.0.9",
