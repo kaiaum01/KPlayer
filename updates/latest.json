@@ -5,13 +5,12 @@
   "channel": "stable",
   "platform": "r36s",
   "releaseTag": "v2.0.8",
-  "releasePageUrl": "",
-  "releasedAt": "2026-11-22T23:55:00Z",
-  "repository": "",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.0.8",
+  "releasedAt": "2026-11-23T00:11:57Z",
+  "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
   "preserveUserPaths": [
-    "gamelist.xml",
     "iptv_usuario/",
     "radios_usuario/",
     "midias/",
@@ -24,20 +23,21 @@
     "resume.cfg"
   ],
   "notes": [
-    "Novas artes em alta resolução fiéis ao disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490)",
-    "Pacote de scraper salvo em kplayer/scraper/ com Capa PNG transparente, Marquee PNG transparente, Boxart (900×1200) e Fanart Full HD (1920×1080)",
-    "Edição automática de metadados no gamelist.xml removida — seus arquivos XML permanecem 100% intactos",
-    "Nome da versão atualizado automaticamente no arquivo lançador .sh (KPlayer v2.0.8.sh) a cada atualização, removendo atalhos antigos",
-    "Changelog pós-atualização exibido uma vez, visualizador de 30s ativado por padrão e saudação climática inteligente na tela inicial"
+    "Novas Imagens de Alta Resolução Fiéis ao Disco de Vinil K Original (dentro de kplayer/scraper/):",
+    "Capa Principal (Fundo Transparente PNG32): kplayer/scraper/kplayer-image.png (1200×1200 RGBA) — disco de vinil preto com centro verde esmeralda K, anel duplo branco e legenda PLAYE",
+    "Marquee / Logo (Fundo Transparente PNG32): kplayer/scraper/kplayer-marquee.png (1600×490 RGBA) — logo horizontal grande com o disco de vinil K + tipografia K PLAYER com contorno es",
+    "Boxart Vertical: kplayer/scraper/kplayer-thumb.png (900×1200) — arte vertical fiel ao disco de vinil K original (PLAYER · R36S EDITION).",
+    "Fanart Full HD: kplayer/scraper/kplayer-fanart.png (1920×1080) — papel de parede widescreen escuro com o disco de vinil K à direita e ondas acústicas verdes sutis.",
+    "Sem Edição Automática de XML (gamelist.xml 100% Intacto):"
   ],
   "r36s": {
     "filename": "KPlayer-v2.0.8-R36S.zip",
     "path": "updates/v2.0.8/KPlayer-v2.0.8-R36S.zip",
-    "url": "",
-    "releaseUrl": "",
-    "sha256Url": "",
-    "sha256": "",
-    "sizeBytes": 0
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.8/KPlayer-v2.0.8-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.0.8/KPlayer-v2.0.8-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.0.8/KPlayer-v2.0.8-R36S.zip.sha256",
+    "sha256": "dd0120eef513884576e9091a216eabc008b69da8963b1cd239f595e09b630796",
+    "sizeBytes": 16570477
   },
   "web": {
     "version": "2.0.8",
