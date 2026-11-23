@@ -1,4 +1,4 @@
-# KPlayer v2.0.8 — Edição R36S (Artes de Scraper Completas, Merge Automático em gamelist.xml e .sh Versionado)
+# KPlayer v2.0.8 — Edição R36S (Novas Artes Transparentes do Disco K + Lançador .sh Versionado)
 
 Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita em **C + SDL2 + libVLC ARM64**, adaptativa à resolução do dispositivo.
 
@@ -6,17 +6,15 @@ Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita e
 
 ## Novidades da v2.0.8 (R36S Nativo)
 
-- **Pacote Completo de Imagens de Scraper dentro de `kplayer/scraper/`:**
-  - **Capa Principal (`<image>`)**: `kplayer/scraper/kplayer-image.png` (640×480)
-  - **Boxart / Miniatura (`<thumbnail>`)**: `kplayer/scraper/kplayer-thumb.png` (480×640)
-  - **Marquee / Logo (`<marquee>`)**: `kplayer/scraper/kplayer-marquee.png` (640×360)
-  - **Fanart / Papel de Parede (`<fanart>`)**: `kplayer/scraper/kplayer-fanart.png` (854×480)
-  - Todas as artes e metadados (`KPlayer-metadata.xml` e `gamelist.xml` interno) ficam organizados dentro da pasta `kplayer/`.
-- **Inserção Automática de Metadados em `/roms/ports/gamelist.xml` e `/roms2/ports/gamelist.xml` (Sem Apagar Nada):**
-  - Ao iniciar ou atualizar, o KPlayer executa automaticamente `kplayer/scraper_sync.py` e insere ou atualiza apenas o bloco `<game>` do KPlayer no `gamelist.xml` existente em `/roms/ports` e `/roms2/ports`, preservando 100% dos seus outros ports e jogos.
-  - Se o arquivo `gamelist.xml` ainda não existir na pasta `ports`, o KPlayer cria automaticamente um `gamelist.xml` válido já com todos os metadados completos (`name`, `sortname`, `desc`, `image`, `thumbnail`, `marquee`, `fanart`, `rating`, `releasedate`, `developer`, `publisher`, `genre`, `family`, `players`, `lang`, `region`, `kidgame`).
+- **Novas Imagens de Alta Resolução Fiéis ao Disco de Vinil K Original (dentro de `kplayer/scraper/`):**
+  - **Capa Principal (Fundo Transparente PNG32)**: `kplayer/scraper/kplayer-image.png` (**1200×1200** RGBA) — disco de vinil preto com centro verde esmeralda `K`, anel duplo branco e legenda `PLAYER` recortados com fundo transparente (também sincronizada em `images/KPlayer-image.png` e `kplayer/cover.png`).
+  - **Marquee / Logo (Fundo Transparente PNG32)**: `kplayer/scraper/kplayer-marquee.png` (**1600×490** RGBA) — logo horizontal grande com o disco de vinil `K` + tipografia **`K PLAYER`** com contorno escuro nítido para se destacar em qualquer tema do EmulationStation.
+  - **Boxart Vertical**: `kplayer/scraper/kplayer-thumb.png` (**900×1200**) — arte vertical fiel ao disco de vinil K original (`PLAYER · R36S EDITION`).
+  - **Fanart Full HD**: `kplayer/scraper/kplayer-fanart.png` (**1920×1080**) — papel de parede widescreen escuro com o disco de vinil K à direita e ondas acústicas verdes sutis.
+- **Sem Edição Automática de XML (`gamelist.xml` 100% Intacto):**
+  - A edição automática de metadados no `gamelist.xml` foi totalmente removida — o KPlayer nunca modifica nem sobrescreve seus arquivos `gamelist.xml`.
 - **Lançador `.sh` Atualizado Automaticamente a Cada Versão (`KPlayer v2.0.8.sh`):**
-  - A cada nova versão instalada ou atualizada via Auto-Update, o script lançador é automaticamente atualizado/renomeado para **`KPlayer vX.Y.Z.sh`** (com `KPLAYER_VERSION="X.Y.Z"` gravado dentro dele), removendo lançadores antigos do KPlayer para não gerar duplicatas no EmulationStation e sincronizando o `<path>` no `gamelist.xml`.
+  - A cada nova versão instalada ou atualizada via Auto-Update, o script lançador é automaticamente atualizado/renomeado para **`KPlayer vX.Y.Z.sh`** (com `KPLAYER_VERSION="X.Y.Z"` gravado dentro dele), removendo lançadores antigos do KPlayer para evitar duplicatas.
 - **Inclui Tudo da v2.0.7:**
   - Changelog pós-atualização exibido uma única vez, protetor de tela com visualizadores (30s ativado por padrão), tela inicial inteligente com saudação do clima + sugestões aleatórias e barra de carregamento ao vivo (0%–100%) no atualizador.
 
@@ -27,9 +25,9 @@ Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita e
 ### Atualização Automática (Recomendado)
 1. Abra o KPlayer no R36S conectado ao Wi-Fi.
 2. Quando o aviso aparecer na barra superior, pressione **`SELECT` → `[A] Verificar atualizações` → `Baixar e atualizar (sem perder dados)`**.
-3. O KPlayer baixa da pasta `updates/`, valida o SHA-256, atualiza o lançador `.sh` para **`KPlayer v2.0.8.sh`**, insere os metadados/artes no `gamelist.xml` preservando todos os outros jogos e reinicia automaticamente.
+3. O KPlayer baixa da pasta `updates/`, valida o SHA-256, atualiza o lançador `.sh` para **`KPlayer v2.0.8.sh`**, atualiza as novas artes em `kplayer/scraper/` preservando todos os seus dados e `gamelist.xml` e reinicia automaticamente.
 
 ### Instalação Manual — R36S (dArkOS / PortMaster)
 1. Baixe **`KPlayer-v2.0.8-R36S.zip`** nos anexos desta release.
 2. Extraia e copie **`KPlayer v2.0.8.sh`** e a pasta **`kplayer/`** para `/roms/ports/` (ou `/roms2/ports/` no SD2).
-3. Abra **Ports → KPlayer v2.0.8** no R36S — na primeira abertura o próprio player insere os metadados e imagens de scraper no seu `gamelist.xml` automaticamente!
+3. Abra **Ports → KPlayer v2.0.8** no R36S. As artes em alta resolução (Capa e Marquee transparentes, Boxart e Fanart) ficam prontas em `kplayer/scraper/` para uso livre no seu scraper/tema.

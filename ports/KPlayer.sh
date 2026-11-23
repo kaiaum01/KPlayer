@@ -37,15 +37,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-chmod +x ./kplayer ./scraper_sync.py ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py 2>/dev/null || true
-if [ -f ./scraper_sync.py ] && command -v python3 >/dev/null 2>&1; then
-    python3 ./scraper_sync.py --version "$KPLAYER_VERSION" >/dev/null 2>&1 || true
-fi
+chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py 2>/dev/null || true
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
 while true; do
-    chmod +x ./kplayer ./scraper_sync.py ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py 2>/dev/null || true
+    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py 2>/dev/null || true
     ./kplayer
     result=$?
     if [ "$result" -eq 42 ]; then

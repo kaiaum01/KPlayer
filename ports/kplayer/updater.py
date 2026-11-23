@@ -5,9 +5,8 @@ Checks the GitHub updates/latest.json channel (with GitHub Releases fallback)
 for any version newer than the installed one (e.g. 2.0.7 -> 2.0.8 -> 2.0.9),
 downloads and SHA-256 verifies the R36S ZIP package, applies updated binaries
 and assets atomically while strictly preserving all user data, gamelist.xml,
-and history, updates the versioned `KPlayer v<VERSION>.sh` launcher, merges
-scraper metadata into `/roms/ports` & `/roms2/ports`, and signals exit code 42
-to restart immediately.
+and history, updates the versioned `KPlayer v<VERSION>.sh` launcher without
+modifying any XML files, and signals exit code 42 to restart immediately.
 """
 from pathlib import Path
 import hashlib
@@ -62,9 +61,92 @@ EXECUTABLE_NAMES = {
     "iptv_fetch.py",
     "football_fetch.py",
     "weather_fetch.py",
-    "scraper_sync.py",
     "updater.py",
 }
+
+KPLAYER_SH_RE = re.compile(r"^KPlayer(?:\s+v?\d+\.\d+\.\d+)?\.sh$", re.IGNORECASE)
+
+
+def stamp_sh_content(content: str, version: str) -> str:
+    """Update the version header comment and KPLAYER_VERSION variable inside a KPlayer .sh script."""
+    if not content.strip():
+        return content
+    if re.search(r"^#\s*K\s*PLAYER(?:\s+v?\d+\.\d+\.\d+)?\b.*$", content, flags=re.MULTILINE | re.IGNORECASE):
+        out = re.sub(
+            r"^#\s*K\s*PLAYER(?:\s+v?\d+\.\d+\.\d+)?\b.*$",
+            f"# KPlayer v{version} - dArkOS / Debian 13 ARM64 / PortMaster",
+            content,
+            count=1,
+            flags=re.MULTILINE | re.IGNORECASE,
+        )
+    else:
+        lines = content.splitlines(keepends=True)
+        insert_at = 1 if lines and lines[0].startswith("#!") else 0
+        lines.insert(insert_at, f"# KPlayer v{version} - dArkOS / Debian 13 ARM64 / PortMaster\n")
+        out = "".join(lines)
+    if re.search(r'^KPLAYER_VERSION="[^"]*"', out, flags=re.MULTILINE):
+        out = re.sub(
+            r'^KPLAYER_VERSION="[^"]*"',
+            f'KPLAYER_VERSION="{version}"',
+            out,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    else:
+        lines = out.splitlines(keepends=True)
+        insert_at = 2 if len(lines) >= 2 and lines[0].startswith("#!") else (1 if lines and lines[0].startswith("#!") else 0)
+        lines.insert(insert_at, f'KPLAYER_VERSION="{version}"\n')
+        out = "".join(lines)
+    return out
+
+
+def sync_versioned_launcher(ports_dir: Path, gamedir: Path, version: str) -> Path | None:
+    """Ensure `KPlayer v<version>.sh` exists with updated version text and clean up old KPlayer*.sh launchers.
+
+    Does NOT edit or create any gamelist.xml or XML metadata files.
+    """
+    if not ports_dir.is_dir() or not re.fullmatch(r"\d+\.\d+\.\d+", version or ""):
+        return None
+    target_name = f"KPlayer v{version}.sh"
+    target_path = ports_dir / target_name
+
+    existing: list[Path] = []
+    try:
+        for entry in ports_dir.iterdir():
+            if entry.is_file() and KPLAYER_SH_RE.match(entry.name):
+                existing.append(entry)
+    except OSError:
+        return None
+
+    src_path: Path | None = None
+    if target_path.is_file():
+        src_path = target_path
+    elif (gamedir / "KPlayer.sh.tmpl").is_file():
+        src_path = gamedir / "KPlayer.sh.tmpl"
+    elif existing:
+        existing.sort(key=lambda p: (parse_semver(p.name), p.stat().st_mtime), reverse=True)
+        src_path = existing[0]
+
+    if src_path is None:
+        return None
+
+    try:
+        raw = src_path.read_text(encoding="utf-8", errors="replace")
+        stamped = stamp_sh_content(raw, version)
+        tmp = ports_dir / f".{target_name}.tmp"
+        tmp.write_text(stamped, encoding="utf-8")
+        os.chmod(tmp, 0o755)
+        os.replace(tmp, target_path)
+    except OSError:
+        return None
+
+    for old in existing:
+        if old.name != target_name:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    return target_path
 
 
 def parse_semver(raw: str) -> tuple[int, int, int]:
@@ -522,22 +604,15 @@ def apply_update(gamedir: Path) -> int:
         if new_ver:
             (gamedir / "installed-version.txt").write_text(new_ver + "\n", encoding="utf-8")
             (gamedir / "app-version.txt").write_text(new_ver + "\n", encoding="utf-8")
-        # Update versioned `KPlayer v<new_ver>.sh` and non-destructively merge gamelist.xml metadata
+        # Update versioned `KPlayer v<new_ver>.sh` (never modifies any gamelist.xml)
         write_progress(
             gamedir,
             98,
-            "Atualizando atalho e scraper...",
-            f"Renomeando .sh para v{new_ver or CURRENT_FALLBACK} e atualizando gamelist.xml",
+            "Atualizando lançador .sh...",
+            f"Atualizando atalho para KPlayer v{new_ver or CURRENT_FALLBACK}.sh",
         )
         try:
-            import subprocess
-
-            sync_script = gamedir / "scraper_sync.py"
-            if sync_script.is_file():
-                cmd = [sys.executable or "python3", str(sync_script)]
-                if new_ver:
-                    cmd += ["--version", new_ver]
-                subprocess.run(cmd, cwd=str(gamedir), timeout=10, check=False)
+            sync_versioned_launcher(ports_dir, gamedir, new_ver or CURRENT_FALLBACK)
         except Exception:
             pass
         write_progress(

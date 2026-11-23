@@ -60,16 +60,16 @@ import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/Placar
 import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
 import { AndroidPlayerApp } from './components/AndroidPlayerApp';
-import scraperCoverImg from './assets/images/kplayer_scraper_image_1795388174490.jpg';
-import scraperBoxartImg from './assets/images/kplayer_scraper_boxart_1795388231552.jpg';
-import scraperMarqueeImg from './assets/images/kplayer_scraper_marquee_1795388175584.jpg';
-import scraperFanartImg from './assets/images/kplayer_scraper_fanart_1795388174418.jpg';
+import scraperCoverImg from './assets/images/kplayer_cover_transparent_v208.png';
+import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_1795391407681.jpg';
+import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
+import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
 const APP_VERSION = '2.0.8';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Pacote completo de imagens para scraper (Capa, Boxart, Marquee e Fanart) organizado dentro de kplayer/scraper/.',
-  'Inserção automática de metadados completos no gamelist.xml de /roms/ports e /roms2/ports sem apagar seus outros jogos/ports.',
-  'Se o arquivo gamelist.xml ainda não existir na pasta ports, o KPlayer cria automaticamente com todos os metadados.',
+  'Novas artes em alta resolução baseadas no disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490).',
+  'Pacote completo salvo em kplayer/scraper/ com Capa (PNG transparente), Marquee (PNG transparente), Boxart (900×1200) e Fanart Full HD (1920×1080).',
+  'Edição automática de metadados no gamelist.xml removida — seus arquivos XML permanecem 100% intactos.',
   'Atualização automática do nome da versão no lançador .sh (KPlayer v2.0.8.sh) a cada nova atualização.',
   'Protetor de tela com visualizadores (30s padrão), saudação climática inteligente na tela inicial e barra de progresso de atualização.',
 ];
@@ -4421,12 +4421,12 @@ export default function App() {
             </div>
 
             <div className="mt-4 flex gap-3.5 items-stretch">
-              <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
+              <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa de Scraper KPlayer v2.0.8 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.0.8 para R36S dArkOS"
                   referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               </div>
               <div className="flex-1 rounded-xl bg-[#0c0f15] border border-white/10 p-3 text-xs space-y-1.5 min-w-0">
@@ -4445,12 +4445,12 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Tamanho</span>
                   <span className="font-medium text-zinc-200">
-                    {r36sInfo ? formatBytes(r36sInfo.sizeBytes) : '~8.2 MB'}
+                    {r36sInfo ? formatBytes(r36sInfo.sizeBytes) : '~11 MB'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-zinc-400">Scraper + XML</span>
-                  <span className="font-medium text-[#1db954]">Merge automático em gamelist.xml</span>
+                  <span className="text-zinc-400">Artes Scraper</span>
+                  <span className="font-medium text-[#1db954]">Capa & Marquee PNG Transparente</span>
                 </div>
                 {r36sInfo?.sha256 && (
                   <div className="pt-1 border-t border-white/10">
@@ -4465,35 +4465,37 @@ export default function App() {
 
             <div className="mt-3 rounded-xl bg-[#0c0f15] border border-white/10 p-2.5">
               <div className="text-[11px] font-bold text-zinc-200 mb-2">
-                Artes de Scraper incluídas em <code className="text-[#1db954]">kplayer/scraper/</code>
+                Artes em alta resolução em <code className="text-[#1db954]">kplayer/scraper/</code>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-lg overflow-hidden border border-white/10 bg-black">
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-[#141923] flex flex-col">
+                  <div className="h-16 flex items-center justify-center p-1.5 bg-[linear-gradient(45deg,#181c24_25%,#1f2530_25%,#1f2530_50%,#181c24_50%,#181c24_75%,#1f2530_75%)] bg-[length:12px_12px]">
+                    <img
+                      src={scraperMarqueeImg}
+                      alt="Marquee Logo Transparente KPlayer R36S"
+                      referrerPolicy="no-referrer"
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
+                  <div className="text-[10px] text-center text-zinc-400 py-0.5 bg-black/70">Marquee PNG (1600×490)</div>
+                </div>
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black flex flex-col">
                   <img
                     src={scraperBoxartImg}
-                    alt="Boxart Thumbnail KPlayer R36S"
+                    alt="Boxart Disco KPlayer R36S"
                     referrerPolicy="no-referrer"
                     className="w-full h-16 object-cover"
                   />
-                  <div className="text-[10px] text-center text-zinc-400 py-0.5">Boxart / Thumb</div>
+                  <div className="text-[10px] text-center text-zinc-400 py-0.5">Boxart (900×1200)</div>
                 </div>
-                <div className="rounded-lg overflow-hidden border border-white/10 bg-black">
-                  <img
-                    src={scraperMarqueeImg}
-                    alt="Marquee Logo KPlayer R36S"
-                    referrerPolicy="no-referrer"
-                    className="w-full h-16 object-cover"
-                  />
-                  <div className="text-[10px] text-center text-zinc-400 py-0.5">Marquee / Logo</div>
-                </div>
-                <div className="rounded-lg overflow-hidden border border-white/10 bg-black">
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black flex flex-col">
                   <img
                     src={scraperFanartImg}
-                    alt="Fanart Wallpaper KPlayer R36S"
+                    alt="Fanart Full HD KPlayer R36S"
                     referrerPolicy="no-referrer"
                     className="w-full h-16 object-cover"
                   />
-                  <div className="text-[10px] text-center text-zinc-400 py-0.5">Fanart / Fundo</div>
+                  <div className="text-[10px] text-center text-zinc-400 py-0.5">Fanart (1920×1080)</div>
                 </div>
               </div>
             </div>
@@ -4509,12 +4511,12 @@ export default function App() {
                   <code className="text-zinc-100">/roms2/ports/</code>.
                 </li>
                 <li>
-                  Ao abrir o KPlayer, ele insere os metadados e artes de scraper automaticamente no{' '}
-                  <code className="text-zinc-100">gamelist.xml</code> existente sem apagar nenhum outro port (ou cria se não existir).
+                  Abra <strong className="text-zinc-100">Ports → KPlayer v2.0.8</strong>. As imagens de Capa/Marquee transparentes ficam disponíveis em{' '}
+                  <code className="text-zinc-100">kplayer/scraper/</code> sem modificar nenhum <code className="text-zinc-100">gamelist.xml</code>.
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.0.8 com artes de scraper completas em kplayer/scraper/, merge seguro em gamelist.xml, lançador .sh atualizado automaticamente a cada versão, changelog pós-atualização e visualizador 30s.
+                Inclui binário ARM64 nativo v2.0.8, Capa transparente (1200×1200), Marquee transparente (1600×490), Boxart e Fanart Full HD baseados no disco de vinil K, lançador .sh atualizado a cada versão, changelog pós-atualização e visualizador 30s.
               </p>
             </div>
 

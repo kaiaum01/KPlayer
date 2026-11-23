@@ -322,20 +322,3 @@ static void updater_poll_main_thread(void) {
   if (need_toast && toast_buf[0]) notify(toast_buf);
   if (need_restart) running = 0;
 }
-
-static void *kp_scraper_sync_worker(void *unused) {
-  (void)unused;
-  if (access("./scraper_sync.py", F_OK) != 0)
-    return NULL;
-  char *argv[] = {"python3", "./scraper_sync.py", "--version", (char *)KPLAYER_VERSION, NULL};
-  (void)kp_upd_run_python(argv);
-  return NULL;
-}
-
-static void scraper_sync_boot(void) {
-  if (access("./scraper_sync.py", F_OK) != 0)
-    return;
-  pthread_t t;
-  if (pthread_create(&t, NULL, kp_scraper_sync_worker, NULL) == 0)
-    pthread_detach(t);
-}

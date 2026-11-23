@@ -4,11 +4,9 @@
 v2.0.8+:
 - Automatically stamps the versioned launcher script as `KPlayer v<VERSION>.sh`
   (with updated version header and `KPLAYER_VERSION` inside) on every release.
-- Bundles all EmulationStation scraper images (`kplayer/scraper/*.png`),
-  `kplayer/scraper_sync.py`, `kplayer/KPlayer-metadata.xml`, and `kplayer/gamelist.xml`
-  cleanly inside `kplayer/` so manual ZIP extraction NEVER overwrites an existing
-  `/roms/ports/gamelist.xml` or `/roms2/ports/gamelist.xml`; the player merges its
-  metadata automatically on launch and update.
+- Bundles high-resolution vinyl-disc scraper artwork inside `kplayer/scraper/`
+  (transparent 1200x1200 Cover, transparent 1600x490 Marquee, 900x1200 Boxart,
+  1920x1080 Fanart) without touching or modifying any user `gamelist.xml`.
 """
 from pathlib import Path
 import hashlib
@@ -42,9 +40,6 @@ files = [
     runtime / "kplayer",
     runtime / "kplayer.gptk",
     runtime / "cover.png",
-    runtime / "KPlayer-metadata.xml",
-    runtime / "gamelist.xml",
-    runtime / "scraper_sync.py",
     runtime / "scraper" / "kplayer-image.png",
     runtime / "scraper" / "kplayer-thumb.png",
     runtime / "scraper" / "kplayer-marquee.png",
@@ -83,7 +78,6 @@ EXECUTABLE_NAMES = {
     "iptv_fetch.py",
     "football_fetch.py",
     "weather_fetch.py",
-    "scraper_sync.py",
     "updater.py",
     "golazo",
 }
@@ -112,12 +106,6 @@ def stamp_launcher_text(raw: str, ver: str) -> bytes:
     return out.encode("utf-8")
 
 
-def stamp_xml_version(raw: str, ver: str) -> bytes:
-    out = re.sub(r"KPlayer v\d+\.\d+\.\d+\.sh", f"KPlayer v{ver}.sh", raw)
-    out = re.sub(r"KPlayer v\d+\.\d+\.\d+", f"KPlayer v{ver}", out)
-    return out.encode("utf-8")
-
-
 with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out:
     # Write dynamically versioned launcher script: `KPlayer v<VERSION>.sh`
     launcher_arcname = f"KPlayer v{VERSION}.sh"
@@ -127,7 +115,7 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out
     linfo.external_attr = (0o100000 | 0o755) << 16
     out.writestr(linfo, launcher_bytes)
 
-    # Also keep an internal template inside kplayer/ so scraper_sync can always regenerate .sh
+    # Also keep an internal template inside kplayer/ so updater.py can always stamp future .sh launchers
     tinfo = zipfile.ZipInfo("kplayer/KPlayer.sh.tmpl")
     tinfo.compress_type = zipfile.ZIP_DEFLATED
     tinfo.external_attr = (0o100000 | 0o644) << 16
@@ -139,11 +127,7 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out
         info.compress_type = zipfile.ZIP_DEFLATED
         mode = 0o755 if path.name in EXECUTABLE_NAMES else 0o644
         info.external_attr = (0o100000 | mode) << 16
-        if path.name in ("KPlayer-metadata.xml", "gamelist.xml"):
-            data = stamp_xml_version(path.read_text(encoding="utf-8"), VERSION)
-        else:
-            data = path.read_bytes()
-        out.writestr(info, data)
+        out.writestr(info, path.read_bytes())
 
     out.write(BASE / "docs" / "INSTALL.md", "README_INSTALL.md")
     out.write(BASE / "TERMS.md", "TERMS.md")

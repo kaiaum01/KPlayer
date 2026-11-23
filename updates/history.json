@@ -5,16 +5,14 @@
     {
       "version": "2.0.8",
       "releaseTag": "v2.0.8",
-      "releasedAt": "2026-11-22T23:16:05Z",
+      "releasedAt": "2026-11-22T23:55:00Z",
       "r36s": "updates/v2.0.8/KPlayer-v2.0.8-R36S.zip",
-      "sha256": "c6ed598189af18975af3111fe6321733ee386d0463e16613f7a882574bfb8223",
+      "sha256": "",
       "notes": [
-        "Pacote Completo de Imagens de Scraper dentro de kplayer/scraper/:",
-        "Capa Principal (<image>): kplayer/scraper/kplayer-image.png (640×480)",
-        "Boxart / Miniatura (<thumbnail>): kplayer/scraper/kplayer-thumb.png (480×640)",
-        "Marquee / Logo (<marquee>): kplayer/scraper/kplayer-marquee.png (640×360)",
-        "Fanart / Papel de Parede (<fanart>): kplayer/scraper/kplayer-fanart.png (854×480)",
-        "Todas as artes e metadados (KPlayer-metadata.xml e gamelist.xml interno) ficam organizados dentro da pasta kplayer/."
+        "Novas artes de alta resolução fiéis ao disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490)",
+        "Boxart vertical (900×1200) e Fanart Full HD (1920×1080) do disco K salvos em kplayer/scraper/",
+        "Edição automática de metadados no gamelist.xml removida — seus XMLs não são mais alterados pelo player",
+        "Atualização automática do nome da versão no script lançador .sh (KPlayer v2.0.8.sh) a cada nova atualização"
       ]
     },
     {
