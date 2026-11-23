@@ -5,14 +5,16 @@
     {
       "version": "2.0.9",
       "releaseTag": "v2.0.9",
-      "releasedAt": "2026-11-22T23:59:00Z",
+      "releasedAt": "2026-11-23T00:43:17Z",
       "r36s": "updates/v2.0.9/KPlayer-v2.0.9-R36S.zip",
-      "sha256": "",
+      "sha256": "25454bafb8f73a05ab8215170bae376ac2b6f245429329eb7f889f428be2a08f",
       "notes": [
-        "Novas artes de alta resolução fiéis ao disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490)",
-        "Boxart vertical (900×1200) e Fanart Full HD (1920×1080) do disco K salvos em kplayer/scraper/",
-        "Edição automática de metadados no gamelist.xml removida — seus XMLs não são mais alterados pelo player",
-        "Atualização automática do nome da versão no script lançador .sh (KPlayer v2.0.9.sh) a cada nova atualização"
+        "Novas Imagens de Alta Resolução Fiéis ao Disco de Vinil K Original (dentro de kplayer/scraper/):",
+        "Capa Principal (Fundo Transparente PNG32): kplayer/scraper/kplayer-image.png (1200×1200 RGBA) — disco de vinil preto com centro verde esmeralda K, anel duplo branco e legenda PLAYE",
+        "Marquee / Logo (Fundo Transparente PNG32): kplayer/scraper/kplayer-marquee.png (1600×490 RGBA) — logo horizontal grande com o disco de vinil K + tipografia K PLAYER com contorno es",
+        "Boxart Vertical: kplayer/scraper/kplayer-thumb.png (900×1200) — arte vertical fiel ao disco de vinil K original (PLAYER · R36S EDITION).",
+        "Fanart Full HD: kplayer/scraper/kplayer-fanart.png (1920×1080) — papel de parede widescreen escuro com o disco de vinil K à direita e ondas acústicas verdes sutis.",
+        "Sem Edição Automática de XML (gamelist.xml 100% Intacto):"
       ]
     },
     {
