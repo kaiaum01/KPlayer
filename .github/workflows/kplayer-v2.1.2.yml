@@ -1,0 +1,166 @@
+name: KPlayer R36S - Gerar versão 2.1.2
+
+# Salve como: .github/workflows/build-v2.1.2.yml
+# Rode em: Actions > "KPlayer R36S - Gerar versão 2.1.2" > Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão a gerar (X.Y.Z)'
+        required: true
+        default: '2.1.2'
+      commit_bump:
+        description: 'Commitar a mudança de versão na branch (true/false)'
+        required: false
+        default: 'true'
+      publish_release:
+        description: 'Publicar GitHub Release v<versão> (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+jobs:
+  build-r36s:
+    name: Compilar e empacotar KPlayer R36S
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      VERSION: ${{ github.event.inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validar versão informada
+        run: |
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Versão inválida: '$VERSION' (use X.Y.Z)"
+            exit 1
+          fi
+
+      - name: Atualizar versão para ${{ github.event.inputs.version }}
+        run: |
+          OLD="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' source/version.h | head -n 1)"
+          echo "Versão atual: $OLD -> nova: $VERSION"
+
+          # Fonte da verdade (o package_release.py lê daqui)
+          sed -i -E "s/^(#define KPLAYER_VERSION \").*(\")$/\1${VERSION}\2/" source/version.h
+
+          # Launcher do PortMaster
+          sed -i -E "s/^(# KPlayer v)[0-9]+\.[0-9]+\.[0-9]+/\1${VERSION}/" ports/KPlayer.sh
+          sed -i -E "s/^(KPLAYER_VERSION=\").*(\")/\1${VERSION}\2/" ports/KPlayer.sh
+
+          # Atualizador, user-agents e package.json
+          sed -i -E "s/^(CURRENT_FALLBACK = \").*(\")/\1${VERSION}\2/" ports/kplayer/updater.py
+          sed -i -E "s#(KPlayer-R36S/)[0-9]+\.[0-9]+\.[0-9]+#\1${VERSION}#" ports/kplayer/news_fetch.py server.ts
+          sed -i -E "s#(KPlayer-EPG/)[0-9]+\.[0-9]+\.[0-9]+#\1${VERSION}#" server.ts
+          sed -i -E "s/^(  \"version\": \").*(\",)/\1${VERSION}\2/" package.json
+
+          echo "--- conferência ---"
+          grep -n "KPLAYER_VERSION" source/version.h
+          grep -n "KPLAYER_VERSION" ports/KPlayer.sh
+          grep -n "CURRENT_FALLBACK" ports/kplayer/updater.py
+          grep -n '"version"' package.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Compilar Golazo para R36S
+        env:
+          GOPATH: ${{ runner.temp }}/golazo-gopath
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go install github.com/0xjuanma/golazo@latest
+          cp "$GOPATH/bin/linux_arm64/golazo" ports/kplayer/golazo
+
+      - name: Instalar compilador ARM64 e dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config patch xz-utils make flex bison file libsdl2-2.0-0
+
+      - name: Cachear núcleo libVLC ARM64
+        uses: actions/cache@v4
+        with:
+          path: ports/kplayer/lib
+          key: libvlc-3.0.23-arm64-${{ hashFiles('patches/kplayer-vlc.patch', 'tools/build_libvlc_arm64.sh') }}
+
+      - name: Compilar núcleo libVLC ARM64
+        run: bash tools/build_libvlc_arm64.sh
+
+      - name: Testes nativos e scripts Python
+        run: |
+          mkdir -p output
+          gcc -O1 -g -fsanitize=address,undefined -I source/include tests/test_native.c -o output/test-native -ldl -lpthread -lm
+          gcc -O1 -g -fsanitize=address,undefined tests/test_tags.c -o output/test-tags
+          ASAN_OPTIONS=detect_leaks=0 output/test-tags
+          (cd ports/kplayer && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
+          rm -f *.bmp
+          python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py ports/kplayer/news_fetch.py
+          python3 -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Compilar KPlayer ARM64 (R36S)
+        run: |
+          aarch64-linux-gnu-gcc -O2 -std=gnu11 -Wall -Wextra -Werror \
+            -I source/include source/kplayer.c -o ports/kplayer/kplayer \
+            -ldl -lpthread -lm
+          file ports/kplayer/kplayer
+
+      - name: Gravar repositório do canal de auto-update
+        run: echo "${{ github.repository }}" > ports/kplayer/update-repo.txt
+
+      - name: Empacotar R36S e gerar SHA-256
+        env:
+          KPLAYER_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          python3 tools/package_release.py
+          ls -lh releases/
+          cat "releases/KPlayer-v${VERSION}-R36S.zip.sha256"
+
+      - name: Commitar mudança de versão
+        if: ${{ github.event.inputs.commit_bump == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/version.h ports/KPlayer.sh ports/kplayer/updater.py ports/kplayer/news_fetch.py server.ts package.json
+          if git diff --cached --quiet; then
+            echo "Versão já estava em ${VERSION}."
+          else
+            git commit -m "chore: versão ${VERSION} [skip ci]"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            git push origin "HEAD:${GITHUB_REF_NAME}" || echo "::warning::Não foi possível dar push (branch protegida?)."
+          fi
+
+      - name: Publicar GitHub Release
+        if: ${{ github.event.inputs.publish_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${VERSION}"
+          ASSETS=(
+            "releases/KPlayer-v${VERSION}-R36S.zip"
+            "releases/KPlayer-v${VERSION}-R36S.zip.sha256"
+          )
+          NOTES="KPlayer ${TAG} - R36S"
+          [ -f releases/RELEASE_NOTES.md ] && NOTES="$(cat releases/RELEASE_NOTES.md)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "KPlayer ${TAG} — R36S" \
+              --notes "$NOTES" \
+              --target "${GITHUB_REF_NAME}" \
+              --latest
+          fi
+
+      - name: Disponibilizar pacote e checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: KPlayer-R36S-v${{ github.event.inputs.version }}
+          path: |
+            releases/KPlayer-v*-R36S.zip
+            releases/KPlayer-v*-R36S.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
