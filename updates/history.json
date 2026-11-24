@@ -5,9 +5,9 @@
     {
       "version": "2.1.1",
       "releaseTag": "v2.1.1",
-      "releasedAt": "2026-11-23T20:18:20Z",
+      "releasedAt": "2026-11-24T23:19:27Z",
       "r36s": "updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
-      "sha256": "2343002d644b2a5da7a68b2b4606b48bf22472f4a602a220711d9b875a3ba130",
+      "sha256": "f8d97e9bb9e5eab01b3ac571ce313bcb59d0809d6b35aee03ee87da451e8c387",
       "notes": [
         "Correção Crítica de Reprodução de Mídias (ALSA + Sons das Teclas):",
         "Corrigido o bug da v2.1.0 em que o dispositivo de áudio SDL2 dos sons das teclas mantinha o ALSA bloqueado e impedia músicas, vídeos, rádios online e IPTV de tocar na libVLC (--aou",
