@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
-UA = {"User-Agent": "KPlayer-R36S/2.1.1"}
+UA = {"User-Agent": "KPlayer-R36S/2.1.2"}
 ALLOWED_CATEGORIES = ("all", "breaking", "world", "crime", "entertainment", "sports")
 DEFAULT_NEWSDATA_CATS = "world,breaking,crime,entertainment,sports"
 CAT_LABELS = {

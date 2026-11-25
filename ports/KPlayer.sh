@@ -1,6 +1,6 @@
 #!/bin/bash
-# KPlayer v2.1.1 - dArkOS / Debian 13 ARM64 / PortMaster
-KPLAYER_VERSION="2.1.1"
+# KPlayer v2.1.2 - dArkOS / Debian 13 ARM64 / PortMaster
+KPLAYER_VERSION="2.1.2"
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)" || exit 1
 GAMEDIR="$script_dir/kplayer"
 cd "$GAMEDIR" || exit 1
@@ -43,12 +43,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py 2>/dev/null || true
+chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./7zzs 2>/dev/null || true
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
 while true; do
-    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py 2>/dev/null || true
+    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./7zzs 2>/dev/null || true
     ./kplayer
     result=$?
     if [ "$result" -eq 42 ]; then

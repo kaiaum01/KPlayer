@@ -1,0 +1,4 @@
+KPlayer v2.1.2 (R36S)
+- Gerenciador de arquivos completo na raiz (/)
+- Suporte oficial 7-Zip (ip7z/7zip) + arquivos com senha
+- Barra de progresso com velocidade (MB/s) e tempo restante (ETA)

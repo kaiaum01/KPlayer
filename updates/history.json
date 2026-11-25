@@ -1,7 +1,20 @@
 {
   "schemaVersion": 2,
-  "latest": "2.1.1",
+  "latest": "2.1.2",
   "releases": [
+    {
+      "version": "2.1.2",
+      "releaseTag": "v2.1.2",
+      "releasedAt": "2026-11-24T12:00:00Z",
+      "r36s": "updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Novo Gerenciador de Arquivos completo em Arquivos (separado de Músicas e Vídeos): acesso à pasta raiz (/), criar pastas, apagar, copiar, mover, colar, renomear, compactar .zip e seleção múltipla",
+        "Integração oficial do 7-Zip público (ip7z/7zip, binário estático ARM64 7zzs) para abrir e descompactar ZIP, 7Z, RAR e TAR — incluindo arquivos protegidos por senha",
+        "Barra de progresso em tempo real com velocidade (MB/s), tempo restante (ETA), bytes transferidos e cancelamento",
+        "Gerenciador de Músicas e Vídeos intacto + áudio ALSA/libVLC e carregamento assíncrono preservados"
+      ]
+    },
     {
       "version": "2.1.1",
       "releaseTag": "v2.1.1",

@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="KPlayer v2.1.1 — Central de Mídia Portátil para R36S" width="100%" />
+  <img src="docs/images/banner.svg" alt="KPlayer v2.1.2 — Central de Mídia Portátil para R36S" width="100%" />
 </p>
 
-<h1 align="center">KPlayer v2.1.1</h1>
+<h1 align="center">KPlayer v2.1.2</h1>
 
 <p align="center">
   <strong>Central de mídia portátil nativa para R36S (dArkOS / PortMaster — C + SDL2 + libVLC ARM64)</strong><br />
-  Músicas e Vídeos (.LRC) · 10 Visualizadores Reativos · 14 Temas · Rádio Online · IPTV + EPG · Notícias · Clima · Placar da Bola
+  Músicas e Vídeos (.LRC) · Gerenciador de Arquivos + 7-Zip · 10 Visualizadores · 14 Temas · Rádio · IPTV + EPG · Notícias · Clima · Placar
 </p>
 
 <p align="center">
@@ -17,22 +17,23 @@
   <a href="docs/BUILD.md">Compilação</a> ·
   <a href="TERMS.md">Termos e Transparência</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.1.1</a> ·
+  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.1.2</a> ·
   <a href="THIRD_PARTY.md">Licenças</a>
 </p>
 
 ---
 
-## Novidades da v2.1.1 (R36S Nativo)
+## Novidades da v2.1.2 (R36S Nativo)
 
-- **Correção Crítica de Áudio no R36S (ALSA + Sons das Teclas):**
-  - Corrigido o conflito em que o dispositivo de áudio SDL2 dos cliques impedia a libVLC (`--aout=alsa`) de reproduzir músicas, vídeos, rádios e IPTV. Os cliques agora só ativam após o boot, liberam o ALSA imediatamente (`sfx_release_device()`) antes de tocar qualquer mídia e fecham automaticamente ~160ms após o último clique.
-- **Lazy-Loading Assíncrono da Biblioteca de Mídias:**
-  - A varredura de músicas e vídeos (`/roms(2)/bgmusic`, `/roms(2)/videos`) agora roda de forma assíncrona em segundo plano (`pthread`), acelerando o boot em cartões SD cheios sem bloquear o áudio.
-- **Atualização na Mesma Versão com Aviso e Confirmação:**
-  - Em `SELECT → Verificar atualizações`, agora é possível atualizar/reinstalar mesmo já estando na versão mais recente (`--force`), com aviso explícito na tela e confirmação em 2 etapas (`B` duas vezes), preservando todos os seus dados e `gamelist.xml`.
-- **Nova Aba `Notícias` (com Imagens em Cache e Vídeos) e Card Unificado `Músicas e Vídeos`:**
-  - Os cards de músicas e vídeos foram unidos em **`Músicas e Vídeos`** (`LRC & Cinema`), liberando espaço para a nova aba **`Notícias`** (manchetes do Brasil em português nas categorias **Urgente**, **Mundo**, **Polícia**, **Entretenimento** e **Esportes**) integrada à API **NewsData.io** (`news.cfg` no R36S ou `NEWSDATA_API_KEY`) com fallback automático para feeds RSS brasileiros ao vivo.
+- **Novo Gerenciador de Arquivos Completo (`Arquivos` — Separado de `Músicas e Vídeos`):**
+  - Mantém **`Músicas e Vídeos`** intacto e oferece em **`Arquivos`** um gerenciador completo acessando desde a **pasta raiz do console (`/`)** (com atalhos rápidos em `L1`: `/`, `/roms`, `/roms2`, `/roms/ports`, `/home`).
+  - Permite **criar pastas**, **apagar** arquivos e diretórios (com confirmação e proteção de raízes do sistema), **copiar**, **mover/recortar**, **colar (`R1`)**, **renomear**, **seleção múltipla (`Y`)**, **compactar em `.zip`** e exibir arquivos ocultos.
+- **7-Zip Público Oficial (`github.com/ip7z/7zip`) + Arquivos com Senha:**
+  - Empacota o binário estático ARM64 **`7zzs`** (com fallback automático Python `zipfile`/`tarfile`) para abrir/navegar e descompactar `.zip`, `.7z`, `.rar`, `.tar.*`, `.cbz`, `.cbr` e `.iso` — **incluindo arquivos protegidos por senha** (prompt de senha mascarada enviada via `stdin` + proteção contra *Zip Slip*).
+- **Barra de Carregamento com Velocidade e Tempo Faltante (ETA):**
+  - Operações de copiar, mover, apagar, descompactar e compactar rodam em segundo plano com **barra de progresso (`0%–100%`)**, **velocidade em tempo real (`KB/s`, `MB/s`)**, **tempo restante estimado (ETA)**, bytes/itens processados e **cancelamento (`A`)**.
+- **Estabilidade da v2.1.1 Preservada:**
+  - Correção ALSA/libVLC nos sons das teclas, carregamento assíncrono (lazy-loading) da biblioteca de mídias, reinstalação na mesma versão com aviso e Notícias com imagens/vídeos.
 - **Gradientes Suaves sem Listras em Todos os 14 Temas do R36S:**
   - Corrigido o artefato de listras horizontais nas caixas translúcidas e painéis do protetor de tela em todo o aplicativo: caixas e HUDs agora usam preenchimento sem sobreposição de transparência, gradiente vertical suave fiel ao tema e borda nítida de 1px.
 - **10 Visualizadores Reativos ao Áudio (+ Modo Automático) no Protetor de Tela:**
@@ -60,6 +61,7 @@
 | :--- | :--- |
 | **Player de Música** | Tags ID3 locais, capa embutida/sidecar, **Letras `.LRC` sincronizadas**, painéis de Fila e Pasta, Favoritas, Velocidade, Repetição, Aleatório, Timer de sono, Equalizador libVLC e **Protetor de Tela com 10 visualizadores**. |
 | **Player de Vídeo** | Reprodução via libVLC, Formato da imagem (`Original / Preencher / Esticar`), Velocidade, Repetição e controles OSD que se ocultam automaticamente. |
+| **Gerenciador de Arquivos (`Arquivos`)** | Acesso completo à raiz (`/`) separado de Músicas e Vídeos: criar pastas, copiar, mover, colar, renomear, seleção múltipla, apagar com confirmação, **7-Zip oficial (`7zzs`)** para abrir/descompactar ZIP/7Z/RAR/TAR com senha e barra de progresso com velocidade e ETA. |
 | **Rádio Online** | Diretório aberto **Radio-Browser** (Brasil, Mais ouvidas, Pop, Rock, Notícias, Favoritas) + estações pessoais em `ports/kplayer/radios_usuario/`. |
 | **IPTV + EPG ao Vivo** | Catálogo ilimitado por categorias: **Canais** (com guia EPG ao vivo), **Filmes**, **Séries** (todas as temporadas e episódios) e **IPTV do Usuário** (teclado virtual + pasta `ports/kplayer/iptv_usuario/`). |
 | **Notícias (Brasil)** | Manchetes em português (**Todas, Urgente, Mundo, Polícia, Entretenimento, Esportes**) via **NewsData.io** (`ports/kplayer/news.cfg` ou `NEWSDATA_API_KEY`) com fallback RSS ao vivo e leitor completo pelo controle. |
@@ -70,7 +72,7 @@
 
 ## Instalação no R36S (dArkOS / PortMaster)
 
-1. Baixe **`KPlayer-v2.1.1-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
+1. Baixe **`KPlayer-v2.1.2-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
 2. Extraia e copie **`KPlayer.sh`** e a pasta **`kplayer/`** para `/roms/ports/` (ou `/roms2/ports/` no SD2).
 3. Coloque suas mídias nas pastas dedicadas (boot rápido — sem varrer ROMs/BIOS/saves):
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.1.2 — Gerenciador de Arquivos Completo (Raiz `/`), 7-Zip Oficial com Senha & Barra de Progresso com Velocidade/ETA
+
+- **Novo Gerenciador de Arquivos Separado (`source/file_manager.h`, `ports/kplayer/file_ops.py`, `src/components/FileManagerScreen.tsx` & `/api/fm/*`):** Substituiu o atalho de `Arquivos` na Home por um gerenciador de arquivos completo e independente — **sem tocar no gerenciador de `Músicas e Vídeos`**. Permite navegar desde a **pasta raiz do console (`/`)** com atalhos rápidos (`L1`: `/`, `/roms`, `/roms2`, `/roms/ports`, `/home`), exibir arquivos ocultos, selecionar múltiplos itens (`Y`), criar pastas, renomear, copiar, mover/recortar, colar (`R1`), compactar em `.zip` e apagar com confirmação explícita e proteção de diretórios críticos do sistema.
+- **Integração Oficial do 7-Zip Público (`github.com/ip7z/7zip` via `tools/fetch_7zip_arm64.sh`):** Empacota o binário estático oficial ARM64 **`7zzs`** (com fallback automático para `zipfile`/`tarfile` em Python) permitindo abrir/inspecionar e descompactar `.zip`, `.7z`, `.rar`, `.tar.*`, `.cbz`, `.cbr` e `.iso` — **incluindo arquivos protegidos por senha** (prompt de senha mascarada enviada exclusivamente via `stdin` + validação contra *Zip Slip* antes da extração).
+- **Barra de Carregamento, Velocidade e Tempo Faltante (ETA) em Tempo Real:** Operações de cópia, movimentação, exclusão, extração e compactação rodam em segundo plano com barra de progresso (`0%–100%`), velocidade instantânea suavizada (`KB/s`, `MB/s`), tempo restante estimado (`ETA`), contador de bytes/itens, arquivo atual e cancelamento via `A`.
+- **Simulador Web + CI R36S Atualizados:** Novo componente `FileManagerScreen` no simulador Web com raiz virtual confinada e arquivos `.zip` de demonstração (inclusive protegido por senha), além da inclusão automática de `7zzs` e `file_ops.py` nos workflows de build e release R36S.
+
 ## v2.1.1 — Correção Crítica de Áudio ALSA/libVLC, Lazy-Loading Assíncrono da Biblioteca & Reinstalação na Mesma Versão com Aviso
 
 - **Correção Crítica de Áudio no R36S (`source/sfx.h`, `source/kplayer.c`, `source/radio.h`):** Resolvido o conflito onde o dispositivo de áudio SDL2 aberto pelos sons das teclas mantinha o PCM ALSA travado e impedia a libVLC (`--aout=alsa`) de reproduzir músicas, vídeos, rádios e IPTV. Agora o dispositivo SDL2 só abre após o boot, libera imediatamente com `sfx_release_device()` antes de qualquer reprodução, recusa abrir enquanto mídia estiver ativa e fecha automaticamente ~160ms após o último clique.

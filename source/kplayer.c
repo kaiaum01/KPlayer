@@ -1066,6 +1066,7 @@ extern char **environ;
 #include "iptv.h"
 #include "news.h"
 #include "football.h"
+#include "file_manager.h"
 #include "updater.h"
 #include "weather.h"
 #include "screensaver.h"
@@ -1321,10 +1322,10 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Correcao critica de audio no R36S: Sons das teclas liberam o ALSA para musicas, videos, radio e IPTV tocarem normalmente.",
-        "Atualizador agora permite reinstalar mesmo estando na mesma versao, exibindo aviso claro e confirmacao antes de iniciar.",
-        "Aba Noticias agora exibe fotos em cache na lista e na materia + reproducao de videos direto no player libVLC.",
-        "Dashboard com Musicas e Videos unificados, 14 temas sem listras, 10 visualizadores reativos e mais animacoes.",
+        "Novo Gerenciador de Arquivos completo em Arquivos: acesso a raiz (/), copiar, mover, apagar, renomear, criar pastas e selecao multipla.",
+        "Integracao oficial do 7-Zip (ip7z/7zip) para abrir e descompactar ZIP, 7Z, RAR e TAR — incluindo arquivos protegidos por senha.",
+        "Barra de progresso em tempo real ao copiar, mover, apagar ou descompactar com velocidade (MB/s), tempo faltante (ETA) e cancelamento.",
+        "Gerenciador de Musicas e Videos intacto + audio ALSA/libVLC e carregamento assincrono da biblioteca preservados.",
     };
     int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
     for (int i = 0; i < n && changelog_count < 6; i++)
@@ -2249,7 +2250,7 @@ static void key(SDL_Keycode k, bool repeat) {
       if (dash_focus == 0)
         scan_automatic_media();
       else if (dash_focus == 1)
-        show_locations();
+        fm_open();
       else if (dash_focus == 2) {
         if (stream_notice_accepted)
           radio_open();
@@ -2287,6 +2288,10 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (mode == 15) {
     if (!repeat) news_key(k);
+    return;
+  }
+  if (mode == 16) {
+    fm_key(k, repeat);
     return;
   }
   if (mode == 0) {
@@ -2731,6 +2736,9 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[1], "--preview-locations")) {
       show_locations();
       draw_menu();
+    } else if (!strcmp(argv[1], "--preview-files")) {
+      fm_open();
+      draw_file_manager();
     } else if (!strcmp(argv[1], "--preview-library"))
       draw_menu();
     else
@@ -2774,6 +2782,7 @@ int main(int argc, char **argv) {
     uint32_t frame = SDL_GetTicks();
     sfx_poll(frame, active || radio_play_is_busy());
     media_library_poll();
+    fm_poll_main_thread();
     updater_poll_main_thread();
     if (!running) break;
     ss_check_idle(frame);
@@ -2878,6 +2887,8 @@ int main(int argc, char **argv) {
       draw_changelog();
     else if (mode == 15)
       draw_news();
+    else if (mode == 16)
+      draw_file_manager();
     else
       draw_menu();
     ui_trans_overlay();
@@ -2889,6 +2900,7 @@ int main(int argc, char **argv) {
                       (int32_t)(ui_anim_active_until - frame) > 0 ||
                       (frame < note_until) ||
                       (active && !paused) ||
+                      (mode == 16 && fm_is_job_busy()) ||
                       (mode == 2 && opt_section == OPT_SEC_UPDATE &&
                        (kp_upd_checking || kp_upd_applying)));
     uint32_t frame_ms = fast_anim ? 28 : 50;
@@ -2918,6 +2930,7 @@ int main(int argc, char **argv) {
   if (radio_art_texture)
     SDL_DestroyTexture(radio_art_texture);
   news_clear_textures();
+  fm_free_buffers();
   kp_sprites_free();
   sfx_quit();
   SDL_DestroyRenderer(renderer);

@@ -138,6 +138,8 @@ def main() -> None:
             "settings.cfg",
             "preferences.cfg",
             "weather.cfg",
+            "news.cfg",
+            "gamelist.xml",
             "history.txt",
             "favorites.txt",
             "radio-favorites.tsv",

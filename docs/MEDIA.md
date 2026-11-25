@@ -1,14 +1,14 @@
-# Media, Visualizers & Metadata / Mídias, Visualizadores e Metadados — KPlayer v2.1.1 (R36S)
+# Media, Visualizers & Metadata / Mídias, Visualizadores e Metadados — KPlayer v2.1.2 (R36S)
 
 ## English
 
 ### Dedicated Fast-Loading Folders
-To avoid slowing down the R36S by scanning thousands of ROMs, BIOS files, and emulator saves, KPlayer v2.1.1 indexes **only four dedicated folders**, filtered strictly by media type (max recursion depth 8, files ≥ 50 KB, up to 4,096 items):
+To avoid slowing down the R36S by scanning thousands of ROMs, BIOS files, and emulator saves, KPlayer v2.1.2 indexes **only four dedicated folders** in **Music & Videos**, filtered strictly by media type (max recursion depth 8, files ≥ 50 KB, up to 4,096 items):
 
 - **Music (Audio only):** `/roms/bgmusic` (SD1) and `/roms2/bgmusic` (SD2)
 - **Videos (Video only):** `/roms/videos` (SD1) and `/roms2/videos` (SD2)
 
-The **Files** view gives direct access to those same four folders on SD1 and SD2 so you can browse subfolders manually.
+For full console root (`/`) browsing, copy/move/delete/rename operations, and official **7-Zip** archive extraction (including password-protected ZIP/7Z/RAR), open the dedicated **Files (`Arquivos`)** tile on Home.
 
 ### Formats, Tags, Artwork & Synced Lyrics
 - **Recognized extensions:** MP3, FLAC, OGG, WAV, M4A, AAC, OPUS (audio) and MP4, MKV, AVI, MOV, WEBM (video). Actual decoding depends on the device's installed VLC plugins.
@@ -29,12 +29,12 @@ Every R36S release bundles vinyl-disc artwork inside `ports/kplayer/scraper/` wi
 ## Português
 
 ### Pastas Dedicadas de Carregamento Rápido
-Para não sobrecarregar o R36S varrendo milhares de ROMs, BIOS e saves no cartão SD, o KPlayer v2.1.1 indexa **exclusivamente quatro pastas dedicadas**, filtrando estritamente por tipo de mídia (profundidade máxima de 8 subpastas, arquivos ≥ 50 KB, limite de 4.096 entradas):
+Para não sobrecarregar o R36S varrendo milhares de ROMs, BIOS e saves no cartão SD, o KPlayer v2.1.2 indexa **exclusivamente quatro pastas dedicadas** em **Músicas e Vídeos**, filtrando estritamente por tipo de mídia (profundidade máxima de 8 subpastas, arquivos ≥ 50 KB, limite de 4.096 entradas):
 
 - **Músicas (somente áudio):** `/roms/bgmusic` (SD1) e `/roms2/bgmusic` (SD2)
 - **Vídeos (somente vídeo):** `/roms/videos` (SD1) e `/roms2/videos` (SD2)
 
-O cartão **Arquivos** dá acesso direto a essas 4 pastas para navegação manual por subpastas.
+Para navegar a partir da **raiz do console (`/`)**, copiar, mover, apagar, renomear pastas/arquivos e abrir/descompactar arquivos ZIP/7Z/RAR (inclusive com senha via **7-Zip oficial**), use o card separado **Arquivos** na tela inicial.
 
 ### Formatos, Tags, Capas e Letras Sincronizadas
 - **Extensões reconhecidas:** MP3, FLAC, OGG, WAV, M4A, AAC e OPUS (áudio); MP4, MKV, AVI, MOV e WEBM (vídeo). A decodificação real depende dos plugins VLC instalados no firmware.

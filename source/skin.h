@@ -214,10 +214,10 @@ static void draw_home(void) {
     draw_home_mini_player();
   const char *names[] = {tr("Músicas e Vídeos"), tr("Arquivos"), tr("Rádio Online"),
                          tr("IPTV"), tr("Notícias"), tr("Placar da Bola")},
-             *desc[] = {tr("Áudio, vídeo e letras"), tr("Explore as pastas"),
+             *desc[] = {tr("Áudio, vídeo e letras"), tr("Raiz, pastas e 7-Zip"),
                         tr("Estações do mundo"), tr("Canais ao vivo"),
                         tr("Últimas do dia"), tr("Jogos e estatísticas")},
-             *tags[] = {tr("LRC & Cinema"), tr("Mídias locais"), tr("Radio Browser"),
+             *tags[] = {tr("LRC & Cinema"), tr("Gerenciador"), tr("Radio Browser"),
                         tr("TV & EPG"), tr("Brasil • Hoje"), tr("Ao vivo")};
   static const int tile_sprite_col[6] = {0, 2, 3, 4, -1, 5};
   static float home_aura_x = -1.0f, home_aura_y = -1.0f;

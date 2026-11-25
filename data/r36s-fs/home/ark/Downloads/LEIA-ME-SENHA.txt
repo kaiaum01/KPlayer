@@ -1,0 +1,3 @@
+Arquivos de teste do Gerenciador de Arquivos KPlayer v2.1.2:
+- pacote-temas-r36s.zip (ZIP padrão, sem senha)
+- backup-protegido.zip (ZIP protegido por senha -> senha: r36s)

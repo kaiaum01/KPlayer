@@ -59,6 +59,7 @@ import { VideoScreen } from './components/VideoScreen';
 import { Newspaper } from 'lucide-react';
 import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/PlacarDaBolaScreen';
 import { NewsScreen, type NewsScreenHandle } from './components/NewsScreen';
+import { FileManagerScreen, type FileManagerScreenHandle } from './components/FileManagerScreen';
 import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
 import { AndroidPlayerApp } from './components/AndroidPlayerApp';
@@ -68,12 +69,12 @@ import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_179539140
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.1.1';
+const APP_VERSION = '2.1.2';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Correção crítica de áudio no R36S: liberação imediata do dispositivo ALSA nos sons das teclas para que músicas, vídeos, rádios e IPTV toquem normalmente sem conflito com a libVLC.',
-  'Carregamento assíncrono (lazy-loading) da biblioteca de mídias na inicialização, evitando travamentos em cartões SD grandes e mantendo o áudio desbloqueado durante o boot.',
-  'Atualização permitida mesmo na mesma versão (reinstalação forçada com aviso e confirmação em 2 etapas), preservando favoritos, histórico, listas e ajustes.',
-  'Aba Notícias com suporte a fotos em cache e reprodução de vídeos no R36S, dashboard unificada (Músicas e Vídeos) e 14 temas com gradiente suave sem listras.',
+  'Novo Gerenciador de Arquivos completo em Arquivos (separado de Músicas e Vídeos): acesso à raiz (/), criar pastas, copiar, mover, renomear, apagar com confirmação e seleção múltipla.',
+  'Integração oficial do 7-Zip público (ip7z/7zip) para abrir e descompactar ZIP, 7Z, RAR e TAR — incluindo arquivos protegidos por senha.',
+  'Barra de progresso em tempo real ao copiar, mover, apagar ou descompactar com velocidade (MB/s), tempo restante (ETA) e botão de cancelar.',
+  'Gerenciador de Músicas e Vídeos preservado intacto, com áudio ALSA/libVLC e carregamento assíncrono da biblioteca mantidos.',
 ];
 
 const RADIO_CATEGORIES = [
@@ -327,6 +328,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const placarRef = useRef<PlacarDaBolaHandle | null>(null);
   const newsRef = useRef<NewsScreenHandle | null>(null);
+  const fileManagerRef = useRef<FileManagerScreenHandle | null>(null);
   const iptvRef = useRef<IptvScreenHandle | null>(null);
   const optionsRef = useRef<OptionsMenuHandle | null>(null);
   const weatherRef = useRef<WeatherScreenHandle | null>(null);
@@ -1369,11 +1371,7 @@ export default function App() {
         setLibSelected(0);
         setScreen('library');
       } else if (idx === 1) {
-        setLibFavoritesOnly(false);
-        setLibLocationsView(true);
-        setLibFilter(0);
-        setLibLocationSelected(0);
-        setScreen('library');
+        setScreen('filemanager');
       } else if (idx === 2) {
         openStreamingScreen('radio', 'home');
       } else if (idx === 3) {
@@ -1587,6 +1585,11 @@ export default function App() {
           setTermsPage(1);
           setScreen('terms');
         }
+        return;
+      }
+
+      if (screen === 'filemanager') {
+        fileManagerRef.current?.handleButton(btn);
         return;
       }
 
@@ -2215,7 +2218,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.1.1 • R36S
+                      v2.1.2 • R36S
                     </div>
                   </div>
 
@@ -2927,9 +2930,9 @@ export default function App() {
                         {
                           kind: 'folder',
                           spriteCol: 2,
-                          tag: tr('Mídias locais', language),
+                          tag: 'Gerenciador',
                           name: tr('Arquivos', language),
-                          desc: tr('Explore as pastas', language),
+                          desc: 'Raiz, pastas e 7-Zip',
                         },
                         {
                           kind: 'radio',
@@ -4122,6 +4125,19 @@ export default function App() {
               />
             )}
 
+            {/* ==================== GERENCIADOR DE ARQUIVOS COMPLETO (RAIZ + 7-ZIP) ==================== */}
+            {screen === 'filemanager' && (
+              <FileManagerScreen
+                ref={fileManagerRef}
+                theme={theme}
+                language={language}
+                locationLabel={locationLabel}
+                toast={toast}
+                notify={notify}
+                onBack={() => setScreen('home')}
+              />
+            )}
+
             {/* ==================== PLACAR DA BOLA (SOFASCORE STYLE) ==================== */}
             {screen === 'football' && (
               <PlacarDaBolaScreen
@@ -4499,7 +4515,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.1.1 — Edição R36S
+                  KPlayer v2.1.2 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4515,7 +4531,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.1.1 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.1.2 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4524,13 +4540,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.1.1-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.1.2-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer.sh (v2.1.1 estável)
+                    KPlayer.sh (v2.1.2 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4594,7 +4610,7 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.1-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.2-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
@@ -4607,22 +4623,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.1.1, correção ALSA nos sons das teclas, lazy-loading assíncrono da biblioteca, Notícias com fotos/vídeos, 10 visualizadores reativos (+ Automático), 14 temas R36S, lançador KPlayer.sh estável e artes PNG transparentes em kplayer/scraper/.
+                Inclui binário ARM64 nativo v2.1.2, Gerenciador de Arquivos completo com acesso à raiz (/), motor oficial 7-Zip (ip7z/7zip) para ZIP/7Z/RAR com senha, barra de progresso com velocidade (MB/s) e tempo restante (ETA), áudio ALSA/libVLC, Notícias com fotos/vídeos e artes PNG transparentes em kplayer/scraper/.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.1.1-R36S.zip"
+                download="KPlayer-v2.1.2-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.1.1-R36S.zip
+                ⬇ Baixar KPlayer-v2.1.2-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.1.1-R36S.zip.sha256"
+                download="KPlayer-v2.1.2-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

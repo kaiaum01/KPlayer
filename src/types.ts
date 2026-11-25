@@ -9,6 +9,7 @@ export type ScreenMode =
   | 'notice'
   | 'home'
   | 'library'
+  | 'filemanager'
   | 'music'
   | 'video'
   | 'radio'

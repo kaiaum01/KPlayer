@@ -50,6 +50,8 @@ files = [
     runtime / "weather_fetch.py",
     runtime / "news_fetch.py",
     runtime / "news.cfg.example",
+    runtime / "file_ops.py",
+    runtime / "7zzs",
     runtime / "updater.py",
     runtime / "golazo",
     runtime / "fonts" / "Interface.ttf",
@@ -82,6 +84,8 @@ EXECUTABLE_NAMES = {
     "football_fetch.py",
     "weather_fetch.py",
     "news_fetch.py",
+    "file_ops.py",
+    "7zzs",
     "updater.py",
     "golazo",
 }

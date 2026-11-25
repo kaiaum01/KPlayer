@@ -1,6 +1,9 @@
 import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { gunzipSync } from 'node:zlib';
@@ -214,7 +217,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.1.1' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.1.2' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -869,7 +872,7 @@ async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<s
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-EPG/2.1.1' },
+      headers: { 'User-Agent': 'KPlayer-EPG/2.1.2' },
     });
     clearTimeout(timer);
     if (!res.ok) return '';
@@ -1648,7 +1651,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.1.1' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.1.2' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1669,7 +1672,7 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipFilename = 'KPlayer-v2.1.1-R36S.zip';
+  const r36sZipFilename = 'KPlayer-v2.1.2-R36S.zip';
   const r36sZipPath = path.join(__dirname, 'releases', r36sZipFilename);
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
@@ -1684,14 +1687,14 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.1.1',
+        version: '2.1.2',
         filename: r36sZipFilename,
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
       });
     } catch {
-      return res.status(404).json({ ready: false, version: '2.1.1', filename: r36sZipFilename });
+      return res.status(404).json({ ready: false, version: '2.1.2', filename: r36sZipFilename });
     }
   });
 
@@ -1748,7 +1751,7 @@ async function createServer() {
 
   function nextPatchVersion(ver: string): string {
     const m = ver.trim().replace(/^v/i, '').match(SEMVER_RE);
-    if (!m) return '2.1.2';
+    if (!m) return '2.1.3';
     return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
   }
 
@@ -1774,7 +1777,7 @@ async function createServer() {
     } catch {
       // Fallback below
     }
-    return '2.1.1';
+    return '2.1.2';
   }
 
   async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
@@ -2479,7 +2482,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.1' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.2' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -2590,7 +2593,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.1' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.2' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -2788,7 +2791,7 @@ async function createServer() {
     try {
       const r = await fetch('https://ipwho.is/', {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.1' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.2' },
       });
       const data = (await r.json()) as {
         success?: boolean;
@@ -2883,7 +2886,7 @@ async function createServer() {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=pt&format=json`;
       const upstream = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.1' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.2' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ results: [], error: 'geocoding_unavailable' });
@@ -2946,7 +2949,7 @@ async function createServer() {
         `&timezone=auto&forecast_days=7`;
       const upstream = await fetch(apiUrl, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.1' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.2' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ error: 'weather_unavailable' });
@@ -3213,7 +3216,7 @@ async function createServer() {
         });
         const upstream = await fetch(`https://newsdata.io/api/1/latest?${params.toString()}`, {
           signal: controller.signal,
-          headers: { 'User-Agent': 'KPlayer-R36S/2.1.1', Accept: 'application/json' },
+          headers: { 'User-Agent': 'KPlayer-R36S/2.1.2', Accept: 'application/json' },
         });
         clearTimeout(timer);
         if (upstream.ok) {
@@ -3323,6 +3326,633 @@ async function createServer() {
     return res.status(502).json({ ok: false, error: 'news_fetch_failed', articles: [] });
   });
 
+  // ==================== STANDALONE R36S FILE MANAGER + 7-ZIP API (v2.1.2) ====================
+  // Confines all Web Simulator file operations strictly inside data/r36s-fs/ (presented as "/").
+  // Real R36S hardware accesses the real Linux root "/" directly via source/file_manager.h.
+
+  const FM_SANDBOX_ROOT = path.resolve(__dirname, 'data', 'r36s-fs');
+  const FM_SCRIPT_PATH = path.resolve(__dirname, 'ports', 'kplayer', 'file_ops.py');
+  const FM_ARCHIVE_EXTS = new Set([
+    '.zip', '.7z', '.rar', '.tar', '.gz', '.tgz', '.xz', '.txz', '.bz2', '.tbz2', '.cbz', '.cbr', '.iso',
+  ]);
+  const FM_PROTECTED_VIRTUAL_PATHS = new Set([
+    '/', '/roms', '/roms2', '/roms/ports', '/home', '/etc', '/usr', '/var',
+  ]);
+
+  interface FmJobState {
+    id: string;
+    op: string;
+    status: 'running' | 'done' | 'error' | 'cancelled' | 'bad_password';
+    percent: number;
+    bytesDone: number;
+    bytesTotal: number;
+    speedBps: number;
+    etaSec: number;
+    itemsDone: number;
+    itemsTotal: number;
+    currentFile: string;
+    message: string;
+    exitCode: number | null;
+    progressFile: string;
+    child: ChildProcess | null;
+    createdAt: number;
+    finishedAt: number | null;
+  }
+
+  const fmJobs = new Map<string, FmJobState>();
+  let fmSeedPromise: Promise<void> | null = null;
+
+  function isFmArchiveName(name: string): boolean {
+    const low = name.toLowerCase();
+    for (const ext of FM_ARCHIVE_EXTS) {
+      if (low.endsWith(ext)) return true;
+    }
+    return false;
+  }
+
+  function isValidFmEntryName(raw: unknown): raw is string {
+    if (typeof raw !== 'string') return false;
+    const name = raw.trim();
+    if (!name || name.length > 128) return false;
+    if (name === '.' || name === '..') return false;
+    if (name.includes('/') || name.includes('\\') || name.includes('\0')) return false;
+    return true;
+  }
+
+  function resolveFmPath(rawVirtual: unknown): { virtualPath: string; realPath: string } | null {
+    const raw = String(rawVirtual ?? '/').replace(/\0/g, '').trim();
+    const cleaned = raw.replace(/\\/g, '/');
+    const normalized = path.posix.normalize(cleaned.startsWith('/') ? cleaned : `/${cleaned}`);
+    if (normalized === '..' || normalized.startsWith('/..')) return null;
+    const rel = normalized.replace(/^\/+/, '');
+    const realPath = path.resolve(FM_SANDBOX_ROOT, rel);
+    if (realPath !== FM_SANDBOX_ROOT && !realPath.startsWith(FM_SANDBOX_ROOT + path.sep)) {
+      return null;
+    }
+    return { virtualPath: normalized || '/', realPath };
+  }
+
+  async function ensureFmSandboxSeeded(): Promise<void> {
+    if (fmSeedPromise) return fmSeedPromise;
+    fmSeedPromise = (async () => {
+      const dirs = [
+        'roms/bgmusic',
+        'roms/videos',
+        'roms/ports/kplayer',
+        'roms/gba',
+        'roms2/roms',
+        'home/ark/Downloads',
+        'etc',
+        'usr/share',
+      ];
+      for (const d of dirs) {
+        await fs.mkdir(path.join(FM_SANDBOX_ROOT, d), { recursive: true });
+      }
+
+      const writeIfMissing = async (rel: string, content: string) => {
+        const target = path.join(FM_SANDBOX_ROOT, rel);
+        try {
+          await fs.access(target);
+        } catch {
+          await fs.writeFile(target, content, 'utf8');
+        }
+      };
+
+      await writeIfMissing(
+        'roms/ports/kplayer/settings.cfg',
+        'theme=0\nvisualizer=0\nkey_sfx=1\nversion=2.1.2\n'
+      );
+      await writeIfMissing(
+        'roms/ports/kplayer/changelog.txt',
+        'KPlayer v2.1.2 (R36S)\n- Gerenciador de arquivos completo na raiz (/)\n- Suporte oficial 7-Zip (ip7z/7zip) + arquivos com senha\n- Barra de progresso com velocidade (MB/s) e tempo restante (ETA)\n'
+      );
+      await writeIfMissing(
+        'roms/bgmusic/LEIA-ME.txt',
+        'Pasta de músicas do console R36S (/roms/bgmusic).\nUse Músicas e Vídeos na Home para tocar sua biblioteca.\n'
+      );
+      await writeIfMissing(
+        'home/ark/Downloads/LEIA-ME-SENHA.txt',
+        'Arquivos de teste do Gerenciador de Arquivos KPlayer v2.1.2:\n' +
+          '- pacote-temas-r36s.zip (ZIP padrão, sem senha)\n' +
+          '- backup-protegido.zip (ZIP protegido por senha -> senha: r36s)\n'
+      );
+      await writeIfMissing(
+        'etc/os-release',
+        'PRETTY_NAME="dArkOS Debian 13 (R36S Simulator Root)"\nID=darkos\nARCH=aarch64\n'
+      );
+
+      // Generate sample plain ZIP and password-protected ZIP (password: "r36s") once
+      const plainZip = path.join(FM_SANDBOX_ROOT, 'home/ark/Downloads/pacote-temas-r36s.zip');
+      const encZip = path.join(FM_SANDBOX_ROOT, 'home/ark/Downloads/backup-protegido.zip');
+      let needsZips = false;
+      try {
+        await fs.access(plainZip);
+        await fs.access(encZip);
+      } catch {
+        needsZips = true;
+      }
+
+      if (needsZips) {
+        const seedPy = [
+          'import os, struct, sys, time, zipfile, zlib',
+          'plain_path, enc_path = sys.argv[1], sys.argv[2]',
+          'if not os.path.exists(plain_path):',
+          '  with zipfile.ZipFile(plain_path, "w", zipfile.ZIP_DEFLATED) as zf:',
+          '    zf.writestr("temas/oled-aurora.txt", "Tema OLED Aurora para KPlayer R36S\\n" * 120)',
+          '    zf.writestr("temas/cyber-neon.txt", "Paleta Cyber Neon v2.1.2\\n" * 120)',
+          '    zf.writestr("LEIA-ME.txt", "Pacote de temas pronto para descompactar no R36S.\\n")',
+          'def write_zipcrypto_zip(out_path, files, password):',
+          '  pwd = password.encode("utf-8")',
+          '  def crc_byte(c, b): return zlib.crc32(bytes([b]), c ^ 0xFFFFFFFF) ^ 0xFFFFFFFF',
+          '  def encrypt(data, crc32_val):',
+          '    k0, k1, k2 = 0x12345678, 0x23456789, 0x34567890',
+          '    def upd(b):',
+          '      nonlocal k0, k1, k2',
+          '      k0 = crc_byte(k0, b)',
+          '      k1 = ((k1 + (k0 & 0xFF)) * 134775813 + 1) & 0xFFFFFFFF',
+          '      k2 = crc_byte(k2, (k1 >> 24) & 0xFF)',
+          '    def stream_byte():',
+          '      t = (k2 | 2) & 0xFFFF',
+          '      return ((t * (t ^ 1)) >> 8) & 0xFF',
+          '    for ch in pwd: upd(ch)',
+          '    hdr = bytes([0x4B, 0x50, 0x32, 0x31, 0x32, 0x52, 0x33, 0x36, 0x53, 0x00, 0x7A, (crc32_val >> 24) & 0xFF])',
+          '    out = bytearray()',
+          '    for b in hdr + data:',
+          '      c = b ^ stream_byte()',
+          '      upd(b)',
+          '      out.append(c)',
+          '    return bytes(out)',
+          '  central = bytearray()',
+          '  offset = 0',
+          '  with open(out_path, "wb") as f:',
+          '    for name, raw in files:',
+          '      nb = name.encode("utf-8")',
+          '      crc = zlib.crc32(raw) & 0xFFFFFFFF',
+          '      enc = encrypt(raw, crc)',
+          '      lh = struct.pack("<IHHHHHIIIHH", 0x04034B50, 20, 0x0001, 0, 0, 0x5821, crc, len(enc), len(raw), len(nb), 0)',
+          '      f.write(lh); f.write(nb); f.write(enc)',
+          '      ch = struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, 0x0001, 0, 0, 0x5821, crc, len(enc), len(raw), len(nb), 0, 0, 0, 0, 0, offset)',
+          '      central.extend(ch); central.extend(nb)',
+          '      offset += len(lh) + len(nb) + len(enc)',
+          '    cd_off = offset',
+          '    f.write(central)',
+          '    eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, len(files), len(files), len(central), cd_off, 0)',
+          '    f.write(eocd)',
+          'if not os.path.exists(enc_path):',
+          '  write_zipcrypto_zip(enc_path, [',
+          '    ("backup/config-r36s.txt", b"Backup protegido do KPlayer R36S v2.1.2!\\nDescompactado com sucesso usando senha.\\n"),',
+          '    ("backup/saves-info.txt", b"Pasta de saves verificada pelo gerenciador de arquivos.\\n"),',
+          '  ], "r36s")',
+        ].join('\n');
+
+        await new Promise<void>((resolve) => {
+          const child = spawn('python3', ['-c', seedPy, plainZip, encZip], { shell: false });
+          child.on('close', () => resolve());
+          child.on('error', () => resolve());
+        });
+      }
+    })();
+    return fmSeedPromise;
+  }
+
+  function parseFmProgressTsv(raw: string): Partial<FmJobState> | null {
+    const line = raw.trim().split(/\r?\n/)[0];
+    if (!line) return null;
+    const parts = line.split('\t');
+    if (parts.length < 10) return null;
+    const rawStatus = parts[0];
+    const status: FmJobState['status'] =
+      rawStatus === 'done' || rawStatus === 'error' || rawStatus === 'cancelled' || rawStatus === 'bad_password'
+        ? rawStatus
+        : 'running';
+    return {
+      status,
+      percent: Math.max(0, Math.min(100, Number(parts[1]) || 0)),
+      bytesDone: Math.max(0, Number(parts[2]) || 0),
+      bytesTotal: Math.max(0, Number(parts[3]) || 0),
+      speedBps: Math.max(0, Number(parts[4]) || 0),
+      etaSec: Number(parts[5]) >= 0 ? Number(parts[5]) : -1,
+      itemsDone: Math.max(0, Number(parts[6]) || 0),
+      itemsTotal: Math.max(0, Number(parts[7]) || 0),
+      op: parts[8] || 'op',
+      currentFile: parts[9] || '',
+      message: parts[10] || '',
+    };
+  }
+
+  function pruneOldFmJobs(): void {
+    const now = Date.now();
+    for (const [id, job] of fmJobs.entries()) {
+      if (job.finishedAt && now - job.finishedAt > 10 * 60_000) {
+        fs.unlink(job.progressFile).catch(() => undefined);
+        fmJobs.delete(id);
+      }
+    }
+  }
+
+  app.get('/api/fm/list', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const showHidden = req.query.hidden === '1' || req.query.hidden === 'true';
+      const resolved = resolveFmPath(req.query.path ?? '/');
+      if (!resolved) {
+        return res.status(400).json({ ok: false, error: 'Caminho inválido' });
+      }
+      const stat = await fs.stat(resolved.realPath).catch(() => null);
+      if (!stat || !stat.isDirectory()) {
+        return res.status(404).json({ ok: false, error: 'Pasta não encontrada' });
+      }
+      const dirents = await fs.readdir(resolved.realPath, { withFileTypes: true });
+      const entries: Array<{
+        name: string;
+        path: string;
+        isDir: boolean;
+        size: number;
+        mtime: number;
+        isHidden: boolean;
+        isArchive: boolean;
+        ext: string;
+      }> = [];
+
+      for (const d of dirents) {
+        const isHidden = d.name.startsWith('.');
+        if (!showHidden && isHidden) continue;
+        const full = path.join(resolved.realPath, d.name);
+        const st = await fs.lstat(full).catch(() => null);
+        if (!st) continue;
+        const isDir = st.isDirectory();
+        const vPath = resolved.virtualPath === '/' ? `/${d.name}` : `${resolved.virtualPath}/${d.name}`;
+        entries.push({
+          name: d.name,
+          path: vPath,
+          isDir,
+          size: isDir ? 0 : st.size,
+          mtime: Math.floor(st.mtimeMs),
+          isHidden,
+          isArchive: !isDir && isFmArchiveName(d.name),
+          ext: isDir ? '' : path.extname(d.name).toLowerCase(),
+        });
+      }
+
+      entries.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+      });
+
+      const parentPath =
+        resolved.virtualPath === '/' ? '/' : path.posix.dirname(resolved.virtualPath) || '/';
+
+      return res.json({
+        ok: true,
+        path: resolved.virtualPath,
+        parentPath,
+        isProtected: FM_PROTECTED_VIRTUAL_PATHS.has(resolved.virtualPath),
+        entries,
+        quickRoots: [
+          { label: '/ (Raiz)', path: '/' },
+          { label: '/roms', path: '/roms' },
+          { label: '/roms2', path: '/roms2' },
+          { label: '/roms/ports', path: '/roms/ports' },
+          { label: '/home/ark/Downloads', path: '/home/ark/Downloads' },
+        ],
+      });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao listar pasta' });
+    }
+  });
+
+  app.post('/api/fm/mkdir', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const parentResolved = resolveFmPath(req.body?.parent ?? '/');
+      const name = req.body?.name;
+      if (!parentResolved || !isValidFmEntryName(name)) {
+        return res.status(400).json({ ok: false, error: 'Nome de pasta inválido' });
+      }
+      const targetVirtual =
+        parentResolved.virtualPath === '/' ? `/${name.trim()}` : `${parentResolved.virtualPath}/${name.trim()}`;
+      const targetResolved = resolveFmPath(targetVirtual);
+      if (!targetResolved) {
+        return res.status(400).json({ ok: false, error: 'Caminho de destino inválido' });
+      }
+      await fs.mkdir(targetResolved.realPath, { recursive: false });
+      return res.json({ ok: true, path: targetResolved.virtualPath });
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code === 'EEXIST') {
+        return res.status(409).json({ ok: false, error: 'Já existe um item com esse nome' });
+      }
+      return res.status(500).json({ ok: false, error: 'Falha ao criar pasta' });
+    }
+  });
+
+  app.post('/api/fm/rename', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const srcResolved = resolveFmPath(req.body?.path);
+      const newName = req.body?.newName;
+      if (!srcResolved || !isValidFmEntryName(newName)) {
+        return res.status(400).json({ ok: false, error: 'Nome inválido para renomear' });
+      }
+      if (FM_PROTECTED_VIRTUAL_PATHS.has(srcResolved.virtualPath)) {
+        return res.status(403).json({ ok: false, error: 'Pasta protegida do sistema não pode ser renomeada' });
+      }
+      const parentVirtual = path.posix.dirname(srcResolved.virtualPath) || '/';
+      const dstVirtual = parentVirtual === '/' ? `/${newName.trim()}` : `${parentVirtual}/${newName.trim()}`;
+      const dstResolved = resolveFmPath(dstVirtual);
+      if (!dstResolved) {
+        return res.status(400).json({ ok: false, error: 'Destino inválido' });
+      }
+      const exists = await fs.access(dstResolved.realPath).then(() => true).catch(() => false);
+      if (exists) {
+        return res.status(409).json({ ok: false, error: 'Já existe um item com esse nome' });
+      }
+      await fs.rename(srcResolved.realPath, dstResolved.realPath);
+      return res.json({ ok: true, path: dstResolved.virtualPath });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao renomear item' });
+    }
+  });
+
+  app.post('/api/fm/archive/list', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const resolved = resolveFmPath(req.body?.path);
+      if (!resolved) {
+        return res.status(400).json({ ok: false, error: 'Arquivo inválido' });
+      }
+      const st = await fs.stat(resolved.realPath).catch(() => null);
+      if (!st || !st.isFile()) {
+        return res.status(404).json({ ok: false, error: 'Arquivo não encontrado' });
+      }
+      const password = typeof req.body?.password === 'string' ? req.body.password : '';
+      const args = [FM_SCRIPT_PATH, 'list-archive', resolved.realPath];
+      if (password) args.push('--password-stdin');
+
+      const result = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+        const child = spawn('python3', args, { shell: false });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (chunk: Buffer) => {
+          if (stdout.length < 2 * 1024 * 1024) stdout += chunk.toString('utf8');
+        });
+        child.stderr.on('data', (chunk: Buffer) => {
+          if (stderr.length < 64 * 1024) stderr += chunk.toString('utf8');
+        });
+        if (password) {
+          child.stdin.write(`${password}\n`);
+        }
+        child.stdin.end();
+        child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
+        child.on('error', () => resolve({ code: 1, stdout: '', stderr: 'spawn_failed' }));
+      });
+
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(result.stdout || '{}') as Record<string, unknown>;
+      } catch {
+        parsed = { ok: false, error: 'Falha ao ler conteúdo do arquivo compactado' };
+      }
+
+      return res.json({
+        ok: Boolean(parsed.ok),
+        archivePath: resolved.virtualPath,
+        engine: parsed.engine ?? 'python-zipfile',
+        encrypted: Boolean(parsed.encrypted),
+        badPassword: Boolean(parsed.bad_password) || result.code === 3,
+        count: Number(parsed.count) || 0,
+        totalSize: Number(parsed.total_size) || 0,
+        items: Array.isArray(parsed.items) ? parsed.items : [],
+        error: typeof parsed.error === 'string' ? parsed.error : undefined,
+      });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao abrir arquivo compactado' });
+    }
+  });
+
+  app.post('/api/fm/job/start', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      pruneOldFmJobs();
+
+      const action = String(req.body?.action ?? '');
+      if (!['copy', 'move', 'delete', 'extract', 'compress'].includes(action)) {
+        return res.status(400).json({ ok: false, error: 'Ação inválida' });
+      }
+
+      const rawSources: unknown[] = Array.isArray(req.body?.sources) ? req.body.sources : [];
+      if (rawSources.length === 0 || rawSources.length > 256) {
+        return res.status(400).json({ ok: false, error: 'Selecione pelo menos um item' });
+      }
+
+      const resolvedSources: Array<{ virtualPath: string; realPath: string }> = [];
+      for (const s of rawSources) {
+        const r = resolveFmPath(s);
+        if (!r) return res.status(400).json({ ok: false, error: 'Caminho de origem inválido' });
+        if ((action === 'delete' || action === 'move') && FM_PROTECTED_VIRTUAL_PATHS.has(r.virtualPath)) {
+          return res.status(403).json({
+            ok: false,
+            error: `Pasta protegida do sistema não pode ser removida ou movida: ${r.virtualPath}`,
+          });
+        }
+        resolvedSources.push(r);
+      }
+
+      const password = typeof req.body?.password === 'string' ? req.body.password : '';
+      const jobId = randomUUID();
+      const progressFile = path.join(os.tmpdir(), `kplayer-fm-${jobId}.tsv`);
+      let args: string[] = [];
+
+      if (action === 'copy' || action === 'move') {
+        const destResolved = resolveFmPath(req.body?.dest);
+        if (!destResolved) {
+          return res.status(400).json({ ok: false, error: 'Pasta de destino inválida' });
+        }
+        args = [
+          FM_SCRIPT_PATH,
+          action,
+          '--dest',
+          destResolved.realPath,
+          '--progress',
+          progressFile,
+          ...resolvedSources.map((s) => s.realPath),
+        ];
+      } else if (action === 'delete') {
+        args = [
+          FM_SCRIPT_PATH,
+          'delete',
+          '--progress',
+          progressFile,
+          ...resolvedSources.map((s) => s.realPath),
+        ];
+      } else if (action === 'extract') {
+        const destResolved = resolveFmPath(req.body?.dest);
+        if (!destResolved) {
+          return res.status(400).json({ ok: false, error: 'Pasta de destino inválida' });
+        }
+        await fs.mkdir(destResolved.realPath, { recursive: true });
+        args = [
+          FM_SCRIPT_PATH,
+          'extract',
+          resolvedSources[0].realPath,
+          '--dest',
+          destResolved.realPath,
+          '--progress',
+          progressFile,
+        ];
+        if (password) args.push('--password-stdin');
+      } else if (action === 'compress') {
+        const destDirResolved = resolveFmPath(req.body?.dest ?? '/');
+        const rawOutName = String(req.body?.outputName ?? 'arquivo.zip').trim();
+        const safeOutName = rawOutName.toLowerCase().endsWith('.zip') ? rawOutName : `${rawOutName}.zip`;
+        if (!destDirResolved || !isValidFmEntryName(safeOutName)) {
+          return res.status(400).json({ ok: false, error: 'Nome de arquivo ZIP inválido' });
+        }
+        const outVirtual =
+          destDirResolved.virtualPath === '/' ? `/${safeOutName}` : `${destDirResolved.virtualPath}/${safeOutName}`;
+        const outResolved = resolveFmPath(outVirtual);
+        if (!outResolved) {
+          return res.status(400).json({ ok: false, error: 'Destino do ZIP inválido' });
+        }
+        args = [
+          FM_SCRIPT_PATH,
+          'compress',
+          '--output',
+          outResolved.realPath,
+          '--progress',
+          progressFile,
+          ...resolvedSources.map((s) => s.realPath),
+        ];
+      }
+
+      const child = spawn('python3', args, { shell: false });
+      const job: FmJobState = {
+        id: jobId,
+        op: action,
+        status: 'running',
+        percent: 0,
+        bytesDone: 0,
+        bytesTotal: 0,
+        speedBps: 0,
+        etaSec: -1,
+        itemsDone: 0,
+        itemsTotal: resolvedSources.length,
+        currentFile: path.basename(resolvedSources[0].realPath),
+        message: 'Iniciando operação...',
+        exitCode: null,
+        progressFile,
+        child,
+        createdAt: Date.now(),
+        finishedAt: null,
+      };
+      fmJobs.set(jobId, job);
+
+      if (action === 'extract' && password) {
+        child.stdin.write(`${password}\n`);
+      }
+      child.stdin.end();
+
+      child.on('close', async (code) => {
+        job.child = null;
+        job.exitCode = code ?? 1;
+        job.finishedAt = Date.now();
+        try {
+          const tsv = await fs.readFile(progressFile, 'utf8');
+          const parsed = parseFmProgressTsv(tsv);
+          if (parsed) Object.assign(job, parsed);
+        } catch {
+          // progress file may not exist on immediate failure
+        }
+        if (job.status === 'running') {
+          if (code === 0) {
+            job.status = 'done';
+            job.percent = 100;
+            job.etaSec = 0;
+            job.message = 'Operação concluída';
+          } else if (code === 3) {
+            job.status = 'bad_password';
+            job.message = 'Senha incorreta ou arquivo criptografado';
+          } else if (code === 4) {
+            job.status = 'cancelled';
+            job.message = 'Operação cancelada';
+          } else {
+            job.status = 'error';
+            job.message = 'Falha na operação de arquivo';
+          }
+        }
+      });
+
+      child.on('error', () => {
+        job.child = null;
+        job.exitCode = 1;
+        job.status = 'error';
+        job.finishedAt = Date.now();
+        job.message = 'Não foi possível iniciar o motor de arquivos';
+      });
+
+      return res.json({ ok: true, jobId });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao iniciar operação' });
+    }
+  });
+
+  app.get('/api/fm/job/:id', async (req, res) => {
+    const job = fmJobs.get(req.params.id);
+    if (!job) {
+      return res.status(404).json({ ok: false, error: 'Operação não encontrada' });
+    }
+    if (job.status === 'running') {
+      try {
+        const tsv = await fs.readFile(job.progressFile, 'utf8');
+        const parsed = parseFmProgressTsv(tsv);
+        if (parsed) {
+          job.percent = parsed.percent ?? job.percent;
+          job.bytesDone = parsed.bytesDone ?? job.bytesDone;
+          job.bytesTotal = parsed.bytesTotal ?? job.bytesTotal;
+          job.speedBps = parsed.speedBps ?? job.speedBps;
+          job.etaSec = parsed.etaSec ?? job.etaSec;
+          job.itemsDone = parsed.itemsDone ?? job.itemsDone;
+          job.itemsTotal = parsed.itemsTotal ?? job.itemsTotal;
+          job.op = parsed.op ?? job.op;
+          job.currentFile = parsed.currentFile ?? job.currentFile;
+          job.message = parsed.message ?? job.message;
+        }
+      } catch {
+        // File not flushed yet
+      }
+    }
+    return res.json({
+      ok: true,
+      job: {
+        id: job.id,
+        op: job.op,
+        status: job.status,
+        percent: job.percent,
+        bytesDone: job.bytesDone,
+        bytesTotal: job.bytesTotal,
+        speedBps: job.speedBps,
+        etaSec: job.etaSec,
+        itemsDone: job.itemsDone,
+        itemsTotal: job.itemsTotal,
+        currentFile: job.currentFile,
+        message: job.message,
+        badPassword: job.status === 'bad_password' || job.exitCode === 3,
+        exitCode: job.exitCode,
+      },
+    });
+  });
+
+  app.post('/api/fm/job/:id/cancel', (req, res) => {
+    const job = fmJobs.get(req.params.id);
+    if (!job) {
+      return res.status(404).json({ ok: false, error: 'Operação não encontrada' });
+    }
+    if (job.child && !job.child.killed) {
+      job.child.kill('SIGTERM');
+    }
+    return res.json({ ok: true });
+  });
+
   app.get('/api/stream', async (req, res) => {
     const target = String(req.query.url ?? '');
     if (!isSafeExternalUrl(target)) {
@@ -3340,7 +3970,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.1',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.2',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -3436,7 +4066,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.1.1 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.1.2 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

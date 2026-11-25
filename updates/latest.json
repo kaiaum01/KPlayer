@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "version": "2.1.1",
-  "nextVersion": "2.1.2",
+  "version": "2.1.2",
+  "nextVersion": "2.1.3",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.1.1",
-  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.1",
-  "releasedAt": "2026-11-24T23:19:27Z",
+  "releaseTag": "v2.1.2",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.2",
+  "releasedAt": "2026-11-24T12:00:00Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -17,30 +17,30 @@
     "settings.cfg",
     "preferences.cfg",
     "weather.cfg",
+    "news.cfg",
+    "gamelist.xml",
     "history.txt",
     "favorites.txt",
     "radio-favorites.tsv",
     "resume.cfg"
   ],
   "notes": [
-    "Correção Crítica de Reprodução de Mídias (ALSA + Sons das Teclas):",
-    "Corrigido o bug da v2.1.0 em que o dispositivo de áudio SDL2 dos sons das teclas mantinha o ALSA bloqueado e impedia músicas, vídeos, rádios online e IPTV de tocar na libVLC (--aou",
-    "O sintetizador de cliques agora só ativa após a inicialização completa do player, libera o dispositivo ALSA imediatamente antes de qualquer reprodução (sfx_release_device()) e fech",
-    "Lazy-Loading Assíncrono da Biblioteca de Mídias na Inicialização:",
-    "A varredura de músicas (/roms/bgmusic, /roms2/bgmusic) e vídeos (/roms/videos, /roms2/videos) agora roda de forma assíncrona em segundo plano (pthread), deixando o boot mais rápido",
-    "Atualização na Mesma Versão (com Aviso e Confirmação):"
+    "Novo Gerenciador de Arquivos completo em Arquivos (separado de Músicas e Vídeos): acesso à pasta raiz do console (/), criar pastas, apagar com confirmação, copiar, mover, colar, renomear, compactar em .zip e seleção múltipla.",
+    "Integração oficial do 7-Zip público (github.com/ip7z/7zip, binário ARM64 7zzs) para abrir e descompactar ZIP, 7Z, RAR e TAR — incluindo arquivos protegidos por senha.",
+    "Barra de progresso em tempo real ao copiar, mover, apagar ou descompactar, exibindo velocidade (MB/s), tempo faltante (ETA), bytes transferidos e cancelamento com A.",
+    "Gerenciador de Músicas e Vídeos preservado intacto, mantendo a correção ALSA/libVLC e o carregamento assíncrono da biblioteca."
   ],
   "r36s": {
-    "filename": "KPlayer-v2.1.1-R36S.zip",
-    "path": "updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
-    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
-    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.1/KPlayer-v2.1.1-R36S.zip",
-    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.1/KPlayer-v2.1.1-R36S.zip.sha256",
-    "sha256": "f8d97e9bb9e5eab01b3ac571ce313bcb59d0809d6b35aee03ee87da451e8c387",
-    "sizeBytes": 16597081
+    "filename": "KPlayer-v2.1.2-R36S.zip",
+    "path": "updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.2/KPlayer-v2.1.2-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.2/KPlayer-v2.1.2-R36S.zip.sha256",
+    "sha256": "",
+    "sizeBytes": 0
   },
   "web": {
-    "version": "2.1.1",
+    "version": "2.1.2",
     "reloadRequired": true
   }
 }

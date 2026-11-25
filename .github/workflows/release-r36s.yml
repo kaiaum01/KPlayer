@@ -36,9 +36,18 @@ jobs:
           key: libvlc-3.0.23-arm64-${{ hashFiles('patches/kplayer-vlc.patch', 'tools/build_libvlc_arm64.sh') }}
       - name: Compilar núcleo libVLC ARM64
         run: bash tools/build_libvlc_arm64.sh
+      - name: Cachear 7-Zip oficial ARM64 (ip7z/7zip)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ports/kplayer/7zzs
+            ports/kplayer/licencas/7-Zip-License.txt
+          key: 7zip-arm64-${{ hashFiles('tools/fetch_7zip_arm64.sh') }}
+      - name: Baixar 7-Zip oficial ARM64 (ip7z/7zip)
+        run: bash tools/fetch_7zip_arm64.sh
       - name: Testar scripts Python
         run: |
-          python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py ports/kplayer/news_fetch.py
+          python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py ports/kplayer/news_fetch.py ports/kplayer/file_ops.py
           python3 -m unittest discover -s tests -p "test_*.py" -v
       - name: Gravar repositório do canal de auto-update
         run: echo "${{ github.repository }}" > ports/kplayer/update-repo.txt

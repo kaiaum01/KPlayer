@@ -387,6 +387,10 @@ int main(void) {
   key(SDLK_RIGHT, false);
   assert(dash_focus == 1);
   key(SDLK_RETURN, false);
+  assert(mode == 16);
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 3);
+  show_locations();
   assert(mode == 0 && locations_view);
   key(SDLK_BACKSPACE, false);
   assert(mode == 3);
@@ -761,6 +765,23 @@ int main(void) {
   show_osd = false;
   draw_video();
   assert(screenshot("../../video-native.bmp"));
+  /* Verify v2.1.2 standalone File Manager helpers & rendering before font cleanup */
+  assert(fm_is_archive_name("roms.zip"));
+  assert(fm_is_archive_name("BACKUP.7Z"));
+  assert(fm_is_archive_name("pacote.tar.gz"));
+  assert(!fm_is_archive_name("musica.mp3"));
+  assert(fm_is_protected_path("/"));
+  assert(fm_is_protected_path("/roms"));
+  assert(!fm_is_protected_path("/roms/bgmusic/album"));
+  char fm_spd[32], fm_eta[32];
+  fm_format_speed(2.5 * 1024.0 * 1024.0, fm_spd, sizeof(fm_spd));
+  assert(strstr(fm_spd, "MB/s") != NULL);
+  fm_format_eta(85, fm_eta, sizeof(fm_eta));
+  assert(strcmp(fm_eta, "1m 25s") == 0);
+  fm_open();
+  draw_file_manager();
+  fm_free_buffers();
+
   SDL_DestroyTexture(video_texture);
   video_texture = NULL;
   for (int i = 0; i < CACHE; i++) {
@@ -804,7 +825,7 @@ int main(void) {
       "first run persistence, language changes, terms navigation and "
       "layout, storage roots, folders, filters, symlinks, missing storage, LRC "
       "sync, navigation, persistent queue, time, extensions, video "
-      "buffers, UTF-8 font, empty/options/video "
+      "buffers, UTF-8 font, empty/options/video/filemanager "
       "rendering");
   return 0;
 }
