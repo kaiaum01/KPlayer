@@ -5,14 +5,16 @@
     {
       "version": "2.1.3",
       "releaseTag": "v2.1.3",
-      "releasedAt": "2026-11-25T12:00:00Z",
+      "releasedAt": "2026-11-25T13:26:13Z",
       "r36s": "updates/v2.1.3/KPlayer-v2.1.3-R36S.zip",
-      "sha256": "",
+      "sha256": "610444f0b3e081932ebe9a7a9863e94330bace3e20bc8b95d65df36c698a8eaa",
       "notes": [
-        "Editor de texto integrado no Gerenciador de Arquivos (.txt, .xml, .html, .sh, .cfg, .json, .m3u8, .pls)",
-        "Execução de scripts .sh de jogos do R36S e binários/executáveis do EmulationStation a partir do Gerenciador de Arquivos",
-        "Reprodução direta de vídeos, músicas, playlists .m3u8/.m3u e arquivos de rádio (.pls, .xspf e .tsv) pelo Gerenciador de Arquivos",
-        "Tela de novidades (changelog) unificada em um único quadro no aplicativo"
+        "Editor de Texto Integrado no Gerenciador de Arquivos (Arquivos):",
+        "Abra, visualize, edite e salve arquivos .txt, .xml, .html, .htm, .sh, .cfg, .conf, .ini, .json, .log, .md, .m3u8, .m3u, .pls, .xspf e .tsv diretamente no console.",
+        "Salvamento atômico com confirmação ao sair caso existam alterações não salvas e bloqueio seguro contra arquivos binários.",
+        "Execução de Scripts .sh de Jogos do R36S e Executáveis do EmulationStation:",
+        "Detecta scripts .sh e binários ELF (\\x7fELF, sem falsos positivos em /roms FAT32/exFAT).",
+        "Ao abrir, permite escolher entre Executar no console (encerrando SDL2/libVLC/ALSA de forma limpa e transferindo o controle com execv) ou Editar script no Editor de Texto."
       ]
     },
     {
