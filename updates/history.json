@@ -5,14 +5,16 @@
     {
       "version": "2.1.2",
       "releaseTag": "v2.1.2",
-      "releasedAt": "2026-11-24T12:00:00Z",
+      "releasedAt": "2026-11-25T11:25:55Z",
       "r36s": "updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
-      "sha256": "",
+      "sha256": "293d37de8948e0e112f4b40a918defb1ab63ee9f4575c97fa1c30087f87b1817",
       "notes": [
-        "Novo Gerenciador de Arquivos completo em Arquivos (separado de Músicas e Vídeos): acesso à pasta raiz (/), criar pastas, apagar, copiar, mover, colar, renomear, compactar .zip e seleção múltipla",
-        "Integração oficial do 7-Zip público (ip7z/7zip, binário estático ARM64 7zzs) para abrir e descompactar ZIP, 7Z, RAR e TAR — incluindo arquivos protegidos por senha",
-        "Barra de progresso em tempo real com velocidade (MB/s), tempo restante (ETA), bytes transferidos e cancelamento",
-        "Gerenciador de Músicas e Vídeos intacto + áudio ALSA/libVLC e carregamento assíncrono preservados"
+        "Novo Gerenciador de Arquivos Completo (Arquivos na Home — Separado de Músicas e Vídeos):",
+        "Mantém o gerenciador de Músicas e Vídeos 100% intacto e adiciona um Gerenciador de Arquivos independente com acesso à pasta raiz do console (/) e a todos os arquivos e diretórios (",
+        "Operações completas: criar pastas, apagar arquivos e pastas (com confirmação explícita e proteção contra exclusão de pastas críticas do sistema), copiar, mover/recortar, colar (R1)",
+        "Integração Oficial do 7-Zip Público (github.com/ip7z/7zip):",
+        "Inclui o binário oficial estático ARM64 7zzs (com fallback automático em Python zipfile/tarfile) para abrir/navegar e descompactar .zip, .7z, .rar, .tar.*, .cbz, .cbr e .iso.",
+        "Suporte completo a arquivos protegidos por senha: detecta automaticamente arquivos criptografados, abre prompt de senha com máscara (Y para exibir/ocultar) e envia a senha de forma"
       ]
     },
     {
