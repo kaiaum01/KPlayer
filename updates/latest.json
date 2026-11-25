@@ -6,7 +6,7 @@
   "platform": "r36s",
   "releaseTag": "v2.1.4",
   "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.4",
-  "releasedAt": "2026-11-25T16:00:00Z",
+  "releasedAt": "2026-11-25T17:14:43Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -25,9 +25,12 @@
     "resume.cfg"
   ],
   "notes": [
-    "Áudio em jogos (Teste prévio) com motor nativo `./kplayer --bg-audio` (libVLC embarcado) + mixagem compartilhada ALSA dmix/PulseAudio e isolamento de LD_LIBRARY_PATH, tocando música local ou rádio online junto com jogos .sh sem depender de cvlc/mpv externos.",
-    "Mini-Player no Jogo sob demanda: fica oculto durante o jogo e só abre ao pressionar SELECT + R2 (R2 pula para próxima música/rádio, L2 volta para a anterior, B/START pausa, ↑/↓ ajusta o volume do fundo e A ou SELECT+R2 fecha voltando ao jogo).",
-    "Leitor de PDF integrado no Gerenciador de Arquivos compatível com PdfCraft R36S (github.com/kaiaum01/PdfReader-R36s): detecta pdfcraft-core.aarch64 (protocolo serve JSON IPC) e PdfCraft.sh, com suporte a PDFs com senha, zoom (X), navegação por páginas (L1/R1) e modo texto (Y)."
+    "Música e Rádio em Segundo Plano + Mini-Player no Jogo (SELECT + R2) (Teste prévio):",
+    "Nova opção Áudio em jogos (Teste prévio) em SELECT → Opções, permitindo ativar ou desativar a qualquer momento (salva em settings.cfg, desativada por padrão).",
+    "Roda diretamente pelo próprio ./kplayer --bg-audio usando a libvlc.so.5 embarcada (sem depender de cvlc/mpv/ffplay), com mixagem compartilhada automática via PulseAudio/PipeWire ou",
+    "Mini-Player no Jogo sob demanda: fica oculto durante a jogatina e só abre ao pressionar SELECT + R2. Com ele aberto: R2 pula para a próxima música/estação, L2 volta para a anterior",
+    "Leitor de PDF Integrado Compatível com PdfCraft R36S (github.com/kaiaum01/PdfReader-R36s):",
+    "Abra arquivos .pdf diretamente no Gerenciador de Arquivos (Arquivos)."
   ],
   "r36s": {
     "filename": "KPlayer-v2.1.4-R36S.zip",
@@ -35,8 +38,8 @@
     "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.4/KPlayer-v2.1.4-R36S.zip",
     "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.4/KPlayer-v2.1.4-R36S.zip",
     "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.4/KPlayer-v2.1.4-R36S.zip.sha256",
-    "sha256": "",
-    "sizeBytes": 0
+    "sha256": "ec77a774d6ea651371410c0eee0512ae1ea75d7ccd7882eb870ecbac6996c997",
+    "sizeBytes": 18171965
   },
   "web": {
     "version": "2.1.4",

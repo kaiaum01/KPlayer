@@ -5,13 +5,16 @@
     {
       "version": "2.1.4",
       "releaseTag": "v2.1.4",
-      "releasedAt": "2026-11-25T16:00:00Z",
+      "releasedAt": "2026-11-25T17:14:43Z",
       "r36s": "updates/v2.1.4/KPlayer-v2.1.4-R36S.zip",
-      "sha256": "",
+      "sha256": "ec77a774d6ea651371410c0eee0512ae1ea75d7ccd7882eb870ecbac6996c997",
       "notes": [
-        "Áudio em jogos (Teste prévio) com motor nativo `./kplayer --bg-audio` (libVLC) + mixagem ALSA dmix/PulseAudio e isolamento de LD_LIBRARY_PATH para tocar música ou rádio junto com jogos .sh",
-        "Mini-Player no Jogo sob demanda: abre somente com SELECT+R2 (R2 pula música, L2 volta música, B pausa, ↑/↓ ajusta volume, A fecha e retoma o jogo)",
-        "Leitor de PDF integrado no Gerenciador de Arquivos compatível com PdfCraft R36S (kaiaum01/PdfReader-R36s), incluindo protocolo serve JSON IPC, PdfCraft.sh, PDFs com senha, zoom e modo texto"
+        "Música e Rádio em Segundo Plano + Mini-Player no Jogo (SELECT + R2) (Teste prévio):",
+        "Nova opção Áudio em jogos (Teste prévio) em SELECT → Opções, permitindo ativar ou desativar a qualquer momento (salva em settings.cfg, desativada por padrão).",
+        "Roda diretamente pelo próprio ./kplayer --bg-audio usando a libvlc.so.5 embarcada (sem depender de cvlc/mpv/ffplay), com mixagem compartilhada automática via PulseAudio/PipeWire ou",
+        "Mini-Player no Jogo sob demanda: fica oculto durante a jogatina e só abre ao pressionar SELECT + R2. Com ele aberto: R2 pula para a próxima música/estação, L2 volta para a anterior",
+        "Leitor de PDF Integrado Compatível com PdfCraft R36S (github.com/kaiaum01/PdfReader-R36s):",
+        "Abra arquivos .pdf diretamente no Gerenciador de Arquivos (Arquivos)."
       ]
     },
     {
