@@ -450,6 +450,7 @@ static bool playlist_file(const char *s) {
   return ext && (!strcasecmp(ext, ".m3u") || !strcasecmp(ext, ".m3u8"));
 }
 static bool home_layout_inverted = false;
+static bool bg_audio_preview = false;
 static bool tutorial_done = false;
 static bool tutorial_from_options = false;
 static char seen_version[32] = "";
@@ -1206,10 +1207,11 @@ static int opt_cursor = 0;
 static int opt_scroll = 0;
 
 /* General Root order (strict A-Z, then penultimate [A] Verificar atualizacoes, then last Sair):
- * 18=Adaptacao de tela, 22=Clima e Localizacao, 5=Idioma, 24=Layout da tela inicial,
- * 25=Protetor de tela, 20=Rever comandos, 26=Sons das teclas, 9=Tema, 6=Termos de uso,
- * 15=Timer de sono, 19=[A] Verificar atualizacoes (penultimate), 8=Sair (last). */
-static const int opt_root_ids[] = {18, 22, 5, 24, 25, 20, 26, 9, 6, 15, 19, 8};
+ * 18=Adaptacao de tela, 27=Audio em jogos (Teste previo), 22=Clima e Localizacao,
+ * 5=Idioma, 24=Layout da tela inicial, 25=Protetor de tela, 20=Rever comandos,
+ * 26=Sons das teclas, 9=Tema, 6=Termos de uso, 15=Timer de sono,
+ * 19=[A] Verificar atualizacoes (penultimate), 8=Sair (last). */
+static const int opt_root_ids[] = {18, 27, 22, 5, 24, 25, 20, 26, 9, 6, 15, 19, 8};
 #define OPT_ROOT_COUNT ((int)(sizeof(opt_root_ids) / sizeof(opt_root_ids[0])))
 
 static const int opt_weather_ids[] = {30, 31, 32, 11, 33, -99};
@@ -1322,11 +1324,11 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Editor de texto nativo no Gerenciador de Arquivos: abra e edite TXT, XML, HTML, SH, CFG, JSON e M3U8 direto no R36S.",
-        "Execucao de scripts .sh de jogos do R36S e executaveis do EmulationStation com encerramento limpo de audio/video.",
-        "Abertura direta de videos, musicas, playlists .m3u8/.m3u e arquivos de radio (.pls/.tsv) pelo Gerenciador de Arquivos.",
-        "Changelog do aplicativo agora reunido em um unico quadro limpo com rolagem suave pelo D-Pad.",
-        "Gerenciador de Musicas e Videos intacto, preservando 7-Zip oficial, progresso em tempo real e audio ALSA/libVLC.",
+        "Teste previo em Opcoes: Audio em jogos (ativar/desativar) para manter musica ou radio tocando no fundo ao abrir jogos .sh.",
+        "Leitor de PDF no Gerenciador de Arquivos com compatibilidade total com PdfCraft R36S (kaiaum01/PdfReader-R36s), zoom e paginas.",
+        "Suporte a PDF protegido por senha via motor PdfCraft R36S e modo texto integrado caso o motor externo nao esteja instalado.",
+        "Retorno automatico ao KPlayer ao fechar jogos .sh ou o PdfCraft R36S quando o modo Teste previo esta ativo.",
+        "Editor de texto, 7-Zip oficial, playlists M3U8, radios e Gerenciador de Musicas e Videos totalmente preservados.",
     };
     int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
     for (int i = 0; i < n && changelog_count < 6; i++)
@@ -1472,6 +1474,7 @@ static const char *opt_label_for(int id) {
   case 24: return "Layout da tela inicial";
   case 25: return "Protetor de tela";
   case 26: return "Sons das teclas";
+  case 27: return "Áudio em jogos (Teste prévio)";
   case 30: return "Abrir aplicativo de Clima";
   case 31: return "Usar localização do meu IP";
   case 32: return "Pesquisar cidade manualmente";
@@ -1604,6 +1607,9 @@ static void opt_value_for(int id, char *value, size_t cap) {
     break;
   case 26:
     snprintf(value, cap, "%s", tr(ui_sfx_enabled ? "Ativada" : "Desativada"));
+    break;
+  case 27:
+    snprintf(value, cap, "%s", bg_audio_preview ? "Ativado (Prévio)" : "Desativado");
     break;
   case 30:
     snprintf(value, cap, "Open-Meteo ›");
@@ -1997,6 +2003,13 @@ static void change_option(int dir) {
     else sfx_release_device();
     notify(ui_sfx_enabled ? "Sons das teclas ativados" : "Sons das teclas desativados");
     break;
+  case 27:
+    bg_audio_preview = !bg_audio_preview;
+    save_settings();
+    notify(bg_audio_preview
+               ? "Teste prévio: áudio/rádio em jogos .sh ativado"
+               : "Áudio em jogos (Teste prévio) desativado");
+    break;
   case 30:
     weather_open(2);
     break;
@@ -2251,15 +2264,17 @@ static void key(SDL_Keycode k, bool repeat) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
-          option == 24 || option == 26 || option == 52 || option == 61 ||
-          option == 70 || option == 71 || option == 72 || option == 73)
+          option == 24 || option == 26 || option == 27 || option == 52 ||
+          option == 61 || option == 70 || option == 71 || option == 72 ||
+          option == 73)
         change_option(-1);
     } else if (k == SDLK_RIGHT) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
-          option == 24 || option == 26 || option == 52 || option == 61 ||
-          option == 70 || option == 71 || option == 72 || option == 73)
+          option == 24 || option == 26 || option == 27 || option == 52 ||
+          option == 61 || option == 70 || option == 71 || option == 72 ||
+          option == 73)
         change_option(1);
     } else if (k == SDLK_RETURN && !repeat) {
       change_option(1);
@@ -2505,13 +2520,14 @@ static void save_settings(void) {
           "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\n"
           "location %d\nrepeat %d\nshuffle %d\ndisplay %d\n"
           "home_inv %d\ntutorial %d\nss_sec %d\nss_viz %d\nss_clock %d\nss_lyrics %d\n"
-          "seen_ver %s\nui_sfx %d\n",
+          "seen_ver %s\nui_sfx %d\nbg_audio %d\n",
           fit, loop_video, rate, theme_index,
           network_location_enabled ? 1 : 0, repeat_mode,
           shuffle_enabled ? 1 : 0, display_mode,
           home_layout_inverted ? 1 : 0, tutorial_done ? 1 : 0,
           ss_timeout_idx, ss_viz_style, ss_show_clock ? 1 : 0, ss_show_lyrics ? 1 : 0,
-          seen_version[0] ? seen_version : "-", ui_sfx_enabled ? 1 : 0);
+          seen_version[0] ? seen_version : "-", ui_sfx_enabled ? 1 : 0,
+          bg_audio_preview ? 1 : 0);
   if (fclose(f) == 0)
     rename("settings.tmp", "settings.cfg");
 }
@@ -2526,7 +2542,8 @@ static void load_settings(void) {
                                 saved_display = 0, saved_home_inv = 0,
                                 saved_tutorial = 0, saved_ss_sec = 1,
                                 saved_ss_viz = 0, saved_ss_clock = 1,
-                                saved_ss_lyrics = 1, saved_ui_sfx = 1;
+                                saved_ss_lyrics = 1, saved_ui_sfx = 1,
+                                saved_bg_audio = 0;
   float r;
   bool valid = false;
   if (fgets(line, sizeof(line), f)) {
@@ -2545,6 +2562,7 @@ static void load_settings(void) {
       if (valid && fscanf(f, "\nss_lyrics %d", &saved_ss_lyrics) != 1) saved_ss_lyrics = 1;
       if (valid && fscanf(f, "\nseen_ver %31s", saved_seen) != 1) saved_seen[0] = 0;
       if (valid && fscanf(f, "\nui_sfx %d", &saved_ui_sfx) != 1) saved_ui_sfx = 1;
+      if (valid && fscanf(f, "\nbg_audio %d", &saved_bg_audio) != 1) saved_bg_audio = 0;
     } else
       valid = sscanf(line, "%d %d %d %f", &legacy_setting, &ft, &loop, &r) == 4;
   }
@@ -2563,6 +2581,7 @@ static void load_settings(void) {
     ss_show_clock = saved_ss_clock != 0;
     ss_show_lyrics = saved_ss_lyrics != 0;
     ui_sfx_enabled = saved_ui_sfx != 0;
+    bg_audio_preview = saved_bg_audio == 1;
     if (saved_seen[0] && strcmp(saved_seen, "-") != 0)
       snprintf(seen_version, sizeof(seen_version), "%.31s", saved_seen);
     else
@@ -2949,6 +2968,31 @@ int main(int argc, char **argv) {
   }
   save_settings();
   save_resume();
+  bool handoff_ready = false;
+  if (fm_exec_target_path[0] && fm_exec_use_handoff) {
+    const char *mtype = "none";
+    const char *muri = "";
+    const char *mtitle = "";
+    long long mpos = 0;
+    if (fm_exec_keep_bg_audio && active) {
+      if (playing_radio && radio_current_station.url[0]) {
+        mtype = "radio";
+        muri = radio_current_station.url;
+        mtitle = radio_current_station.name;
+      } else if (playing_audio && current_path[0]) {
+        mtype = "music";
+        muri = current_path;
+        mtitle = title[0] ? title : media_name;
+        if (player) {
+          libvlc_time_t cur_t = libvlc_media_player_get_time(player);
+          if (cur_t > 0) mpos = (long long)cur_t;
+        }
+      }
+    }
+    handoff_ready = fm_write_bg_launch_json(".bg-launch.json", fm_exec_target_path,
+                                            fm_exec_is_script, fm_exec_keep_bg_audio,
+                                            mtype, muri, mpos, 50, mtitle);
+  }
   stop_media();
   libvlc_media_player_release(player);
   libvlc_release(engine);
@@ -2976,6 +3020,9 @@ int main(int argc, char **argv) {
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();
+  if (handoff_ready) {
+    return 43;
+  }
   if (fm_exec_target_path[0]) {
     char exec_dir[PATH_MAX];
     snprintf(exec_dir, sizeof(exec_dir), "%s", fm_exec_target_path);

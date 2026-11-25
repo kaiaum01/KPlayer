@@ -1,8 +1,10 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  BookOpen,
   CheckSquare,
   ChevronLeft,
+  ChevronRight,
   ClipboardPaste,
   Copy,
   Eye,
@@ -74,6 +76,9 @@ interface FileManagerScreenProps {
   locationLabel: string;
   toast: string | null;
   notify: (msg: string) => void;
+  bgAudioPreview?: boolean;
+  activeBackgroundAudio?: { title: string; kind: 'music' | 'radio' } | null;
+  onSetGameAudioDucking?: (ducked: boolean) => void;
   onBack: () => void;
   onPlayMedia?: (item: FmPlayMediaPayload) => void;
   onPlayRadio?: (item: FmPlayRadioPayload) => void;
@@ -88,6 +93,7 @@ interface FmEntry {
   mtime: number;
   isHidden: boolean;
   isArchive: boolean;
+  isPdf?: boolean;
   isText?: boolean;
   isScript?: boolean;
   isExecutable?: boolean;
@@ -143,6 +149,22 @@ interface LaunchPreviewState {
   interpreter: string;
   targetDir: string;
   logLines: string[];
+  bgAudioActive?: boolean;
+  bgAudioLabel?: string;
+}
+
+interface PdfViewState {
+  path: string;
+  name: string;
+  title: string;
+  pageCount: number;
+  currentPage: number;
+  zoom: number;
+  mode: 'document' | 'text';
+  encrypted: boolean;
+  pageTexts: string[];
+  engine: string;
+  pdfcraftRepo: string;
 }
 
 interface FmClipboard {
@@ -302,10 +324,15 @@ function isEntryText(e: FmEntry): boolean {
   return Boolean(e.isText ?? TEXT_EXTS.has(e.ext));
 }
 
+function isEntryPdf(e: FmEntry): boolean {
+  return Boolean(e.isPdf ?? e.ext === '.pdf');
+}
+
 function formatEntryTag(entry: FmEntry): string {
   if (entry.isDir) return 'PASTA';
   if (isEntryScript(entry)) return 'SH';
   if (isEntryExecutable(entry)) return 'EXEC';
+  if (isEntryPdf(entry)) return 'PDF';
   if (entry.isArchive) return '7Z/ZIP';
   if (isEntryRadio(entry)) return 'RÁDIO';
   if (isEntryPlaylist(entry)) return entry.ext === '.m3u8' ? 'M3U8' : 'PLAYLIST';
@@ -324,7 +351,22 @@ function formatEditorBadge(ext: string): string {
 }
 
 export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManagerScreenProps>(
-  ({ theme, locationLabel, toast, notify, onBack, onPlayMedia, onPlayRadio, onPlayPlaylistStream }, ref) => {
+  (
+    {
+      theme,
+      locationLabel,
+      toast,
+      notify,
+      bgAudioPreview = false,
+      activeBackgroundAudio = null,
+      onSetGameAudioDucking,
+      onBack,
+      onPlayMedia,
+      onPlayRadio,
+      onPlayPlaylistStream,
+    },
+    ref
+  ) => {
     const [currentPath, setCurrentPath] = useState<string>('/');
     const [parentPath, setParentPath] = useState<string>('/');
     const [entries, setEntries] = useState<FmEntry[]>([]);
@@ -356,6 +398,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     } | null>(null);
     const [editorView, setEditorView] = useState<EditorState | null>(null);
     const [mediaListView, setMediaListView] = useState<MediaListState | null>(null);
+    const [pdfView, setPdfView] = useState<PdfViewState | null>(null);
 
     // Modal state
     const [modal, setModal] = useState<ModalMode>(null);
@@ -422,8 +465,17 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         if (pollTimerRef.current !== null) {
           window.clearInterval(pollTimerRef.current);
         }
+        onSetGameAudioDucking?.(false);
       };
-    }, []);
+    }, [onSetGameAudioDucking]);
+
+    // v2.1.4 Teste prévio: duck active music/radio smoothly while a game launch preview console is open
+    useEffect(() => {
+      const shouldDuck = Boolean(
+        modal?.kind === 'exec_console' && bgAudioPreview && activeBackgroundAudio
+      );
+      onSetGameAudioDucking?.(shouldDuck);
+    }, [activeBackgroundAudio, bgAudioPreview, modal, onSetGameAudioDucking]);
 
     // Keep focused row scrolled into view
     useEffect(() => {
@@ -770,7 +822,60 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       [onPlayMedia, onPlayPlaylistStream, onPlayRadio]
     );
 
-    // ==================== v2.1.3 .SH & EMULATIONSTATION LAUNCHER ====================
+    // ==================== v2.1.4 PDF VIEWER (PdfCraft R36S COMPATIBLE) ====================
+    const openPdfDocument = useCallback(
+      async (filePath: string) => {
+        setLoading(true);
+        try {
+          const res = await fetch('/api/fm/pdf/info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath }),
+          });
+          const data = (await res.json()) as {
+            ok?: boolean;
+            path?: string;
+            name?: string;
+            title?: string;
+            pageCount?: number;
+            encrypted?: boolean;
+            pageTexts?: string[];
+            engine?: string;
+            pdfcraftCompat?: { repo?: string };
+            error?: string;
+          };
+          if (!res.ok || !data.ok) {
+            notify(data.error || 'Não foi possível abrir o arquivo PDF');
+            return;
+          }
+          setModal(null);
+          setArchiveView(null);
+          setEditorView(null);
+          setMediaListView(null);
+          const pageTexts = Array.isArray(data.pageTexts) ? data.pageTexts : [];
+          setPdfView({
+            path: data.path || filePath,
+            name: data.name || baseNamePosix(filePath),
+            title: data.title || baseNamePosix(filePath),
+            pageCount: Math.max(1, Number(data.pageCount) || 1),
+            currentPage: 1,
+            zoom: 100,
+            mode: 'document',
+            encrypted: Boolean(data.encrypted),
+            pageTexts,
+            engine: data.engine || 'KPlayer PDF + PdfCraft R36S',
+            pdfcraftRepo: data.pdfcraftCompat?.repo || 'kaiaum01/PdfReader-R36s',
+          });
+        } catch {
+          notify('Falha ao abrir documento PDF');
+        } finally {
+          setLoading(false);
+        }
+      },
+      [notify]
+    );
+
+    // ==================== v2.1.3 / v2.1.4 .SH & EMULATIONSTATION LAUNCHER ====================
     const launchR36sTarget = useCallback(
       async (filePath: string) => {
         setLoading(true);
@@ -778,7 +883,12 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           const res = await fetch('/api/fm/launch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: filePath }),
+            body: JSON.stringify({
+              path: filePath,
+              bgAudioPreview,
+              activeMediaTitle: activeBackgroundAudio?.title || '',
+              activeMediaKind: activeBackgroundAudio?.kind || null,
+            }),
           });
           const data = (await res.json()) as {
             ok?: boolean;
@@ -788,12 +898,16 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             interpreter?: string;
             targetDir?: string;
             logLines?: string[];
+            bgAudioActive?: boolean;
             error?: string;
           };
           if (!res.ok || !data.ok) {
             notify(data.error || 'Não foi possível executar este arquivo');
             return;
           }
+          const bgActive = Boolean(
+            (data.bgAudioActive ?? (bgAudioPreview && Boolean(activeBackgroundAudio))) && bgAudioPreview
+          );
           setModal({
             kind: 'exec_console',
             preview: {
@@ -803,6 +917,10 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
               interpreter: data.interpreter || '/bin/bash',
               targetDir: data.targetDir || '/',
               logLines: Array.isArray(data.logLines) ? data.logLines : [],
+              bgAudioActive: bgActive,
+              bgAudioLabel: activeBackgroundAudio
+                ? `${activeBackgroundAudio.kind === 'radio' ? 'Rádio' : 'Música'}: ${activeBackgroundAudio.title}`
+                : undefined,
             },
           });
         } catch {
@@ -811,7 +929,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           setLoading(false);
         }
       },
-      [notify]
+      [activeBackgroundAudio, bgAudioPreview, notify]
     );
 
     const playDirectMediaEntry = useCallback(
@@ -958,13 +1076,18 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     const execChoiceOptions = useMemo(() => {
       if (modal?.kind !== 'exec_choice') return [];
       const target = modal.target;
+      const runDesc = bgAudioPreview
+        ? activeBackgroundAudio
+          ? `Teste prévio ATIVO: mantém ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" tocando em segundo plano (volume reduzido)`
+          : 'Teste prévio ATIVO: suporta música ou rádio em segundo plano ao abrir jogos .sh'
+        : 'Encerra SDL2/libVLC e entrega controle direto ao script/executável (ative Teste prévio em Opções para áudio em jogos)';
       const opts: Array<{ id: string; label: string; desc: string; run: () => void }> = [
         {
           id: 'run',
           label: isEntryScript(target)
             ? 'Executar script .sh no console (R36S)'
             : 'Executar binário / EmulationStation',
-          desc: 'Encerra SDL2/libVLC e entrega controle direto ao script/executável',
+          desc: runDesc,
           run: () => void launchR36sTarget(target.path),
         },
       ];
@@ -983,7 +1106,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         run: () => setModal(null),
       });
       return opts;
-    }, [launchR36sTarget, modal, openTextEditor]);
+    }, [activeBackgroundAudio, bgAudioPreview, launchR36sTarget, modal, openTextEditor]);
 
     const actionMenuItems = useMemo(() => {
       if (modal?.kind !== 'actions') return [];
@@ -999,6 +1122,14 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       }> = [];
 
       if (target && !target.isDir) {
+        if (isEntryPdf(target)) {
+          list.push({
+            id: 'open-pdf',
+            label: 'Abrir documento PDF (PdfCraft R36S)',
+            desc: 'Leitor integrado compatível com kaiaum01/PdfReader-R36s',
+            run: () => void openPdfDocument(target.path),
+          });
+        }
         if (isEntryAudio(target) || isEntryVideo(target)) {
           list.push({
             id: 'play-media',
@@ -1022,11 +1153,20 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           list.push({
             id: 'launch-sh',
             label: isEntryScript(target) ? 'Executar script .sh (R36S)' : 'Executar binário / EmulationStation',
-            desc: 'Iniciar jogo ou executável no console',
+            desc: bgAudioPreview
+              ? 'Iniciar jogo mantendo áudio em segundo plano (Teste prévio)'
+              : 'Iniciar jogo ou executável no console',
             run: () => void launchR36sTarget(target.path),
           });
         }
-        if (isEntryText(target) || (!target.isArchive && !isEntryAudio(target) && !isEntryVideo(target) && !isEntryExecutable(target))) {
+        if (
+          isEntryText(target) ||
+          (!target.isArchive &&
+            !isEntryPdf(target) &&
+            !isEntryAudio(target) &&
+            !isEntryVideo(target) &&
+            !isEntryExecutable(target))
+        ) {
           list.push({
             id: 'edit-text',
             label: 'Editar no Editor de Texto',
@@ -1173,6 +1313,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
 
       return list;
     }, [
+      bgAudioPreview,
       clipboard,
       currentPath,
       getEffectiveTargets,
@@ -1183,6 +1324,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       notify,
       openArchive,
       openMediaList,
+      openPdfDocument,
       openTextEditor,
       playDirectMediaEntry,
       requestExtract,
@@ -1194,6 +1336,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       (entry: FmEntry) => {
         if (entry.isDir) {
           void loadDirectory(entry.path);
+        } else if (isEntryPdf(entry)) {
+          void openPdfDocument(entry.path);
         } else if (entry.isArchive) {
           void openArchive(entry.path);
         } else if (isEntryAudio(entry) || isEntryVideo(entry)) {
@@ -1210,7 +1354,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           setModal({ kind: 'actions', target: entry });
         }
       },
-      [loadDirectory, openArchive, openMediaList, openTextEditor, playDirectMediaEntry]
+      [loadDirectory, openArchive, openMediaList, openPdfDocument, openTextEditor, playDirectMediaEntry]
     );
 
     const handleButton = useCallback(
@@ -1281,6 +1425,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                 setArchiveView(null);
                 setEditorView(null);
                 setMediaListView(null);
+                setPdfView(null);
                 void loadDirectory(target.path);
               }
             }
@@ -1313,6 +1458,41 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           if (modal.kind === 'password') {
             if (btn === 'Y') setShowPassword((v) => !v);
             else if (btn === 'B') handlePasswordSubmit();
+            return;
+          }
+          return;
+        }
+
+        // PDF Viewer navigation (v2.1.4 — PdfCraft R36S compatible)
+        if (pdfView) {
+          if (btn === 'A') {
+            setPdfView(null);
+            return;
+          }
+          if (btn === 'L1' || btn === 'LEFT') {
+            setPdfView((prev) =>
+              prev ? { ...prev, currentPage: Math.max(1, prev.currentPage - 1) } : prev
+            );
+            return;
+          }
+          if (btn === 'R1' || btn === 'RIGHT') {
+            setPdfView((prev) =>
+              prev ? { ...prev, currentPage: Math.min(prev.pageCount, prev.currentPage + 1) } : prev
+            );
+            return;
+          }
+          if (btn === 'X') {
+            setPdfView((prev) =>
+              prev
+                ? { ...prev, zoom: prev.zoom === 100 ? 130 : prev.zoom === 130 ? 160 : 100 }
+                : prev
+            );
+            return;
+          }
+          if (btn === 'Y') {
+            setPdfView((prev) =>
+              prev ? { ...prev, mode: prev.mode === 'document' ? 'text' : 'document' } : prev
+            );
             return;
           }
           return;
@@ -1453,6 +1633,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         openEntry,
         openTextEditor,
         parentPath,
+        pdfView,
         playParsedMediaItem,
         quickRoots,
         requestCloseEditor,
@@ -1469,6 +1650,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     const renderEntryIcon = (entry: FmEntry, focused: boolean) => {
       const color = focused ? theme.accent : entry.isDir ? theme.accent : theme.muted;
       if (entry.isDir) return <Folder className="w-4 h-4 shrink-0" style={{ color }} />;
+      if (isEntryPdf(entry)) return <BookOpen className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />;
       if (entry.isArchive) return <Archive className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />;
       if (isEntryScript(entry) || isEntryExecutable(entry)) {
         return <Terminal className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />;
@@ -1484,7 +1666,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       return <FileIcon className="w-4 h-4 shrink-0" style={{ color }} />;
     };
 
-    const isSubView = Boolean(archiveView || editorView || mediaListView);
+    const isSubView = Boolean(archiveView || editorView || mediaListView || pdfView);
     const editorDirty = Boolean(editorView && editorView.content !== editorView.savedContent);
     const editorLines = useMemo(
       () => (editorView ? editorView.content.split('\n') : []),
@@ -1506,7 +1688,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
               <button
                 type="button"
                 onClick={() => {
-                  if (editorView) requestCloseEditor();
+                  if (pdfView) setPdfView(null);
+                  else if (editorView) requestCloseEditor();
                   else if (mediaListView) setMediaListView(null);
                   else if (archiveView) setArchiveView(null);
                   else if (currentPath !== '/') void loadDirectory(parentPath);
@@ -1519,7 +1702,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                   border: `1px solid ${themeHairline(theme)}`,
                 }}
                 title={
-                  editorView
+                  pdfView
+                    ? 'Fechar leitor PDF'
+                    : editorView
                     ? 'Fechar editor de texto'
                     : mediaListView
                     ? 'Fechar lista'
@@ -1535,7 +1720,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] uppercase tracking-wider font-semibold flex items-center gap-1.5" style={{ color: theme.muted }}>
                   <span>
-                    {editorView
+                    {pdfView
+                      ? `Leitor PDF • PdfCraft R36S • Pág. ${pdfView.currentPage}/${pdfView.pageCount}`
+                      : editorView
                       ? `Editor de Texto • ${formatEditorBadge(editorView.ext)}${editorDirty ? ' • Alterado' : ''}`
                       : mediaListView
                       ? mediaListView.kind === 'radio'
@@ -1547,7 +1734,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                   </span>
                 </div>
                 <div className="text-[12px] font-bold truncate font-mono" style={{ color: theme.text }}>
-                  {editorView
+                  {pdfView
+                    ? pdfView.path
+                    : editorView
                     ? editorView.path
                     : mediaListView
                     ? mediaListView.path
@@ -1679,6 +1868,86 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                   <FileText className="w-3 h-3" style={{ color: theme.accent }} />
                   <span>Editar texto (X)</span>
                 </button>
+              )}
+
+              {pdfView && (
+                <>
+                  <button
+                    type="button"
+                    disabled={pdfView.currentPage <= 1}
+                    onClick={() =>
+                      setPdfView((prev) =>
+                        prev ? { ...prev, currentPage: Math.max(1, prev.currentPage - 1) } : prev
+                      )
+                    }
+                    className="p-1.5 rounded-lg cursor-pointer disabled:opacity-40"
+                    style={{
+                      backgroundColor: mixRgb(theme.elevated, theme.text, 0.08),
+                      color: theme.text,
+                      border: `1px solid ${themeHairline(theme)}`,
+                    }}
+                    title="Página anterior (L1)"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pdfView.currentPage >= pdfView.pageCount}
+                    onClick={() =>
+                      setPdfView((prev) =>
+                        prev
+                          ? { ...prev, currentPage: Math.min(prev.pageCount, prev.currentPage + 1) }
+                          : prev
+                      )
+                    }
+                    className="p-1.5 rounded-lg cursor-pointer disabled:opacity-40"
+                    style={{
+                      backgroundColor: mixRgb(theme.elevated, theme.text, 0.08),
+                      color: theme.text,
+                      border: `1px solid ${themeHairline(theme)}`,
+                    }}
+                    title="Próxima página (R1)"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPdfView((prev) =>
+                        prev
+                          ? { ...prev, zoom: prev.zoom === 100 ? 130 : prev.zoom === 130 ? 160 : 100 }
+                          : prev
+                      )
+                    }
+                    className="px-2 py-1 rounded-lg text-[10px] font-bold tabular-nums cursor-pointer"
+                    style={{
+                      backgroundColor: mixRgb(theme.elevated, theme.text, 0.08),
+                      color: theme.text,
+                      border: `1px solid ${themeHairline(theme)}`,
+                    }}
+                    title="Alternar zoom (X)"
+                  >
+                    {pdfView.zoom}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPdfView((prev) =>
+                        prev
+                          ? { ...prev, mode: prev.mode === 'document' ? 'text' : 'document' }
+                          : prev
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer"
+                    style={{
+                      backgroundColor: theme.accent,
+                      color: theme.bg,
+                    }}
+                    title="Alternar modo Documento / Texto (Y)"
+                  >
+                    {pdfView.mode === 'document' ? 'Texto (Y)' : 'PDF (Y)'}
+                  </button>
+                </>
               )}
 
               {archiveView && (
@@ -1831,8 +2100,79 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             </div>
           )}
 
-          {/* Main Content Area: Text Editor OR Media/Radio List OR Archive Viewer OR Directory List */}
-          {editorView ? (
+          {/* Main Content Area: PDF Viewer OR Text Editor OR Media/Radio List OR Archive Viewer OR Directory List */}
+          {pdfView ? (
+            <div
+              className="flex-1 min-h-0 flex flex-col rounded-xl overflow-hidden"
+              style={modernPanelStyle(theme, 12)}
+            >
+              <div
+                className="px-3 py-1.5 flex items-center justify-between text-[10px] shrink-0 gap-2"
+                style={{
+                  color: theme.muted,
+                  borderBottom: `1px solid ${themeHairline(theme)}`,
+                  backgroundColor: mixRgb(theme.panel, theme.bg, 0.35),
+                }}
+              >
+                <span className="truncate font-semibold" style={{ color: theme.text }}>
+                  {pdfView.title}
+                </span>
+                <span className="tabular-nums font-mono shrink-0">
+                  Pág. {pdfView.currentPage}/{pdfView.pageCount} • {pdfView.zoom}% • {pdfView.pdfcraftRepo}
+                </span>
+              </div>
+
+              {pdfView.mode === 'text' ? (
+                <div
+                  className="flex-1 min-h-0 overflow-y-auto kp-scroll p-3.5 font-mono leading-relaxed whitespace-pre-wrap"
+                  style={{
+                    backgroundColor: mixRgb(theme.bg, theme.panel, 0.2),
+                    color: theme.text,
+                    fontSize: pdfView.zoom === 160 ? '14px' : pdfView.zoom === 130 ? '12.5px' : '11.5px',
+                  }}
+                >
+                  {pdfView.encrypted
+                    ? 'Documento protegido por senha. No R36S nativo, o PdfCraft R36S solicita a senha pelo teclado na tela.'
+                    : pdfView.pageTexts[pdfView.currentPage - 1] ||
+                      pdfView.pageTexts[0] ||
+                      'Esta página não contém texto selecionável (use o modo PDF para visualizar).'}
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 flex flex-col bg-[#0d1016] relative">
+                  <iframe
+                    key={`${pdfView.path}-${pdfView.currentPage}-${pdfView.zoom}`}
+                    src={`/api/fm/pdf?path=${encodeURIComponent(pdfView.path)}#page=${pdfView.currentPage}&zoom=${pdfView.zoom}`}
+                    title={pdfView.title}
+                    className="w-full h-full border-0 flex-1"
+                  />
+                  {pdfView.pageTexts.length > 0 && (
+                    <div
+                      className="px-3 py-1 text-[10px] flex items-center justify-between border-t shrink-0"
+                      style={{
+                        backgroundColor: mixRgb(theme.panel, theme.bg, 0.5),
+                        borderColor: themeHairline(theme),
+                        color: theme.muted,
+                      }}
+                    >
+                      <span className="truncate">
+                        Compatível com PdfCraft R36S (pdfcraft-core.aarch64)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPdfView((prev) => (prev ? { ...prev, mode: 'text' } : prev))
+                        }
+                        className="font-semibold cursor-pointer shrink-0 ml-2"
+                        style={{ color: theme.accent }}
+                      >
+                        Ler texto extraído (Y)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : editorView ? (
             <div
               className="flex-1 min-h-0 flex flex-col rounded-xl overflow-hidden"
               style={modernPanelStyle(theme, 12)}
@@ -2193,7 +2533,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             style={{ color: theme.muted }}
           >
             <span className="tabular-nums truncate">
-              {editorView
+              {pdfView
+                ? `Pág. ${pdfView.currentPage}/${pdfView.pageCount} • L1/R1 páginas • X zoom • Y texto/PDF • A voltar`
+                : editorView
                 ? 'START / Ctrl+S salvar • A sair do editor'
                 : mediaListView
                 ? `${mediaListView.items.length} item(ns) • B reproduzir • X editar • A voltar`
@@ -2201,7 +2543,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                 ? `${archiveView.items.length} item(ns) no arquivo`
                 : `${entries.length} item(ns) • B abrir/tocar • X ações • Y selecionar • L1 atalhos`}
             </span>
-            <span className="font-mono shrink-0">Editor • .sh • M3U8 • 7-Zip</span>
+            <span className="font-mono shrink-0">PDF • Editor • .sh • M3U8 • 7-Zip</span>
           </div>
         </div>
 
@@ -2292,6 +2634,25 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                       <X className="w-4 h-4" />
                     </button>
                   </div>
+
+                  {modal.preview.bgAudioActive && (
+                    <div
+                      className="rounded-lg px-2.5 py-1.5 text-[10.5px] flex items-center justify-between gap-2"
+                      style={{
+                        backgroundColor: rgbToRgba(theme.accent, 0.14),
+                        border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
+                        color: theme.text,
+                      }}
+                    >
+                      <span className="truncate font-semibold">
+                        Áudio em jogos (Teste prévio) ativo
+                        {modal.preview.bgAudioLabel ? ` • ${modal.preview.bgAudioLabel}` : ''}
+                      </span>
+                      <span className="font-mono tabular-nums shrink-0" style={{ color: theme.accent }}>
+                        45% vol
+                      </span>
+                    </div>
+                  )}
 
                   <div
                     className="rounded-xl p-2.5 font-mono text-[10.5px] leading-relaxed space-y-1 max-h-[200px] overflow-y-auto kp-scroll"

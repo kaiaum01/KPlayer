@@ -600,8 +600,21 @@ int main(void) {
   mode = 3;
   open_options();
   assert(opt_section == OPT_SEC_ROOT && option == 18);
+  /* Navigate to Audio em jogos (Teste previo) (27) and toggle + persist */
+  opt_cursor = 1;
+  opt_sync_option_id();
+  assert(option == 27);
+  bool prev_bg_audio = bg_audio_preview;
+  key(SDLK_RIGHT, false);
+  assert(bg_audio_preview != prev_bg_audio);
+  save_settings();
+  bg_audio_preview = prev_bg_audio;
+  load_settings();
+  assert(bg_audio_preview != prev_bg_audio);
+  bg_audio_preview = false;
+  save_settings();
   /* Navigate to Layout da tela inicial (24) and toggle */
-  opt_cursor = 3;
+  opt_cursor = 4;
   opt_sync_option_id();
   assert(option == 24);
   bool prev_inv = home_layout_inverted;
@@ -610,7 +623,7 @@ int main(void) {
   draw_home();
   home_layout_inverted = false;
   /* Navigate to Protetor de tela (25) -> opens OPT_SEC_SCREENSAVER */
-  opt_cursor = 4;
+  opt_cursor = 5;
   opt_sync_option_id();
   assert(option == 25);
   key(SDLK_RETURN, false);
@@ -637,7 +650,7 @@ int main(void) {
   mode = 2;
   opt_enter_section(OPT_SEC_ROOT);
   /* Navigate to Rever comandos (20) -> opens mode 12 tutorial */
-  opt_cursor = 5;
+  opt_cursor = 6;
   opt_sync_option_id();
   assert(option == 20);
   key(SDLK_RETURN, false);
@@ -765,11 +778,14 @@ int main(void) {
   show_osd = false;
   draw_video();
   assert(screenshot("../../video-native.bmp"));
-  /* Verify v2.1.2 + v2.1.3 standalone File Manager helpers, editor, .sh/ELF, playlists & rendering before font cleanup */
+  /* Verify v2.1.2 + v2.1.3 + v2.1.4 standalone File Manager helpers, editor, PDF, bg-audio handoff & rendering */
   assert(fm_is_archive_name("roms.zip"));
   assert(fm_is_archive_name("BACKUP.7Z"));
   assert(fm_is_archive_name("pacote.tar.gz"));
   assert(!fm_is_archive_name("musica.mp3"));
+  assert(fm_is_pdf_name("Manual-R36S.pdf"));
+  assert(fm_is_pdf_name("GUIDE.PDF"));
+  assert(!fm_is_pdf_name("manual.txt"));
   assert(fm_is_text_name("gamelist.xml"));
   assert(fm_is_text_name("guia.html"));
   assert(fm_is_text_name("notas.txt"));
@@ -787,13 +803,14 @@ int main(void) {
   fm_format_eta(85, fm_eta, sizeof(fm_eta));
   assert(strcmp(fm_eta, "1m 25s") == 0);
   {
-    char fm_tmp[] = "/tmp/kplayer-fm213-XXXXXX";
+    char fm_tmp[] = "/tmp/kplayer-fm214-XXXXXX";
     assert(mkdtemp(fm_tmp));
-    char f_txt[512], f_m3u8[512], f_pls[512], f_elf[512];
+    char f_txt[512], f_m3u8[512], f_pls[512], f_elf[512], f_bg[512];
     snprintf(f_txt, sizeof(f_txt), "%s/guia.html", fm_tmp);
     snprintf(f_m3u8, sizeof(f_m3u8), "%s/canais.m3u8", fm_tmp);
     snprintf(f_pls, sizeof(f_pls), "%s/radios.pls", fm_tmp);
     snprintf(f_elf, sizeof(f_elf), "%s/emulationstation", fm_tmp);
+    snprintf(f_bg, sizeof(f_bg), "%s/bg-launch.json", fm_tmp);
     FILE *ff = fopen(f_txt, "wb");
     assert(ff);
     fputs("<html>\n<body>KPlayer</body>\n</html>\n", ff);
@@ -816,10 +833,23 @@ int main(void) {
     assert(!fm_is_executable_file(f_txt, S_IFREG | 0644));
     fm_ensure_buffers();
 
+    /* v2.1.4 Background audio handoff JSON writer */
+    assert(fm_write_bg_launch_json(f_bg, "/roms/ports/Celeste.sh", true, true,
+                                   "radio", "https://example.org/radio.mp3",
+                                   12000, 50, "Radio Teste"));
+    FILE *fbg = fopen(f_bg, "rb");
+    assert(fbg);
+    char bg_buf[1024] = {0};
+    size_t bg_n = fread(bg_buf, 1, sizeof(bg_buf) - 1, fbg);
+    fclose(fbg);
+    assert(bg_n > 20);
+    assert(strstr(bg_buf, "\"bg_audio_enabled\": true") != NULL);
+    assert(strstr(bg_buf, "\"media_type\": \"radio\"") != NULL);
+
     /* Native Text Editor open -> replace -> insert -> save -> render */
     assert(fm_ed_open(f_txt, "guia.html"));
     assert(fm_ed_count == 3 && strcmp(fm_ed_lines[1], "<body>KPlayer</body>") == 0);
-    assert(fm_ed_replace_line(1, "<body>KPlayer v2.1.3</body>"));
+    assert(fm_ed_replace_line(1, "<body>KPlayer v2.1.4</body>"));
     assert(fm_ed_insert_line(2, "<!-- ok -->"));
     assert(fm_ed_dirty && fm_ed_count == 4);
     assert(fm_ed_save());
@@ -836,12 +866,25 @@ int main(void) {
     assert(fm_parse_media_list(f_pls, "radios.pls", true));
     assert(fm_ml_count == 1 && strcmp(fm_ml_items[0].title, "Radio Teste") == 0);
     draw_file_manager();
+
+    /* v2.1.4 Native PDF Viewer render smoke test */
+    snprintf(fm_pdf_name, sizeof(fm_pdf_name), "Manual.pdf");
+    snprintf(fm_pdf_title, sizeof(fm_pdf_title), "Manual KPlayer v2.1.4");
+    snprintf(fm_pdf_engine, sizeof(fm_pdf_engine), "pdfcraft");
+    fm_pdf_total_pages = 2;
+    fm_pdf_page = 1;
+    fm_pdf_text_mode = true;
+    fm_pdf_text_buf = strdup("KPlayer PDF Reader\nPdfCraft R36S Compatible");
+    fm_view = FM_VIEW_PDF;
+    draw_file_manager();
+    fm_pdf_clear_render();
     fm_view = FM_VIEW_BROWSE;
 
     unlink(f_txt);
     unlink(f_m3u8);
     unlink(f_pls);
     unlink(f_elf);
+    unlink(f_bg);
     rmdir(fm_tmp);
   }
   fm_open();

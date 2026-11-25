@@ -1,24 +1,20 @@
-# KPlayer v2.1.3 — Edição R36S (Editor de Texto, Scripts `.sh` & EmulationStation, Mídias/Playlists/Rádios nos Arquivos & Changelog Unificado)
+# KPlayer v2.1.4 — Edição R36S (Áudio em Jogos — Teste Prévio & Leitor de PDF Compatível com PdfCraft R36S)
 
 Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita em **C + SDL2 + libVLC ARM64**, adaptativa à resolução do dispositivo.
 
 ---
 
-## Novidades da v2.1.3 (R36S Nativo)
+## Novidades da v2.1.4 (R36S Nativo)
 
-- **Editor de Texto Integrado no Gerenciador de Arquivos (`Arquivos`):**
-  - Abra, visualize, edite e salve arquivos `.txt`, `.xml`, `.html`, `.htm`, `.sh`, `.cfg`, `.conf`, `.ini`, `.json`, `.log`, `.md`, `.m3u8`, `.m3u`, `.pls`, `.xspf` e `.tsv` diretamente no console.
-  - Salvamento atômico com confirmação ao sair caso existam alterações não salvas e bloqueio seguro contra arquivos binários.
-- **Execução de Scripts `.sh` de Jogos do R36S e Executáveis do EmulationStation:**
-  - Detecta scripts `.sh` e binários ELF (`\x7fELF`, sem falsos positivos em `/roms` FAT32/exFAT).
-  - Ao abrir, permite escolher entre **Executar no console** (encerrando SDL2/libVLC/ALSA de forma limpa e transferindo o controle com `execv`) ou **Editar script** no Editor de Texto.
-- **Vídeos, Músicas, Playlists `.m3u8` e Arquivos de Rádio Direto no Gerenciador de Arquivos:**
-  - Reproduza vídeos e músicas direto do Gerenciador de Arquivos pressionando `B` (retornando para `Arquivos` ao pressionar `A`).
-  - Abra playlists `.m3u8`/`.m3u` e arquivos de rádio (`.pls`, `.xspf`, `.tsv`) para escolher e tocar canais, faixas ou estações — ou pressione `X` para editar o conteúdo no Editor de Texto.
-- **Changelog Unificado em Um Único Quadro:**
-  - A tela de novidades pós-atualização agora agrupa todas as notas dentro de **um único quadro contínuo** com divisórias sutis e rolagem no direcional, substituindo os múltiplos quadros individuais.
-- **Tudo da v2.1.2 Preservado:**
-  - Gerenciador de Arquivos separado de `Músicas e Vídeos` com acesso à raiz `/`, 7-Zip oficial ARM64 (`7zzs`) com suporte a senha e barra de progresso em tempo real com velocidade e ETA.
+- **Música e Rádio em Segundo Plano ao Abrir Jogos `.sh` (`Teste prévio`):**
+  - Nova opção **`Áudio em jogos (Teste prévio)`** em **`SELECT → Opções`**, permitindo **ativar ou desativar** a qualquer momento (salva em `settings.cfg`, desativada por padrão).
+  - Quando ativada e uma música local ou rádio online estiver tocando, ao lançar um script `.sh` de jogo ou executável pelo Gerenciador de Arquivos (`Arquivos`), o `KPlayer.sh` + `bg_audio.py` mantém o áudio em segundo plano (volume reduzido) via `cvlc`/`mpv`/`ffplay`, pausa o `gptokeyb` para o jogo assumir o controle e retoma o KPlayer automaticamente ao sair do jogo.
+- **Leitor de PDF Integrado Compatível com `PdfCraft R36S` (`github.com/kaiaum01/PdfReader-R36s`):**
+  - Abra arquivos **`.pdf`** diretamente no Gerenciador de Arquivos (`Arquivos`).
+  - Compatibilidade nativa com o motor **`pdfcraft-core.aarch64`** do projeto **`kaiaum01/PdfReader-R36s`** (via protocolo JSON IPC `serve`), opção de abrir no app externo **`PdfCraft.sh`** quando instalado em `/roms(2)/ports/`, suporte a PDFs com senha pelo teclado virtual e fallback automático via `pdftoppm`/`mutool` e extrator de texto Python integrado.
+  - Controles no leitor PDF: **`L1`/`R1`** trocar página, **`X`** alternar zoom, **`Y`** alternar visualização de documento/texto, **`D-Pad`** rolar e **`A`** voltar.
+- **Tudo da v2.1.3 & v2.1.2 Preservado:**
+  - Editor de texto integrado (`.txt`, `.xml`, `.html`, `.sh`, `.cfg`, `.json`, `.m3u8`, `.pls`), execução de scripts `.sh`/EmulationStation, reprodução direta de vídeos/músicas/playlists/rádios, changelog em quadro único, 7-Zip oficial ARM64 (`7zzs`) com senha e barra de progresso/velocidade/ETA.
 
 ---
 
@@ -30,6 +26,6 @@ Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita e
 3. O KPlayer baixa o pacote da pasta `updates/` (ou GitHub Releases), valida o checksum SHA-256, mantém o lançador fixo **`KPlayer.sh`** atualizado internamente sem mexer em nenhum `gamelist.xml`, preserva favoritos, histórico, listas IPTV/Rádio, clima, tema e idioma, e reinicia automaticamente.
 
 ### Instalação Manual — R36S (dArkOS / PortMaster)
-1. Baixe **`KPlayer-v2.1.3-R36S.zip`** nos anexos desta release.
+1. Baixe **`KPlayer-v2.1.4-R36S.zip`** nos anexos desta release.
 2. Extraia e copie **`KPlayer.sh`** e a pasta **`kplayer/`** para `/roms/ports/` (ou `/roms2/ports/` no SD2).
 3. Abra **Ports → KPlayer** no R36S. As artes em alta resolução do disco K ficam em `kplayer/scraper/`.

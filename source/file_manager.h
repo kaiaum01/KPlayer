@@ -32,6 +32,7 @@ typedef struct {
   bool is_executable;
   bool is_playlist;
   bool is_radio;
+  bool is_pdf;
   bool selected;
   long long size;
 } FmEntry;
@@ -54,7 +55,8 @@ enum {
   FM_VIEW_BROWSE = 0,
   FM_VIEW_ARCHIVE = 1,
   FM_VIEW_EDITOR = 2,
-  FM_VIEW_MEDIA_LIST = 3
+  FM_VIEW_MEDIA_LIST = 3,
+  FM_VIEW_PDF = 4
 };
 
 enum {
@@ -66,7 +68,8 @@ enum {
   FM_MODAL_ROOTS = 5,
   FM_MODAL_EXEC = 6,
   FM_MODAL_EDITOR_MENU = 7,
-  FM_MODAL_EDITOR_EXIT = 8
+  FM_MODAL_EDITOR_EXIT = 8,
+  FM_MODAL_PDF_CHOICE = 9
 };
 
 enum {
@@ -75,12 +78,15 @@ enum {
   FM_KB_PASSWORD_OPEN = 2,
   FM_KB_PASSWORD_EXTRACT = 3,
   FM_KB_EDIT_LINE = 4,
-  FM_KB_NEW_LINE = 5
+  FM_KB_NEW_LINE = 5,
+  FM_KB_PDF_PASSWORD = 6
 };
 
 static bool fm_return_on_exit = false;
 static char fm_exec_target_path[PATH_MAX] = "";
 static bool fm_exec_is_script = false;
+static bool fm_exec_use_handoff = false;
+static bool fm_exec_keep_bg_audio = false;
 
 static char fm_cwd[PATH_MAX] = "/";
 static char fm_app_dir[PATH_MAX] = ".";
@@ -129,11 +135,32 @@ static int fm_ml_count = 0;
 static int fm_ml_cursor = 0;
 static int fm_ml_scroll = 0;
 
-/* Script (.sh) & EmulationStation executable launcher modal state (v2.1.3) */
+/* Script (.sh) & EmulationStation executable launcher modal state (v2.1.3/v2.1.4) */
 static char fm_exec_modal_path[PATH_MAX] = "";
 static char fm_exec_modal_name[256] = "";
 static bool fm_exec_modal_is_script = false;
 static int fm_exec_modal_cursor = 0;
+
+/* Native PDF Viewer state — PdfCraft R36S (kaiaum01/PdfReader-R36s) compatible (v2.1.4) */
+static char fm_pdf_path[PATH_MAX] = "";
+static char fm_pdf_name[256] = "";
+static char fm_pdf_title[160] = "";
+static char fm_pdf_engine[64] = "";
+static char fm_pdf_password[128] = "";
+static char fm_pdf_pdfcraft_sh[PATH_MAX] = "";
+static char fm_pdf_error[192] = "";
+static int fm_pdf_page = 1;
+static int fm_pdf_total_pages = 1;
+static int fm_pdf_zoom_idx = 0;
+static int fm_pdf_pan_x = 0;
+static int fm_pdf_pan_y = 0;
+static bool fm_pdf_text_mode = false;
+static int fm_pdf_text_scroll = 0;
+static int fm_pdf_choice_cursor = 0;
+static SDL_Texture *fm_pdf_tex = NULL;
+static int fm_pdf_tex_w = 0;
+static int fm_pdf_tex_h = 0;
+static char *fm_pdf_text_buf = NULL;
 
 /* Modals & keyboard state */
 static int fm_modal = FM_MODAL_NONE;
@@ -231,6 +258,10 @@ static bool fm_is_script_name(const char *name) {
   return name && fm_has_ext(name, ".sh");
 }
 
+static bool fm_is_pdf_name(const char *name) {
+  return name && fm_has_ext(name, ".pdf");
+}
+
 static bool fm_is_playlist_name(const char *name) {
   return name && (fm_has_ext(name, ".m3u8") || fm_has_ext(name, ".m3u"));
 }
@@ -289,6 +320,7 @@ static const char *fm_file_badge(const FmEntry *e) {
   if (!e) return "ARQ";
   if (e->is_dir) return strcmp(e->name, "..") == 0 ? "VOLTAR" : "PASTA";
   if (e->is_archive) return "7Z/ZIP";
+  if (e->is_pdf) return "PDF";
   if (e->is_script) return "SH";
   if (e->is_executable) return "EXEC";
   if (e->is_radio) return "RÁDIO";
@@ -391,6 +423,18 @@ static void fm_ensure_buffers(void) {
     fm_ml_items = (FmMediaItem *)calloc(FM_MAX_MEDIA_ITEMS, sizeof(FmMediaItem));
 }
 
+static void fm_pdf_clear_render(void) {
+  if (fm_pdf_tex) {
+    SDL_DestroyTexture(fm_pdf_tex);
+    fm_pdf_tex = NULL;
+  }
+  fm_pdf_tex_w = 0;
+  fm_pdf_tex_h = 0;
+  free(fm_pdf_text_buf);
+  fm_pdf_text_buf = NULL;
+  fm_pdf_text_scroll = 0;
+}
+
 static void fm_free_buffers(void) {
   free(fm_entries);
   fm_entries = NULL;
@@ -402,6 +446,8 @@ static void fm_free_buffers(void) {
   fm_ml_items = NULL;
   fm_ml_count = 0;
   fm_ed_free();
+  fm_pdf_clear_render();
+  memset(fm_pdf_password, 0, sizeof(fm_pdf_password));
 }
 
 static int fm_selected_count(void) {
@@ -474,12 +520,14 @@ static bool fm_scan_dir(const char *path) {
     e->is_dir = is_dir;
     e->is_link = is_link;
     e->is_archive = !is_dir && fm_is_archive_name(de->d_name);
+    e->is_pdf = !is_dir && fm_is_pdf_name(de->d_name);
     e->is_script = !is_dir && fm_is_script_name(de->d_name);
     e->is_radio = !is_dir && fm_is_radio_file(de->d_name, full);
     e->is_playlist = !is_dir && !e->is_radio && fm_is_playlist_name(de->d_name);
     e->is_text = !is_dir && fm_is_text_name(de->d_name);
-    e->is_executable = !is_dir && !e->is_script && !e->is_archive && !e->is_text &&
-                       !supported(de->d_name) && fm_is_executable_file(full, eff_mode);
+    e->is_executable = !is_dir && !e->is_script && !e->is_archive && !e->is_pdf &&
+                       !e->is_text && !supported(de->d_name) &&
+                       fm_is_executable_file(full, eff_mode);
     e->size = sz;
   }
   closedir(d);
@@ -1411,6 +1459,304 @@ static void fm_play_media_item(const FmMediaItem *it) {
   notify(it->is_video ? "Conectando canal da playlist..." : "Sintonizando rádio...");
 }
 
+/* Background audio & external launch JSON handoff writer (v2.1.4 — Teste previo) */
+static void fm_json_write_escaped(FILE *f, const char *s) {
+  fputc('"', f);
+  if (s) {
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+      if (*p == '"' || *p == '\\') {
+        fputc('\\', f);
+        fputc((int)*p, f);
+      } else if (*p == '\n') {
+        fputs("\\n", f);
+      } else if (*p == '\r') {
+        fputs("\\r", f);
+      } else if (*p == '\t') {
+        fputs("\\t", f);
+      } else if (*p >= 32) {
+        fputc((int)*p, f);
+      }
+    }
+  }
+  fputc('"', f);
+}
+
+static bool fm_write_bg_launch_json(const char *json_path,
+                                    const char *target_path,
+                                    bool is_script,
+                                    bool keep_bg_audio,
+                                    const char *media_type,
+                                    const char *media_uri,
+                                    long long media_pos_ms,
+                                    int volume_pct,
+                                    const char *media_title) {
+  if (!json_path || !json_path[0] || !target_path || !target_path[0])
+    return false;
+  char tmp_path[PATH_MAX];
+  int n = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", json_path);
+  if (n < 0 || n >= (int)sizeof(tmp_path)) return false;
+  FILE *f = fopen(tmp_path, "w");
+  if (!f) return false;
+  fputs("{\n  \"target_path\": ", f);
+  fm_json_write_escaped(f, target_path);
+  fprintf(f, ",\n  \"is_script\": %s,\n  \"bg_audio_enabled\": %s,\n  \"media_type\": ",
+          is_script ? "true" : "false",
+          keep_bg_audio ? "true" : "false");
+  fm_json_write_escaped(f, (keep_bg_audio && media_type && media_type[0]) ? media_type : "none");
+  fputs(",\n  \"media_uri\": ", f);
+  fm_json_write_escaped(f, (keep_bg_audio && media_uri) ? media_uri : "");
+  fprintf(f, ",\n  \"media_pos_ms\": %lld,\n  \"volume_pct\": %d,\n  \"title\": ",
+          media_pos_ms > 0 ? media_pos_ms : 0LL,
+          volume_pct >= 15 && volume_pct <= 100 ? volume_pct : 50);
+  fm_json_write_escaped(f, media_title ? media_title : "");
+  fputs("\n}\n", f);
+  if (fclose(f) != 0) {
+    unlink(tmp_path);
+    return false;
+  }
+  if (rename(tmp_path, json_path) != 0) {
+    unlink(tmp_path);
+    return false;
+  }
+  return true;
+}
+
+/* Native PDF operations bridge via ./pdf_ops.py (PdfCraft R36S compatible) */
+static int fm_run_pdf_ops(char *const argv[], const char *password,
+                          char *out_buf, size_t out_cap) {
+  if (out_buf && out_cap > 0) out_buf[0] = 0;
+  int out_pipe[2] = {-1, -1};
+  int in_pipe[2] = {-1, -1};
+  if (pipe(out_pipe) != 0) return -1;
+  bool send_pwd = password && password[0];
+  if (send_pwd && pipe(in_pipe) != 0) {
+    close(out_pipe[0]);
+    close(out_pipe[1]);
+    return -1;
+  }
+  pid_t pid = fork();
+  if (pid < 0) {
+    close(out_pipe[0]);
+    close(out_pipe[1]);
+    if (send_pwd) { close(in_pipe[0]); close(in_pipe[1]); }
+    return -1;
+  }
+  if (pid == 0) {
+    if (send_pwd) {
+      dup2(in_pipe[0], STDIN_FILENO);
+      close(in_pipe[0]);
+      close(in_pipe[1]);
+    }
+    dup2(out_pipe[1], STDOUT_FILENO);
+    close(out_pipe[0]);
+    close(out_pipe[1]);
+    execvp("python3", argv);
+    _exit(127);
+  }
+  close(out_pipe[1]);
+  if (send_pwd) {
+    close(in_pipe[0]);
+    size_t plen = strlen(password);
+    ssize_t w1 = write(in_pipe[1], password, plen);
+    ssize_t w2 = write(in_pipe[1], "\n", 1);
+    (void)w1;
+    (void)w2;
+    close(in_pipe[1]);
+  }
+  size_t pos = 0;
+  if (out_buf && out_cap > 1) {
+    char chunk[1024];
+    ssize_t r;
+    while ((r = read(out_pipe[0], chunk, sizeof(chunk))) > 0) {
+      size_t avail = out_cap - 1 - pos;
+      if (avail == 0) continue;
+      size_t take = (size_t)r < avail ? (size_t)r : avail;
+      memcpy(out_buf + pos, chunk, take);
+      pos += take;
+    }
+    out_buf[pos] = 0;
+  }
+  close(out_pipe[0]);
+  int status = 0;
+  while (waitpid(pid, &status, 0) < 0) {
+    if (errno != EINTR) return -1;
+  }
+  return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+static void fm_pdf_load_page_text(void) {
+  free(fm_pdf_text_buf);
+  fm_pdf_text_buf = NULL;
+  fm_pdf_text_scroll = 0;
+  char page_s[16];
+  snprintf(page_s, sizeof(page_s), "%d", fm_pdf_page);
+  bool has_pwd = fm_pdf_password[0] != 0;
+  char *argv_plain[] = {"python3", "./pdf_ops.py", "text", fm_pdf_path, page_s, NULL};
+  char *argv_pwd[] = {"python3", "./pdf_ops.py", "text", fm_pdf_path, page_s, "--password-stdin", NULL};
+  size_t cap = 32768;
+  char *buf = (char *)malloc(cap);
+  if (!buf) return;
+  fm_run_pdf_ops(has_pwd ? argv_pwd : argv_plain, has_pwd ? fm_pdf_password : NULL, buf, cap);
+  char *nl = strchr(buf, '\n');
+  if (nl) {
+    *nl = 0;
+    char *body = nl + 1;
+    while (*body == '\r' || *body == '\n') body++;
+    if (body[0]) {
+      fm_pdf_text_buf = strdup(body);
+    }
+  }
+  if (!fm_pdf_text_buf) {
+    fm_pdf_text_buf = strdup("(Sem texto extraível nesta página)");
+  }
+  free(buf);
+}
+
+static void fm_pdf_load_page(void) {
+  fm_pdf_clear_render();
+  fm_pdf_error[0] = 0;
+  if (fm_pdf_page < 1) fm_pdf_page = 1;
+  if (fm_pdf_total_pages > 0 && fm_pdf_page > fm_pdf_total_pages)
+    fm_pdf_page = fm_pdf_total_pages;
+
+  if (fm_pdf_text_mode) {
+    fm_pdf_load_page_text();
+    return;
+  }
+
+  static const float zoom_scales[3] = {1.0f, 1.35f, 1.75f};
+  float scale = zoom_scales[fm_pdf_zoom_idx % 3];
+  char page_s[16], scale_s[16], x_s[16], y_s[16], w_s[16], h_s[16];
+  snprintf(page_s, sizeof(page_s), "%d", fm_pdf_page);
+  snprintf(scale_s, sizeof(scale_s), "%.2f", scale);
+  snprintf(x_s, sizeof(x_s), "%d", fm_pdf_pan_x);
+  snprintf(y_s, sizeof(y_s), "%d", fm_pdf_pan_y);
+  snprintf(w_s, sizeof(w_s), "588");
+  snprintf(h_s, sizeof(h_s), "322");
+
+  char out_png[128];
+  snprintf(out_png, sizeof(out_png), "/tmp/kplayer_pdf_page_%ld.png", (long)getpid());
+  unlink(out_png);
+
+  bool has_pwd = fm_pdf_password[0] != 0;
+  char *argv_plain[] = {"python3", "./pdf_ops.py", "render", fm_pdf_path, page_s,
+                        scale_s, x_s, y_s, w_s, h_s, out_png, NULL};
+  char *argv_pwd[] = {"python3", "./pdf_ops.py", "render", fm_pdf_path, page_s,
+                      scale_s, x_s, y_s, w_s, h_s, out_png, "--password-stdin", NULL};
+  char out[512];
+  int rc = fm_run_pdf_ops(has_pwd ? argv_pwd : argv_plain, has_pwd ? fm_pdf_password : NULL,
+                          out, sizeof(out));
+  if (rc == 0 && renderer && access(out_png, R_OK) == 0) {
+    int iw = 0, ih = 0, comp = 0;
+    unsigned char *pix = stbi_load(out_png, &iw, &ih, &comp, 4);
+    unlink(out_png);
+    if (pix && iw > 0 && ih > 0 && iw <= 2048 && ih <= 2048) {
+      SDL_Texture *tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+                                           SDL_TEXTUREACCESS_STATIC, iw, ih);
+      if (tex) {
+        SDL_UpdateTexture(tex, NULL, pix, iw * 4);
+        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+        fm_pdf_tex = tex;
+        fm_pdf_tex_w = iw;
+        fm_pdf_tex_h = ih;
+        stbi_image_free(pix);
+        return;
+      }
+    }
+    if (pix) stbi_image_free(pix);
+  } else {
+    unlink(out_png);
+  }
+
+  /* Fallback seamlessly to clean UTF-8 text rendering */
+  fm_pdf_load_page_text();
+}
+
+static bool fm_pdf_open(const char *path, const char *name, const char *password, bool ask_choice_if_pdfcraft) {
+  if (!path || !path[0]) return false;
+  snprintf(fm_pdf_path, sizeof(fm_pdf_path), "%s", path);
+  snprintf(fm_pdf_name, sizeof(fm_pdf_name), "%.255s", name ? name : "documento.pdf");
+  snprintf(fm_pdf_password, sizeof(fm_pdf_password), "%.127s", password ? password : "");
+  fm_pdf_pdfcraft_sh[0] = 0;
+  fm_pdf_error[0] = 0;
+
+  bool has_pwd = fm_pdf_password[0] != 0;
+  char *argv_plain[] = {"python3", "./pdf_ops.py", "info", fm_pdf_path, NULL};
+  char *argv_pwd[] = {"python3", "./pdf_ops.py", "info", fm_pdf_path, "--password-stdin", NULL};
+  char out[1024];
+  fm_run_pdf_ops(has_pwd ? argv_pwd : argv_plain, has_pwd ? fm_pdf_password : NULL,
+                 out, sizeof(out));
+
+  char *nl = strchr(out, '\n');
+  if (nl) *nl = 0;
+  if (strncmp(out, "PDFMETA\t", 8) != 0) {
+    notify("Não foi possível inspecionar este PDF");
+    return false;
+  }
+
+  char *fields[8] = {0};
+  int nf = 0;
+  char *p = out + 8;
+  while (nf < 8) {
+    fields[nf++] = p;
+    char *tab = strchr(p, '\t');
+    if (!tab) break;
+    *tab = 0;
+    p = tab + 1;
+  }
+  int ok = nf >= 1 ? atoi(fields[0]) : 0;
+  const char *eng = nf >= 2 ? fields[1] : "integrado";
+  int pages = nf >= 3 ? atoi(fields[2]) : 1;
+  const char *title_s = nf >= 5 ? fields[4] : fm_pdf_name;
+  const char *sh_s = nf >= 6 ? fields[5] : "";
+  const char *err_s = nf >= 7 ? fields[6] : "";
+
+  snprintf(fm_pdf_pdfcraft_sh, sizeof(fm_pdf_pdfcraft_sh), "%.4095s", sh_s);
+
+  if (!ok && strcmp(eng, "password") == 0) {
+    fm_open_keyboard(FM_KB_PDF_PASSWORD, "PDF protegido por senha",
+                     "Digite a senha do documento (PdfCraft R36S)", "", true);
+    return false;
+  }
+  if (!ok) {
+    notify(err_s[0] ? err_s : "Falha ao abrir arquivo PDF");
+    return false;
+  }
+
+  snprintf(fm_pdf_engine, sizeof(fm_pdf_engine), "%.63s", eng);
+  snprintf(fm_pdf_title, sizeof(fm_pdf_title), "%.159s", title_s[0] ? title_s : fm_pdf_name);
+  fm_pdf_total_pages = pages > 0 ? pages : 1;
+  fm_pdf_page = 1;
+  fm_pdf_zoom_idx = 0;
+  fm_pdf_pan_x = 0;
+  fm_pdf_pan_y = 0;
+  fm_pdf_text_mode = false;
+
+  if (ask_choice_if_pdfcraft && fm_pdf_pdfcraft_sh[0]) {
+    fm_pdf_choice_cursor = 0;
+    fm_modal = FM_MODAL_PDF_CHOICE;
+    return true;
+  }
+
+  fm_modal = FM_MODAL_NONE;
+  fm_view = FM_VIEW_PDF;
+  fm_pdf_load_page();
+  return true;
+}
+
+static void fm_launch_pdfcraft_external(void) {
+  if (!fm_pdf_pdfcraft_sh[0]) {
+    notify("PdfCraft.sh (PdfReader-R36s) não encontrado em /roms/ports");
+    return;
+  }
+  snprintf(fm_exec_target_path, sizeof(fm_exec_target_path), "%s", fm_pdf_pdfcraft_sh);
+  fm_exec_is_script = true;
+  fm_exec_use_handoff = true;
+  fm_exec_keep_bg_audio = bg_audio_preview && active && (playing_audio || playing_radio);
+  fm_modal = FM_MODAL_NONE;
+  running = 0;
+}
+
 static void fm_open_exec_modal(const char *path, const char *name, bool is_script) {
   snprintf(fm_exec_modal_path, sizeof(fm_exec_modal_path), "%s", path);
   snprintf(fm_exec_modal_name, sizeof(fm_exec_modal_name), "%.255s", name);
@@ -1436,7 +1782,9 @@ enum {
   FM_ACT_EDIT_TEXT = 12,
   FM_ACT_EXEC_RUN = 13,
   FM_ACT_PLAY_MEDIA = 14,
-  FM_ACT_OPEN_PLAYLIST = 15
+  FM_ACT_OPEN_PLAYLIST = 15,
+  FM_ACT_OPEN_PDF = 16,
+  FM_ACT_OPEN_PDFCRAFT = 17
 };
 
 static int fm_build_actions(int *out_ids, int max_n) {
@@ -1444,6 +1792,10 @@ static int fm_build_actions(int *out_ids, int max_n) {
   FmEntry *cur = (fm_cursor >= 0 && fm_cursor < fm_count) ? &fm_entries[fm_cursor] : NULL;
   bool valid_item = cur && strcmp(cur->name, "..") != 0;
   if (valid_item && !cur->is_dir) {
+    if (cur->is_pdf) {
+      if (n < max_n) out_ids[n++] = FM_ACT_OPEN_PDF;
+      if (n < max_n) out_ids[n++] = FM_ACT_OPEN_PDFCRAFT;
+    }
     if (cur->is_script || cur->is_executable) {
       if (n < max_n) out_ids[n++] = FM_ACT_EXEC_RUN;
     }
@@ -1453,7 +1805,7 @@ static int fm_build_actions(int *out_ids, int max_n) {
     if (supported(cur->name)) {
       if (n < max_n) out_ids[n++] = FM_ACT_PLAY_MEDIA;
     }
-    if (!cur->is_archive && !cur->is_executable && !supported(cur->name)) {
+    if (!cur->is_archive && !cur->is_pdf && !cur->is_executable && !supported(cur->name)) {
       if (n < max_n) out_ids[n++] = FM_ACT_EDIT_TEXT;
     }
     if (cur->is_archive && n < max_n) {
@@ -1480,6 +1832,8 @@ static int fm_build_actions(int *out_ids, int max_n) {
 
 static const char *fm_action_label(int id) {
   switch (id) {
+  case FM_ACT_OPEN_PDF: return "Abrir PDF (Leitor integrado / PdfCraft)";
+  case FM_ACT_OPEN_PDFCRAFT: return "Abrir no PdfCraft R36S (PdfReader-R36s)";
   case FM_ACT_EXEC_RUN: return "Executar script (.sh) / EmulationStation";
   case FM_ACT_EDIT_TEXT: return "Editar no Editor de Texto";
   case FM_ACT_PLAY_MEDIA: return "Reproduzir mídia (Vídeo / Música)";
@@ -1503,7 +1857,18 @@ static const char *fm_action_label(int id) {
 static void fm_exec_action(int id) {
   FmEntry *cur = (fm_cursor >= 0 && fm_cursor < fm_count) ? &fm_entries[fm_cursor] : NULL;
   fm_modal = FM_MODAL_NONE;
-  if (id == FM_ACT_EXEC_RUN && cur && !cur->is_dir) {
+  if (id == FM_ACT_OPEN_PDF && cur && cur->is_pdf) {
+    fm_pdf_open(cur->path, cur->name, "", false);
+  } else if (id == FM_ACT_OPEN_PDFCRAFT && cur && cur->is_pdf) {
+    if (fm_pdf_open(cur->path, cur->name, "", false)) {
+      if (fm_pdf_pdfcraft_sh[0]) {
+        fm_view = FM_VIEW_BROWSE;
+        fm_launch_pdfcraft_external();
+      } else {
+        notify("PdfCraft.sh não encontrado — aberto no leitor integrado");
+      }
+    }
+  } else if (id == FM_ACT_EXEC_RUN && cur && !cur->is_dir) {
     fm_open_exec_modal(cur->path, cur->name, cur->is_script);
   } else if (id == FM_ACT_EDIT_TEXT && cur && !cur->is_dir) {
     fm_ed_open(cur->path, cur->name);
@@ -1626,6 +1991,13 @@ static void fm_kb_submit(void) {
     fm_ed_insert_line(fm_ed_cursor, fm_kb_buf);
     memset(fm_kb_buf, 0, sizeof(fm_kb_buf));
     fm_modal = FM_MODAL_NONE;
+  } else if (fm_kb_purpose == FM_KB_PDF_PASSWORD) {
+    char pwd[128];
+    snprintf(pwd, sizeof(pwd), "%.127s", fm_kb_buf);
+    memset(fm_kb_buf, 0, sizeof(fm_kb_buf));
+    fm_modal = FM_MODAL_NONE;
+    fm_pdf_open(fm_pdf_path, fm_pdf_name, pwd, false);
+    memset(pwd, 0, sizeof(pwd));
   }
 }
 
@@ -1653,7 +2025,9 @@ static void fm_kb_key(SDL_Keycode k) {
     fm_kb_symbols = false;
   } else if (k == SDLK_e) {
     fm_kb_symbols = !fm_kb_symbols;
-  } else if (k == SDLK_m && (fm_kb_purpose == FM_KB_PASSWORD_OPEN || fm_kb_purpose == FM_KB_PASSWORD_EXTRACT)) {
+  } else if (k == SDLK_m && (fm_kb_purpose == FM_KB_PASSWORD_OPEN ||
+                             fm_kb_purpose == FM_KB_PASSWORD_EXTRACT ||
+                             fm_kb_purpose == FM_KB_PDF_PASSWORD)) {
     fm_kb_mask = !fm_kb_mask;
   } else if (k == SDLK_RETURN) {
     if (fm_kb_row == 0) {
@@ -1681,6 +2055,22 @@ static void fm_key(SDL_Keycode k, bool repeat) {
     fm_kb_key(k);
     return;
   }
+  if (fm_modal == FM_MODAL_PDF_CHOICE) {
+    if (k == SDLK_UP) fm_pdf_choice_cursor = (fm_pdf_choice_cursor + 2) % 3;
+    else if (k == SDLK_DOWN) fm_pdf_choice_cursor = (fm_pdf_choice_cursor + 1) % 3;
+    else if (k == SDLK_BACKSPACE && !repeat) fm_modal = FM_MODAL_NONE;
+    else if (k == SDLK_RETURN && !repeat) {
+      int pick = fm_pdf_choice_cursor;
+      fm_modal = FM_MODAL_NONE;
+      if (pick == 0) {
+        fm_view = FM_VIEW_PDF;
+        fm_pdf_load_page();
+      } else if (pick == 1) {
+        fm_launch_pdfcraft_external();
+      }
+    }
+    return;
+  }
   if (fm_modal == FM_MODAL_EXEC) {
     int opts = fm_exec_modal_is_script ? 3 : 2;
     if (k == SDLK_UP)
@@ -1693,6 +2083,8 @@ static void fm_key(SDL_Keycode k, bool repeat) {
       if (fm_exec_modal_cursor == 0) {
         snprintf(fm_exec_target_path, sizeof(fm_exec_target_path), "%s", fm_exec_modal_path);
         fm_exec_is_script = fm_exec_modal_is_script;
+        fm_exec_use_handoff = bg_audio_preview;
+        fm_exec_keep_bg_audio = bg_audio_preview && active && (playing_audio || playing_radio);
         fm_modal = FM_MODAL_NONE;
         running = 0;
       } else if (fm_exec_modal_is_script && fm_exec_modal_cursor == 1) {
@@ -1798,6 +2190,61 @@ static void fm_key(SDL_Keycode k, bool repeat) {
     else if (k == SDLK_RETURN && !repeat) {
       if (fm_action_cursor >= 0 && fm_action_cursor < cnt)
         fm_exec_action(ids[fm_action_cursor]);
+    }
+    return;
+  }
+
+  /* Inside Native PDF Viewer (v2.1.4 — PdfCraft R36S compatible) */
+  if (fm_view == FM_VIEW_PDF) {
+    if (k == SDLK_BACKSPACE && !repeat) {
+      fm_pdf_clear_render();
+      memset(fm_pdf_password, 0, sizeof(fm_pdf_password));
+      fm_view = FM_VIEW_BROWSE;
+    } else if (k == SDLK_q || k == SDLK_PAGEUP || (k == SDLK_LEFT && fm_pdf_zoom_idx == 0)) {
+      if (fm_pdf_page > 1) {
+        fm_pdf_page--;
+        fm_pdf_pan_x = 0;
+        fm_pdf_pan_y = 0;
+        fm_pdf_load_page();
+      }
+    } else if (k == SDLK_e || k == SDLK_PAGEDOWN || (k == SDLK_RIGHT && fm_pdf_zoom_idx == 0)) {
+      if (fm_pdf_page < fm_pdf_total_pages) {
+        fm_pdf_page++;
+        fm_pdf_pan_x = 0;
+        fm_pdf_pan_y = 0;
+        fm_pdf_load_page();
+      }
+    } else if (k == SDLK_SPACE && !repeat) {
+      fm_pdf_zoom_idx = (fm_pdf_zoom_idx + 1) % 3;
+      fm_pdf_pan_x = 0;
+      fm_pdf_pan_y = 0;
+      if (!fm_pdf_text_mode) fm_pdf_load_page();
+    } else if (k == SDLK_m && !repeat) {
+      fm_pdf_text_mode = !fm_pdf_text_mode;
+      fm_pdf_load_page();
+    } else if (k == SDLK_UP) {
+      if (fm_pdf_text_mode || !fm_pdf_tex) {
+        if (fm_pdf_text_scroll > 0) fm_pdf_text_scroll--;
+      } else if (fm_pdf_pan_y > 0) {
+        fm_pdf_pan_y = fm_pdf_pan_y > 60 ? fm_pdf_pan_y - 60 : 0;
+        fm_pdf_load_page();
+      }
+    } else if (k == SDLK_DOWN) {
+      if (fm_pdf_text_mode || !fm_pdf_tex) {
+        fm_pdf_text_scroll++;
+      } else if (fm_pdf_zoom_idx > 0) {
+        fm_pdf_pan_y += 60;
+        fm_pdf_load_page();
+      }
+    } else if (k == SDLK_LEFT && fm_pdf_zoom_idx > 0 && !fm_pdf_text_mode) {
+      fm_pdf_pan_x = fm_pdf_pan_x > 60 ? fm_pdf_pan_x - 60 : 0;
+      fm_pdf_load_page();
+    } else if (k == SDLK_RIGHT && fm_pdf_zoom_idx > 0 && !fm_pdf_text_mode) {
+      fm_pdf_pan_x += 60;
+      fm_pdf_load_page();
+    } else if (k == SDLK_RETURN && !repeat && fm_pdf_pdfcraft_sh[0]) {
+      fm_pdf_choice_cursor = 1;
+      fm_modal = FM_MODAL_PDF_CHOICE;
     }
     return;
   }
@@ -1909,6 +2356,8 @@ static void fm_key(SDL_Keycode k, bool repeat) {
         snprintf(next_path, sizeof(next_path), "%s", e->path);
         fm_cursor = 0;
         fm_scan_dir(next_path);
+      } else if (e->is_pdf) {
+        fm_pdf_open(e->path, e->name, "", true);
       } else if (e->is_archive) {
         fm_open_archive_entry(e->path, e->name, "");
       } else if (e->is_script || e->is_executable) {
@@ -1994,7 +2443,9 @@ static void draw_file_manager_keyboard(void) {
   char tip[128];
   snprintf(tip, sizeof(tip),
            "B digita • A apaga/fecha • L1 MAIUSC • R1 Símbolos%s",
-           (fm_kb_purpose == FM_KB_PASSWORD_OPEN || fm_kb_purpose == FM_KB_PASSWORD_EXTRACT)
+           (fm_kb_purpose == FM_KB_PASSWORD_OPEN ||
+            fm_kb_purpose == FM_KB_PASSWORD_EXTRACT ||
+            fm_kb_purpose == FM_KB_PDF_PASSWORD)
                ? " • Y mostrar senha" : "");
   centered(tip, 20, 424, W - 40, 11, muted);
 }
@@ -2008,10 +2459,45 @@ static void draw_file_manager(void) {
   backdrop();
   draw_header(fm_view == FM_VIEW_ARCHIVE ? "ARQUIVO COMPACTADO (7-ZIP)"
               : fm_view == FM_VIEW_EDITOR ? "EDITOR DE TEXTO"
+              : fm_view == FM_VIEW_PDF ? "LEITOR DE PDF (PDFCRAFT R36S)"
               : fm_view == FM_VIEW_MEDIA_LIST ? (fm_ml_is_radio ? "ARQUIVO DE RÁDIO" : "PLAYLIST M3U8")
                                               : "GERENCIADOR DE ARQUIVOS");
 
-  if (fm_view == FM_VIEW_EDITOR) {
+  if (fm_view == FM_VIEW_PDF) {
+    static const int zoom_pcts[3] = {100, 135, 175};
+    label(fm_pdf_title[0] ? fm_pdf_title : fm_pdf_name, 24, 42, 18, textc, 430);
+    char meta[140];
+    snprintf(meta, sizeof(meta), "Página %d/%d • Zoom %d%% • %s%s",
+             fm_pdf_page, fm_pdf_total_pages, zoom_pcts[fm_pdf_zoom_idx % 3],
+             fm_pdf_engine[0] ? fm_pdf_engine : "Integrado",
+             fm_pdf_text_mode ? " • Texto" : "");
+    label(meta, 24, 67, 12, accent, 592);
+
+    panel_card(20, 90, 600, 332, 12);
+    if (!fm_pdf_text_mode && fm_pdf_tex && fm_pdf_tex_w > 0 && fm_pdf_tex_h > 0) {
+      int box_x = 26, box_y = 96, box_w = 588, box_h = 320;
+      float sx = (float)box_w / (float)fm_pdf_tex_w;
+      float sy = (float)box_h / (float)fm_pdf_tex_h;
+      float sc = sx < sy ? sx : sy;
+      int dw = (int)((float)fm_pdf_tex_w * sc);
+      int dh = (int)((float)fm_pdf_tex_h * sc);
+      if (dw < 1) dw = 1;
+      if (dh < 1) dh = 1;
+      SDL_Rect dst = {box_x + (box_w - dw) / 2, box_y + (box_h - dh) / 2, dw, dh};
+      SDL_RenderCopy(renderer, fm_pdf_tex, NULL, &dst);
+    } else {
+      const char *txt = fm_pdf_text_buf ? fm_pdf_text_buf : "Carregando página...";
+      int skip = fm_pdf_text_scroll;
+      const char *p = txt;
+      while (skip > 0 && *p) {
+        if (*p == '\n') skip--;
+        p++;
+      }
+      wrapped(*p ? p : txt, 36, 104, 568, 13, 18, 16, textc);
+    }
+    centered("L1/R1 Página • X Zoom • Y Modo Texto/Imagem • D-Pad Rolar • A Voltar",
+             16, 436, W - 32, 11, muted);
+  } else if (fm_view == FM_VIEW_EDITOR) {
     char title_buf[160];
     snprintf(title_buf, sizeof(title_buf), "%.90s%s", fm_ed_name, fm_ed_dirty ? " *" : "");
     label(title_buf, 24, 42, 19, textc, 456);
@@ -2156,9 +2642,10 @@ static void draw_file_manager(void) {
         const char *tag = fm_file_badge(e);
         SDL_Color tag_c = e->selected ? accent
                          : (e->is_dir ? accent
+                         : (e->is_pdf ? (SDL_Color){248, 113, 113, 255}
                          : (e->is_archive ? (SDL_Color){251, 191, 36, 255}
                          : ((e->is_script || e->is_executable) ? (SDL_Color){74, 222, 128, 255}
-                         : ((e->is_playlist || e->is_radio) ? accent : muted))));
+                         : ((e->is_playlist || e->is_radio) ? accent : muted)))));
         if (e->selected) {
           label("[✓]", 40, ry + 10, 12, accent, 30);
           label(tag, 70, ry + 11, 10, tag_c, 52);
@@ -2175,7 +2662,7 @@ static void draw_file_manager(void) {
         }
       }
     }
-    centered("B Abrir/Editor/.sh/Mídia • X Ações • Y Selecionar • L1 Raiz/SD • A Voltar",
+    centered("B Abrir/PDF/Editor/.sh/Mídia • X Ações • Y Selecionar • L1 Raiz/SD • A Voltar",
              20, 438, W - 40, 11, muted);
   }
 
@@ -2206,11 +2693,35 @@ static void draw_file_manager(void) {
       SDL_Color tc = danger ? (SDL_Color){255, 130, 130, 255} : (foc ? textc : muted);
       label(fm_action_label(ids[idx]), 134, iy + 6, 13, tc, 372);
     }
+  } else if (fm_modal == FM_MODAL_PDF_CHOICE) {
+    SDL_Color scrim = {0, 0, 0, 185};
+    rect(0, 0, W, H, scrim);
+    int mh = 228;
+    int my = (H - mh) / 2;
+    rounded_gradient(86, my, 468, mh, 14, elevated, panel);
+    rounded_outline(86, my, 468, mh, 14, accent);
+    label("Abrir documento PDF", 106, my + 16, 16, accent, 428);
+    label(fm_pdf_name, 106, my + 42, 13, textc, 428);
+    label("PdfCraft R36S (PdfReader-R36s) detectado neste console.", 106, my + 64, 11, muted, 428);
+    const char *plabels[3] = {
+        "Abrir no leitor PDF integrado do KPlayer",
+        "Abrir no PdfCraft R36S (PdfReader-R36s)",
+        "Cancelar"
+    };
+    for (int i = 0; i < 3; i++) {
+      bool foc = (i == fm_pdf_choice_cursor);
+      int iy = my + 92 + i * 38;
+      if (foc) {
+        rounded_gradient(104, iy, 432, 32, 8, mix(elevated, accent, 0.28f), panel);
+        rounded_outline(104, iy, 432, 32, 8, accent);
+      }
+      label(plabels[i], 118, iy + 8, 13, foc ? textc : muted, 404);
+    }
   } else if (fm_modal == FM_MODAL_EXEC) {
     SDL_Color scrim = {0, 0, 0, 185};
     rect(0, 0, W, H, scrim);
     int opts = fm_exec_modal_is_script ? 3 : 2;
-    int mh = 114 + opts * 38;
+    int mh = 118 + opts * 38;
     int my = (H - mh) / 2;
     rounded_gradient(86, my, 468, mh, 14, elevated, panel);
     rounded_outline(86, my, 468, mh, 14, accent);
@@ -2219,20 +2730,27 @@ static void draw_file_manager(void) {
     char ename[140];
     snprintf(ename, sizeof(ename), "%.96s", fm_exec_modal_name);
     label(ename, 106, my + 42, 13, textc, 428);
-    label("Fecha o KPlayer com segurança para liberar tela e áudio no R36S.",
-          106, my + 64, 11, muted, 428);
+    bool will_bg = bg_audio_preview && active && (playing_audio || playing_radio);
+    label(will_bg
+              ? "Teste prévio ativo: áudio/rádio segue no fundo (50%) e volta ao KPlayer."
+              : (bg_audio_preview
+                     ? "Teste prévio ativo (sem mídia tocando). Retorna ao KPlayer ao sair."
+                     : "Fecha o KPlayer com segurança para liberar tela e áudio no R36S."),
+          106, my + 64, 11, will_bg ? (SDL_Color){74, 222, 128, 255} : muted, 428);
     const char *sh_labels[3] = {
-        "Executar script (.sh) no console",
+        will_bg ? "Executar (.sh) mantendo áudio no fundo (Prévio)"
+                : "Executar script (.sh) no console",
         "Abrir no Editor de Texto",
         "Cancelar"
     };
     const char *bin_labels[2] = {
-        "Executar programa / EmulationStation",
+        will_bg ? "Executar mantendo áudio no fundo (Prévio)"
+                : "Executar programa / EmulationStation",
         "Cancelar"
     };
     for (int i = 0; i < opts; i++) {
       bool foc = (i == fm_exec_modal_cursor);
-      int iy = my + 92 + i * 38;
+      int iy = my + 94 + i * 38;
       if (foc) {
         rounded_gradient(104, iy, 432, 32, 8, mix(elevated, accent, 0.28f), panel);
         rounded_outline(104, iy, 432, 32, 8, accent);

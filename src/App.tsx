@@ -69,12 +69,12 @@ import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_179539140
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.1.3';
+const APP_VERSION = '2.1.4';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Editor de texto integrado no Gerenciador de Arquivos (Arquivos): abra, edite e salve arquivos .txt, .xml, .html, .sh, .cfg, .json, .m3u8 e .pls direto no console.',
-  'Execução de scripts .sh de jogos do R36S e binários/executáveis do EmulationStation a partir do Gerenciador de Arquivos, com opção de executar ou editar.',
-  'Reprodução direta pelo Gerenciador de Arquivos de vídeos, músicas, playlists .m3u8/.m3u e arquivos de rádio (.pls, .xspf e .tsv).',
-  'Tela de novidades (changelog) unificada em um único quadro limpo e contínuo no aplicativo.',
+  'Opção Teste prévio em Opções: "Áudio em jogos (Teste prévio)" (ativar/desativar) para manter música ou rádio tocando no fundo ao abrir jogos .sh.',
+  'Leitor de PDF no Gerenciador de Arquivos (Arquivos) com compatibilidade total com PdfCraft R36S (kaiaum01/PdfReader-R36s), zoom, páginas e modo texto.',
+  'Detecção automática do motor pdfcraft-core.aarch64 e do lançador PdfCraft.sh no console R36S, incluindo PDFs protegidos por senha.',
+  'Retorno automático ao KPlayer após fechar jogos .sh ou o PdfCraft R36S quando o modo Teste prévio está ativado.',
 ];
 
 const RADIO_CATEGORIES = [
@@ -206,6 +206,17 @@ export default function App() {
       // Ignore storage quota errors
     }
   }, [uiSfxEnabled]);
+  const [bgAudioPreview, setBgAudioPreview] = useState<boolean>(() =>
+    loadStorage('kp_bg_audio_preview', false)
+  );
+  const [gameAudioDucked, setGameAudioDucked] = useState<boolean>(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem('kp_bg_audio_preview', JSON.stringify(bgAudioPreview));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [bgAudioPreview]);
   const [screensaverActive, setScreensaverActive] = useState<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
   const [weatherMoodSeed] = useState<number>(() => Math.floor(Math.random() * 100000));
@@ -1147,6 +1158,12 @@ export default function App() {
       audioRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate, activeRadio]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = gameAudioDucked && bgAudioPreview ? 0.45 : 1.0;
+    }
+  }, [gameAudioDucked, bgAudioPreview]);
 
   // Fetch Radio stations when category changes or Radio opens (instant when preloaded at boot)
   const loadRadioCategory = useCallback(
@@ -2226,7 +2243,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.1.3 • R36S
+                      v2.1.4 • R36S
                     </div>
                   </div>
 
@@ -4153,6 +4170,15 @@ export default function App() {
                 locationLabel={locationLabel}
                 toast={toast}
                 notify={notify}
+                bgAudioPreview={bgAudioPreview}
+                activeBackgroundAudio={
+                  activeRadio && isPlaying
+                    ? { title: activeRadio.name, kind: 'radio' }
+                    : activeTrack && activeTrack.kind === 'audio' && isPlaying
+                    ? { title: activeTrack.title || activeTrack.name, kind: 'music' }
+                    : null
+                }
+                onSetGameAudioDucking={setGameAudioDucked}
                 onBack={() => setScreen('home')}
                 onPlayMedia={(item) => {
                   const extMatch = item.name.match(/\.([^.]+)$/);
@@ -4297,6 +4323,7 @@ export default function App() {
                 screensaverShowClock={screensaverShowClock}
                 screensaverShowLyrics={screensaverShowLyrics}
                 uiSfxEnabled={uiSfxEnabled}
+                bgAudioPreview={bgAudioPreview}
                 onSetThemeIndex={setThemeIndex}
                 onSetLanguage={setLanguage}
                 onSetDisplayMode={setR36sDisplayMode}
@@ -4317,6 +4344,17 @@ export default function App() {
                     setUiSfxEnabled(next);
                     if (next) playUiSfx('confirm');
                     notify(`Sons das teclas: ${next ? 'Ativado' : 'Desativado'}`);
+                    return next;
+                  });
+                }}
+                onToggleBgAudioPreview={() => {
+                  setBgAudioPreview((prev) => {
+                    const next = !prev;
+                    notify(
+                      next
+                        ? 'Teste prévio ativado: mantém música/rádio ao abrir jogos .sh'
+                        : 'Áudio em jogos (Teste prévio) desativado'
+                    );
                     return next;
                   });
                 }}
@@ -4594,7 +4632,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.1.3 — Edição R36S
+                  KPlayer v2.1.4 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4610,7 +4648,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.1.3 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.1.4 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4619,13 +4657,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.1.3-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.1.4-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer.sh (v2.1.3 estável)
+                    KPlayer.sh (v2.1.4 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4689,7 +4727,7 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.3-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.4-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
@@ -4702,22 +4740,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.1.3, Gerenciador de Arquivos completo com Editor de Texto (.txt/.xml/.html/.sh), execução de scripts .sh de jogos e binários do EmulationStation, reprodução direta de vídeos, músicas, playlists .m3u8 e rádios, 7-Zip com senha e barra de progresso/velocidade/ETA.
+                Inclui binário ARM64 nativo v2.1.4, Teste prévio de Música e Rádio em segundo plano ao abrir jogos .sh, Leitor de PDF compatível com PdfCraft R36S (kaiaum01/PdfReader-R36s), Editor de Texto, reprodução direta de vídeos/músicas/M3U8/rádios e 7-Zip com senha.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.1.3-R36S.zip"
+                download="KPlayer-v2.1.4-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.1.3-R36S.zip
+                ⬇ Baixar KPlayer-v2.1.4-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.1.3-R36S.zip.sha256"
+                download="KPlayer-v2.1.4-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

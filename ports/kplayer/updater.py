@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-CURRENT_FALLBACK = "2.1.3"
+CURRENT_FALLBACK = "2.1.4"
 UA = f"KPlayer-Updater/{CURRENT_FALLBACK}"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",
@@ -65,6 +65,8 @@ EXECUTABLE_NAMES = {
     "weather_fetch.py",
     "news_fetch.py",
     "file_ops.py",
+    "bg_audio.py",
+    "pdf_ops.py",
     "7zzs",
     "updater.py",
 }

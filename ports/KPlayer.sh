@@ -1,6 +1,6 @@
 #!/bin/bash
-# KPlayer v2.1.3 - dArkOS / Debian 13 ARM64 / PortMaster
-KPLAYER_VERSION="2.1.3"
+# KPlayer v2.1.4 - dArkOS / Debian 13 ARM64 / PortMaster
+KPLAYER_VERSION="2.1.4"
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)" || exit 1
 GAMEDIR="$script_dir/kplayer"
 cd "$GAMEDIR" || exit 1
@@ -43,12 +43,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./7zzs 2>/dev/null || true
+chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./pdf_ops.py ./7zzs 2>/dev/null || true
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
 while true; do
-    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./7zzs 2>/dev/null || true
+    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./pdf_ops.py ./7zzs 2>/dev/null || true
     ./kplayer
     result=$?
     if [ "$result" -eq 42 ]; then
@@ -61,6 +61,15 @@ while true; do
         fi
         # Fallback seguro caso KPlayer.sh tenha sido movido: reinicia diretamente o binario
         trap cleanup EXIT
+        $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
+        mapper_pid=$!
+        continue
+    fi
+    if [ "$result" -eq 43 ] && [ -f "$GAMEDIR/.bg-launch.json" ]; then
+        printf 'K PLAYER iniciando alvo externo com retorno automatico (Teste previo)...\n'
+        if [ -n "${mapper_pid:-}" ]; then kill "$mapper_pid" 2>/dev/null || true; wait "$mapper_pid" 2>/dev/null || true; mapper_pid=""; fi
+        python3 "$GAMEDIR/bg_audio.py" run "$GAMEDIR/.bg-launch.json" || true
+        rm -f "$GAMEDIR/.bg-launch.json" 2>/dev/null || true
         $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
         mapper_pid=$!
         continue

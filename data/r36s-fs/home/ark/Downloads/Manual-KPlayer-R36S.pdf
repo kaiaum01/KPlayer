@@ -1,0 +1,87 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 601 >>
+stream
+BT
+/F1 18 Tf
+48 756 Td
+(KPlayer v2.1.4 - Manual R36S \(Pagina 1/2\)) Tj
+/F1 12 Tf
+0 -28 Td
+(Leitor de PDF compativel com PdfCraft R36S \(kaiaum01/PdfReader-R36s\).) Tj
+0 -20 Td
+( ) Tj
+0 -20 Td
+(Novidades da versao 2.1.4:) Tj
+0 -20 Td
+(1. Opcao Teste previo: Audio em jogos \(.sh\) - ativar/desativar em Opcoes.) Tj
+0 -20 Td
+(2. Mantem musica local ou radio online tocando no fundo com volume reduzido.) Tj
+0 -20 Td
+(3. Leitor PDF integrado com paginas \(L1/R1\), zoom \(X\) e modo texto \(Y\).) Tj
+0 -20 Td
+(4. Deteccao automatica do motor pdfcraft-core.aarch64 e PdfCraft.sh no R36S.) Tj
+0 -20 Td
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 616 >>
+stream
+BT
+/F1 18 Tf
+48 756 Td
+(Compatibilidade PdfCraft R36S \(Pagina 2/2\)) Tj
+/F1 12 Tf
+0 -28 Td
+(Se voce instalar o PdfCraft R36S em /roms/ports/pdfcraft-r36s:) Tj
+0 -20 Td
+(- O KPlayer detecta automaticamente o motor pdfcraft-core.aarch64.) Tj
+0 -20 Td
+(- Usa o protocolo JSON de sessao do PdfCraft \(open, render, text, quit\).) Tj
+0 -20 Td
+(- Suporta PDFs protegidos por senha e zoom por recorte de viewport.) Tj
+0 -20 Td
+(- Voce tambem pode abrir diretamente no PdfCraft.sh e voltar ao KPlayer.) Tj
+0 -20 Td
+( ) Tj
+0 -20 Td
+(Controles: L1/R1 mudar pagina | X alternar zoom | Y modo texto | A voltar.) Tj
+0 -20 Td
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+8 0 obj
+<< /Title (Manual KPlayer R36S v2.1.4) /Author (KPlayer R36S) >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000898 00000 n 
+0000001024 00000 n 
+0000001690 00000 n 
+0000001760 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R /Info 8 0 R >>
+startxref
+1840
+%%EOF
