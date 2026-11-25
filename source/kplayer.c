@@ -1068,6 +1068,7 @@ extern char **environ;
 #include "news.h"
 #include "football.h"
 #include "file_manager.h"
+#include "bg_miniplayer.h"
 #include "updater.h"
 #include "weather.h"
 #include "screensaver.h"
@@ -1324,9 +1325,9 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Teste previo em Opcoes: Audio em jogos (ativar/desativar) para manter musica ou radio tocando no fundo ao abrir jogos .sh.",
+        "Teste previo em Opcoes: Audio em jogos com libVLC nativo + ALSA dmix/Pulse para tocar musica ou radio junto com jogos .sh.",
+        "Mini-Player no Jogo: abre somente com SELECT+R2 (R2 pula musica, L2 volta musica, B pausa, cima/baixo volume, A fecha).",
         "Leitor de PDF no Gerenciador de Arquivos com compatibilidade total com PdfCraft R36S (kaiaum01/PdfReader-R36s), zoom e paginas.",
-        "Suporte a PDF protegido por senha via motor PdfCraft R36S e modo texto integrado caso o motor externo nao esteja instalado.",
         "Retorno automatico ao KPlayer ao fechar jogos .sh ou o PdfCraft R36S quando o modo Teste previo esta ativo.",
         "Editor de texto, 7-Zip oficial, playlists M3U8, radios e Gerenciador de Musicas e Videos totalmente preservados.",
     };
@@ -2007,7 +2008,7 @@ static void change_option(int dir) {
     bg_audio_preview = !bg_audio_preview;
     save_settings();
     notify(bg_audio_preview
-               ? "Teste prévio: áudio/rádio em jogos .sh ativado"
+               ? "Teste prévio ativo: SELECT+R2 abre Mini-Player (L2/R2 troca faixa)"
                : "Áudio em jogos (Teste prévio) desativado");
     break;
   case 30:
@@ -2611,6 +2612,10 @@ int main(int argc, char **argv) {
   signal(SIGINT, stop_signal);
   signal(SIGTERM, stop_signal);
   signal(SIGPIPE, SIG_IGN);
+  if (argc > 2 && !strcmp(argv[1], "--bg-audio")) {
+    pid_t gpid = (argc > 3) ? (pid_t)strtol(argv[3], NULL, 10) : 0;
+    return bg_miniplayer_main(argv[2], gpid);
+  }
   if (!load_sdl())
     return 1;
   if (!preview && !load_vlc())
@@ -2974,24 +2979,124 @@ int main(int argc, char **argv) {
     const char *muri = "";
     const char *mtitle = "";
     long long mpos = 0;
-    if (fm_exec_keep_bg_audio && active) {
-      if (playing_radio && radio_current_station.url[0]) {
-        mtype = "radio";
-        muri = radio_current_station.url;
-        mtitle = radio_current_station.name;
-      } else if (playing_audio && current_path[0]) {
-        mtype = "music";
-        muri = current_path;
-        mtitle = title[0] ? title : media_name;
-        if (player) {
-          libvlc_time_t cur_t = libvlc_media_player_get_time(player);
-          if (cur_t > 0) mpos = (long long)cur_t;
+    bool auto_play = false;
+    bool keep_bg = false;
+    FmBgTrack bg_tracks[BG_MP_MAX_TRACKS];
+    char bg_title_buf[BG_MP_MAX_TRACKS][128];
+    int bg_track_count = 0;
+    int bg_track_index = 0;
+
+    if (bg_audio_preview && active && playing_radio && radio_current_station.url[0]) {
+      mtype = "radio";
+      muri = radio_current_station.url;
+      mtitle = radio_current_station.name;
+      keep_bg = true;
+      auto_play = !paused;
+      bool found_cur = false;
+      for (int i = 0; i < radio_count && bg_track_count < BG_MP_MAX_TRACKS; i++) {
+        if (!radio_stations[i].url[0]) continue;
+        if (!strcmp(radio_stations[i].url, radio_current_station.url)) {
+          bg_track_index = bg_track_count;
+          found_cur = true;
+        }
+        bg_tracks[bg_track_count].uri = radio_stations[i].url;
+        bg_tracks[bg_track_count].title = radio_stations[i].name;
+        bg_tracks[bg_track_count].is_radio = true;
+        bg_track_count++;
+      }
+      if (!found_cur && bg_track_count < BG_MP_MAX_TRACKS) {
+        bg_track_index = bg_track_count;
+        bg_tracks[bg_track_count].uri = radio_current_station.url;
+        bg_tracks[bg_track_count].title = radio_current_station.name;
+        bg_tracks[bg_track_count].is_radio = true;
+        bg_track_count++;
+      }
+    } else if (bg_audio_preview && active && playing_audio && current_path[0]) {
+      mtype = "music";
+      muri = current_path;
+      mtitle = title[0] ? title : media_name;
+      keep_bg = true;
+      auto_play = !paused;
+      if (player) {
+        libvlc_time_t cur_t = libvlc_media_player_get_time(player);
+        if (cur_t > 0) mpos = (long long)cur_t;
+      }
+      bool found_cur = false;
+      for (int i = 0; i < queue_count && bg_track_count < BG_MP_MAX_TRACKS; i++) {
+        if (!queue_paths[i] || !queue_paths[i][0]) continue;
+        if (!strcmp(queue_paths[i], current_path)) {
+          bg_track_index = bg_track_count;
+          found_cur = true;
+          snprintf(bg_title_buf[bg_track_count], sizeof(bg_title_buf[0]), "%.127s", mtitle);
+        } else {
+          const char *bn = strrchr(queue_paths[i], '/');
+          snprintf(bg_title_buf[bg_track_count], sizeof(bg_title_buf[0]), "%.127s",
+                   (bn && bn[1]) ? bn + 1 : queue_paths[i]);
+        }
+        bg_tracks[bg_track_count].uri = queue_paths[i];
+        bg_tracks[bg_track_count].title = bg_title_buf[bg_track_count];
+        bg_tracks[bg_track_count].is_radio = false;
+        bg_track_count++;
+      }
+      if (!found_cur && bg_track_count < BG_MP_MAX_TRACKS) {
+        bg_track_index = bg_track_count;
+        snprintf(bg_title_buf[bg_track_count], sizeof(bg_title_buf[0]), "%.127s", mtitle);
+        bg_tracks[bg_track_count].uri = current_path;
+        bg_tracks[bg_track_count].title = bg_title_buf[bg_track_count];
+        bg_tracks[bg_track_count].is_radio = false;
+        bg_track_count++;
+      }
+    } else if (bg_audio_preview) {
+      /* Even when paused/idle, export queue or cached audio so SELECT+R2 works in-game */
+      for (int i = 0; i < queue_count && bg_track_count < BG_MP_MAX_TRACKS; i++) {
+        if (!queue_paths[i] || !queue_paths[i][0]) continue;
+        const char *bn = strrchr(queue_paths[i], '/');
+        snprintf(bg_title_buf[bg_track_count], sizeof(bg_title_buf[0]), "%.127s",
+                 (bn && bn[1]) ? bn + 1 : queue_paths[i]);
+        bg_tracks[bg_track_count].uri = queue_paths[i];
+        bg_tracks[bg_track_count].title = bg_title_buf[bg_track_count];
+        bg_tracks[bg_track_count].is_radio = false;
+        bg_track_count++;
+      }
+      if (bg_track_count == 0) {
+        pthread_mutex_lock(&media_cache_mutex);
+        for (int i = 0; i < cached_media_total && bg_track_count < BG_MP_MAX_TRACKS; i++) {
+          if (!cached_media[i].path || !audio_file(cached_media[i].path)) continue;
+          snprintf(bg_title_buf[bg_track_count], sizeof(bg_title_buf[0]), "%.127s",
+                   cached_media[i].name ? cached_media[i].name : cached_media[i].path);
+          bg_tracks[bg_track_count].uri = cached_media[i].path;
+          bg_tracks[bg_track_count].title = bg_title_buf[bg_track_count];
+          bg_tracks[bg_track_count].is_radio = false;
+          bg_track_count++;
+        }
+        pthread_mutex_unlock(&media_cache_mutex);
+      }
+      if (bg_track_count == 0 && radio_count > 0) {
+        for (int i = 0; i < radio_count && bg_track_count < BG_MP_MAX_TRACKS; i++) {
+          if (!radio_stations[i].url[0]) continue;
+          bg_tracks[bg_track_count].uri = radio_stations[i].url;
+          bg_tracks[bg_track_count].title = radio_stations[i].name;
+          bg_tracks[bg_track_count].is_radio = true;
+          bg_track_count++;
         }
       }
+      if (bg_track_count > 0) {
+        keep_bg = true;
+        auto_play = false;
+        bg_track_index = 0;
+        mtype = bg_tracks[0].is_radio ? "radio" : "music";
+        muri = bg_tracks[0].uri;
+        mtitle = bg_tracks[0].title;
+      }
     }
-    handoff_ready = fm_write_bg_launch_json(".bg-launch.json", fm_exec_target_path,
-                                            fm_exec_is_script, fm_exec_keep_bg_audio,
-                                            mtype, muri, mpos, 50, mtitle);
+
+    char accent_hex[16];
+    SDL_Color ac = themes[theme_index].highlight;
+    snprintf(accent_hex, sizeof(accent_hex), "#%02x%02x%02x", ac.r, ac.g, ac.b);
+    handoff_ready = fm_write_bg_launch_json_ext(".bg-launch.json", fm_exec_target_path,
+                                                fm_exec_is_script, keep_bg, auto_play,
+                                                mtype, muri, mpos, 55, mtitle, accent_hex,
+                                                bg_tracks, bg_track_count, bg_track_index);
   }
   stop_media();
   libvlc_media_player_release(player);

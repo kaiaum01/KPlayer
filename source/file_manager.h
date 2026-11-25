@@ -1481,15 +1481,26 @@ static void fm_json_write_escaped(FILE *f, const char *s) {
   fputc('"', f);
 }
 
-static bool fm_write_bg_launch_json(const char *json_path,
-                                    const char *target_path,
-                                    bool is_script,
-                                    bool keep_bg_audio,
-                                    const char *media_type,
-                                    const char *media_uri,
-                                    long long media_pos_ms,
-                                    int volume_pct,
-                                    const char *media_title) {
+typedef struct {
+  const char *uri;
+  const char *title;
+  bool is_radio;
+} FmBgTrack;
+
+static bool fm_write_bg_launch_json_ext(const char *json_path,
+                                        const char *target_path,
+                                        bool is_script,
+                                        bool keep_bg_audio,
+                                        bool auto_play,
+                                        const char *media_type,
+                                        const char *media_uri,
+                                        long long media_pos_ms,
+                                        int volume_pct,
+                                        const char *media_title,
+                                        const char *theme_accent,
+                                        const FmBgTrack *tracks,
+                                        int track_count,
+                                        int track_index) {
   if (!json_path || !json_path[0] || !target_path || !target_path[0])
     return false;
   char tmp_path[PATH_MAX];
@@ -1499,17 +1510,38 @@ static bool fm_write_bg_launch_json(const char *json_path,
   if (!f) return false;
   fputs("{\n  \"target_path\": ", f);
   fm_json_write_escaped(f, target_path);
-  fprintf(f, ",\n  \"is_script\": %s,\n  \"bg_audio_enabled\": %s,\n  \"media_type\": ",
+  fprintf(f, ",\n  \"is_script\": %s,\n  \"bg_audio_enabled\": %s,\n  \"auto_play\": %s,\n  \"media_type\": ",
           is_script ? "true" : "false",
-          keep_bg_audio ? "true" : "false");
+          keep_bg_audio ? "true" : "false",
+          (keep_bg_audio && auto_play) ? "true" : "false");
   fm_json_write_escaped(f, (keep_bg_audio && media_type && media_type[0]) ? media_type : "none");
   fputs(",\n  \"media_uri\": ", f);
   fm_json_write_escaped(f, (keep_bg_audio && media_uri) ? media_uri : "");
   fprintf(f, ",\n  \"media_pos_ms\": %lld,\n  \"volume_pct\": %d,\n  \"title\": ",
           media_pos_ms > 0 ? media_pos_ms : 0LL,
-          volume_pct >= 15 && volume_pct <= 100 ? volume_pct : 50);
+          volume_pct >= 10 && volume_pct <= 100 ? volume_pct : 55);
   fm_json_write_escaped(f, media_title ? media_title : "");
-  fputs("\n}\n", f);
+  fputs(",\n  \"theme_accent\": ", f);
+  fm_json_write_escaped(f, (theme_accent && theme_accent[0]) ? theme_accent : "#1db954");
+  fprintf(f, ",\n  \"track_index\": %d,\n  \"tracks\": [",
+          track_index >= 0 ? track_index : 0);
+  if (keep_bg_audio && tracks && track_count > 0) {
+    int written = 0;
+    for (int i = 0; i < track_count && written < 128; i++) {
+      if (!tracks[i].uri || !tracks[i].uri[0]) continue;
+      fputs(written == 0 ? "\n    {" : ",\n    {", f);
+      fputs("\"uri\": ", f);
+      fm_json_write_escaped(f, tracks[i].uri);
+      fputs(", \"title\": ", f);
+      fm_json_write_escaped(f, tracks[i].title ? tracks[i].title : "");
+      fputs(", \"type\": ", f);
+      fm_json_write_escaped(f, tracks[i].is_radio ? "radio" : "music");
+      fputc('}', f);
+      written++;
+    }
+    if (written > 0) fputs("\n  ", f);
+  }
+  fputs("]\n}\n", f);
   if (fclose(f) != 0) {
     unlink(tmp_path);
     return false;
@@ -1519,6 +1551,23 @@ static bool fm_write_bg_launch_json(const char *json_path,
     return false;
   }
   return true;
+}
+
+static bool __attribute__((unused))
+fm_write_bg_launch_json(const char *json_path,
+                                    const char *target_path,
+                                    bool is_script,
+                                    bool keep_bg_audio,
+                                    const char *media_type,
+                                    const char *media_uri,
+                                    long long media_pos_ms,
+                                    int volume_pct,
+                                    const char *media_title) {
+  return fm_write_bg_launch_json_ext(json_path, target_path, is_script,
+                                     keep_bg_audio, keep_bg_audio,
+                                     media_type, media_uri, media_pos_ms,
+                                     volume_pct, media_title, "#1db954",
+                                     NULL, 0, 0);
 }
 
 /* Native PDF operations bridge via ./pdf_ops.py (PdfCraft R36S compatible) */
@@ -2732,19 +2781,19 @@ static void draw_file_manager(void) {
     label(ename, 106, my + 42, 13, textc, 428);
     bool will_bg = bg_audio_preview && active && (playing_audio || playing_radio);
     label(will_bg
-              ? "Teste prévio ativo: áudio/rádio segue no fundo (50%) e volta ao KPlayer."
+              ? "Teste prévio: SELECT+R2 abre Mini-Player no jogo (L2 volta • R2 pula)."
               : (bg_audio_preview
-                     ? "Teste prévio ativo (sem mídia tocando). Retorna ao KPlayer ao sair."
+                     ? "Teste prévio ativo: SELECT+R2 abre Mini-Player no jogo se houver fila."
                      : "Fecha o KPlayer com segurança para liberar tela e áudio no R36S."),
           106, my + 64, 11, will_bg ? (SDL_Color){74, 222, 128, 255} : muted, 428);
     const char *sh_labels[3] = {
-        will_bg ? "Executar (.sh) mantendo áudio no fundo (Prévio)"
+        will_bg ? "Executar (.sh) com Mini-Player SELECT+R2"
                 : "Executar script (.sh) no console",
         "Abrir no Editor de Texto",
         "Cancelar"
     };
     const char *bin_labels[2] = {
-        will_bg ? "Executar mantendo áudio no fundo (Prévio)"
+        will_bg ? "Executar com Mini-Player SELECT+R2"
                 : "Executar programa / EmulationStation",
         "Cancelar"
     };

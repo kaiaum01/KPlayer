@@ -880,6 +880,50 @@ int main(void) {
     fm_pdf_clear_render();
     fm_view = FM_VIEW_BROWSE;
 
+    /* v2.1.4 Native --bg-audio JSON queue + SELECT+R2 In-Game Mini-Player state machine */
+    FmBgTrack mp_tracks[3] = {
+        {"/roms/bgmusic/track1.mp3", "Faixa Um", false},
+        {"/roms/bgmusic/track2.mp3", "Faixa Dois", false},
+        {"https://stream.example.org/radio.mp3", "Radio Ilha", true},
+    };
+    assert(fm_write_bg_launch_json_ext(
+        f_bg, f_elf, true, true, true, "music", mp_tracks[1].uri, 12000, 55,
+        mp_tracks[1].title, "#22d3ee", mp_tracks, 3, 1));
+    BgMpState mp_st;
+    assert(bg_mp_load_json_file(f_bg, &mp_st));
+    assert(mp_st.track_count == 3 && mp_st.current_index == 1);
+    assert(mp_st.volume_pct == 55 && mp_st.auto_play && !mp_st.overlay_open);
+    assert(mp_st.accent_r == 0x22 && mp_st.accent_g == 0xd3 && mp_st.accent_b == 0xee);
+    assert(mp_st.tracks[2].is_radio && !strcmp(mp_st.tracks[2].title, "Radio Ilha"));
+    /* While Mini-Player is closed, normal game R2/L2/B/A must be ignored */
+    assert(bg_mp_handle_action(&mp_st, BG_ACT_R2) == BG_RES_NONE);
+    assert(bg_mp_handle_action(&mp_st, BG_ACT_L2) == BG_RES_NONE);
+    assert(mp_st.current_index == 1 && !mp_st.overlay_open);
+    /* SELECT+R2 opens Mini-Player */
+    unsigned int r_open = bg_mp_handle_action(&mp_st, BG_ACT_SELECT_R2);
+    assert((r_open & BG_RES_OPEN_OVERLAY) && mp_st.overlay_open);
+    /* R2 skips to next track (1 -> 2), then wraps (2 -> 0) */
+    unsigned int r_next = bg_mp_handle_action(&mp_st, BG_ACT_R2);
+    assert((r_next & BG_RES_TRACK_CHANGED) && mp_st.current_index == 2);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_R2) & BG_RES_TRACK_CHANGED) &&
+           mp_st.current_index == 0);
+    /* L2 goes back (0 -> 2) */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_L2) & BG_RES_TRACK_CHANGED) &&
+           mp_st.current_index == 2);
+    /* B/START toggles pause, UP/DOWN adjusts volume */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_TOGGLE_PAUSE) & BG_RES_PAUSE_TOGGLED) &&
+           mp_st.paused);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_VOL_UP) & BG_RES_VOLUME_CHANGED) &&
+           mp_st.volume_pct == 65);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_VOL_DOWN) & BG_RES_VOLUME_CHANGED) &&
+           mp_st.volume_pct == 55);
+    /* A closes Mini-Player */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_CLOSE) & BG_RES_CLOSE_OVERLAY) &&
+           !mp_st.overlay_open);
+    /* Closed + SELECT+L2 goes back immediately (2 -> 1) */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_SELECT_L2) & BG_RES_TRACK_CHANGED) &&
+           mp_st.current_index == 1 && !mp_st.overlay_open);
+
     unlink(f_txt);
     unlink(f_m3u8);
     unlink(f_pls);

@@ -20,16 +20,21 @@ import {
   ListMusic,
   Lock,
   MoreHorizontal,
+  Music,
   PackageOpen,
+  Pause,
   Pencil,
   Play,
   Radio,
   RefreshCw,
   Save,
   Scissors,
+  SkipBack,
+  SkipForward,
   Square,
   Terminal,
   Trash2,
+  Volume2,
   X,
 } from 'lucide-react';
 import type { KpTheme } from '../themes';
@@ -48,6 +53,7 @@ import {
 
 export interface FileManagerScreenHandle {
   handleButton: (btn: R36SButton) => void;
+  isInGameLaunch: () => boolean;
 }
 
 export interface FmPlayMediaPayload {
@@ -70,6 +76,14 @@ export interface FmPlayPlaylistStreamPayload {
   isVideo: boolean;
 }
 
+export interface ActiveBgAudioInfo {
+  title: string;
+  kind: 'music' | 'radio';
+  isPlaying: boolean;
+  index: number;
+  total: number;
+}
+
 interface FileManagerScreenProps {
   theme: KpTheme;
   language: LanguageCode;
@@ -77,7 +91,12 @@ interface FileManagerScreenProps {
   toast: string | null;
   notify: (msg: string) => void;
   bgAudioPreview?: boolean;
-  activeBackgroundAudio?: { title: string; kind: 'music' | 'radio' } | null;
+  activeBackgroundAudio?: ActiveBgAudioInfo | null;
+  bgAudioVolume?: number;
+  onChangeBgAudioVolume?: (delta: number) => void;
+  onBgPrevTrack?: () => void;
+  onBgNextTrack?: () => void;
+  onBgTogglePause?: () => void;
   onSetGameAudioDucking?: (ducked: boolean) => void;
   onBack: () => void;
   onPlayMedia?: (item: FmPlayMediaPayload) => void;
@@ -359,6 +378,11 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       notify,
       bgAudioPreview = false,
       activeBackgroundAudio = null,
+      bgAudioVolume = 55,
+      onChangeBgAudioVolume,
+      onBgPrevTrack,
+      onBgNextTrack,
+      onBgTogglePause,
       onSetGameAudioDucking,
       onBack,
       onPlayMedia,
@@ -405,6 +429,10 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     const [modalFocusIdx, setModalFocusIdx] = useState(0);
     const [textInput, setTextInput] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    // In-Game Mini-Player: strictly hidden until SELECT + R2 is triggered
+    const [inGameMiniPlayerOpen, setInGameMiniPlayerOpen] = useState(false);
+    const [selectArmed, setSelectArmed] = useState(false);
+    const selectArmTimerRef = useRef<number | null>(null);
 
     // Live job progress state
     const [activeJob, setActiveJob] = useState<FmJobProgress | null>(null);
@@ -465,6 +493,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         if (pollTimerRef.current !== null) {
           window.clearInterval(pollTimerRef.current);
         }
+        if (selectArmTimerRef.current !== null) {
+          window.clearTimeout(selectArmTimerRef.current);
+        }
         onSetGameAudioDucking?.(false);
       };
     }, [onSetGameAudioDucking]);
@@ -475,7 +506,25 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         modal?.kind === 'exec_console' && bgAudioPreview && activeBackgroundAudio
       );
       onSetGameAudioDucking?.(shouldDuck);
+      if (modal?.kind !== 'exec_console') {
+        setInGameMiniPlayerOpen(false);
+        setSelectArmed(false);
+      }
     }, [activeBackgroundAudio, bgAudioPreview, modal, onSetGameAudioDucking]);
+
+    const toggleInGameMiniPlayer = useCallback(() => {
+      if (!bgAudioPreview) {
+        notify('Ative "Áudio em jogos (Teste prévio)" em Opções primeiro');
+        return;
+      }
+      setInGameMiniPlayerOpen((open) => {
+        const next = !open;
+        if (next && activeBackgroundAudio && !activeBackgroundAudio.isPlaying) {
+          onBgTogglePause?.();
+        }
+        return next;
+      });
+    }, [activeBackgroundAudio, bgAudioPreview, notify, onBgTogglePause]);
 
     // Keep focused row scrolled into view
     useEffect(() => {
@@ -1078,8 +1127,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       const target = modal.target;
       const runDesc = bgAudioPreview
         ? activeBackgroundAudio
-          ? `Teste prévio ATIVO: mantém ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" tocando em segundo plano (volume reduzido)`
-          : 'Teste prévio ATIVO: suporta música ou rádio em segundo plano ao abrir jogos .sh'
+          ? `Teste prévio ATIVO: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • SELECT+R2 abre Mini-Player (L2 volta • R2 pula)`
+          : 'Teste prévio ATIVO: SELECT+R2 abre Mini-Player no jogo (L2 volta • R2 pula)'
         : 'Encerra SDL2/libVLC e entrega controle direto ao script/executável (ative Teste prévio em Opções para áudio em jogos)';
       const opts: Array<{ id: string; label: string; desc: string; run: () => void }> = [
         {
@@ -1369,12 +1418,59 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
 
         // Modals
         if (modal) {
-          if (btn === 'A') {
-            setModal(null);
+          if (modal.kind === 'exec_console') {
+            if (btn === 'SELECT') {
+              if (bgAudioPreview) {
+                setSelectArmed(true);
+                if (selectArmTimerRef.current !== null) {
+                  window.clearTimeout(selectArmTimerRef.current);
+                }
+                selectArmTimerRef.current = window.setTimeout(() => {
+                  setSelectArmed(false);
+                }, 2500);
+                notify('SELECT ativo — pressione R2 para abrir/fechar Mini-Player (ou L2 para voltar faixa)');
+              }
+              return;
+            }
+            if (btn === 'R2') {
+              if (selectArmed) {
+                setSelectArmed(false);
+                toggleInGameMiniPlayer();
+              } else if (inGameMiniPlayerOpen) {
+                onBgNextTrack?.();
+              }
+              return;
+            }
+            if (btn === 'L2') {
+              if (selectArmed) {
+                setSelectArmed(false);
+                onBgPrevTrack?.();
+              } else if (inGameMiniPlayerOpen) {
+                onBgPrevTrack?.();
+              }
+              return;
+            }
+            if (inGameMiniPlayerOpen) {
+              if (btn === 'B' || btn === 'START') {
+                onBgTogglePause?.();
+              } else if (btn === 'UP') {
+                onChangeBgAudioVolume?.(10);
+              } else if (btn === 'DOWN') {
+                onChangeBgAudioVolume?.(-10);
+              } else if (btn === 'A') {
+                setInGameMiniPlayerOpen(false);
+              }
+              return;
+            }
+            if (btn === 'A' || btn === 'B') {
+              setInGameMiniPlayerOpen(false);
+              setSelectArmed(false);
+              setModal(null);
+            }
             return;
           }
-          if (modal.kind === 'exec_console') {
-            if (btn === 'B') setModal(null);
+          if (btn === 'A') {
+            setModal(null);
             return;
           }
           if (modal.kind === 'exec_choice') {
@@ -1614,6 +1710,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         actionMenuItems,
         activeJob,
         archiveView,
+        bgAudioPreview,
         cancelActiveJob,
         currentEntry,
         currentPath,
@@ -1625,11 +1722,17 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         handlePaste,
         handlePasswordSubmit,
         handleRenameSubmit,
+        inGameMiniPlayerOpen,
         loadDirectory,
         mediaListView,
         modal,
         modalFocusIdx,
+        notify,
         onBack,
+        onBgNextTrack,
+        onBgPrevTrack,
+        onBgTogglePause,
+        onChangeBgAudioVolume,
         openEntry,
         openTextEditor,
         parentPath,
@@ -1639,13 +1742,22 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         requestCloseEditor,
         requestExtract,
         saveEditorFile,
+        selectArmed,
         selectedPaths.size,
         startJob,
+        toggleInGameMiniPlayer,
         toggleSelectPath,
       ]
     );
 
-    useImperativeHandle(ref, () => ({ handleButton }), [handleButton]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        handleButton,
+        isInGameLaunch: () => modal?.kind === 'exec_console',
+      }),
+      [handleButton, modal?.kind]
+    );
 
     const renderEntryIcon = (entry: FmEntry, focused: boolean) => {
       const color = focused ? theme.accent : entry.isDir ? theme.accent : theme.muted;
@@ -2627,7 +2739,11 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                     </div>
                     <button
                       type="button"
-                      onClick={() => setModal(null)}
+                      onClick={() => {
+                        setInGameMiniPlayerOpen(false);
+                        setSelectArmed(false);
+                        setModal(null);
+                      }}
                       className="p-1 rounded-lg cursor-pointer"
                       style={{ color: theme.muted }}
                     >
@@ -2635,43 +2751,160 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                     </button>
                   </div>
 
-                  {modal.preview.bgAudioActive && (
+                  {bgAudioPreview && !inGameMiniPlayerOpen && (
                     <div
                       className="rounded-lg px-2.5 py-1.5 text-[10.5px] flex items-center justify-between gap-2"
                       style={{
-                        backgroundColor: rgbToRgba(theme.accent, 0.14),
-                        border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
+                        backgroundColor: rgbToRgba(theme.accent, selectArmed ? 0.24 : 0.12),
+                        border: `1px solid ${rgbToRgba(theme.accent, selectArmed ? 0.75 : 0.4)}`,
                         color: theme.text,
                       }}
                     >
                       <span className="truncate font-semibold">
-                        Áudio em jogos (Teste prévio) ativo
-                        {modal.preview.bgAudioLabel ? ` • ${modal.preview.bgAudioLabel}` : ''}
+                        {selectArmed
+                          ? 'SELECT pronto — aperte R2 para abrir o Mini-Player'
+                          : 'Mini-Player oculto no jogo • Aperte SELECT + R2 para abrir'}
                       </span>
-                      <span className="font-mono tabular-nums shrink-0" style={{ color: theme.accent }}>
-                        45% vol
-                      </span>
+                      <button
+                        type="button"
+                        onClick={toggleInGameMiniPlayer}
+                        className="px-2 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 cursor-pointer"
+                        style={{ backgroundColor: theme.accent, color: theme.bg }}
+                      >
+                        SELECT+R2
+                      </button>
                     </div>
                   )}
 
-                  <div
-                    className="rounded-xl p-2.5 font-mono text-[10.5px] leading-relaxed space-y-1 max-h-[200px] overflow-y-auto kp-scroll"
-                    style={{
-                      backgroundColor: mixRgb(theme.bg, '#000000', 0.45),
-                      border: `1px solid ${themeHairline(theme)}`,
-                      color: theme.text,
-                    }}
-                  >
-                    {modal.preview.logLines.map((line, i) => (
-                      <div key={i} className="break-words">
-                        <span style={{ color: theme.accent }}>$ </span>
-                        <span>{line}</span>
+                  {!inGameMiniPlayerOpen && (
+                    <div
+                      className="rounded-xl p-2.5 font-mono text-[10.5px] leading-relaxed space-y-1 max-h-[190px] overflow-y-auto kp-scroll"
+                      style={{
+                        backgroundColor: mixRgb(theme.bg, '#000000', 0.45),
+                        border: `1px solid ${themeHairline(theme)}`,
+                        color: theme.text,
+                      }}
+                    >
+                      {modal.preview.logLines.map((line, i) => (
+                        <div key={i} className="break-words">
+                          <span style={{ color: theme.accent }}>$ </span>
+                          <span>{line}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {inGameMiniPlayerOpen && (
+                    <div
+                      className="rounded-xl overflow-hidden"
+                      style={{
+                        backgroundColor: mixRgb(theme.bg, '#000000', 0.55),
+                        border: `1.5px solid ${theme.accent}`,
+                      }}
+                    >
+                      <div className="h-1 w-full" style={{ backgroundColor: theme.accent }} />
+                      <div className="p-3 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {activeBackgroundAudio?.kind === 'radio' ? (
+                              <Radio className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
+                            ) : (
+                              <Music className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
+                            )}
+                            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.accent }}>
+                              K PLAYER MINI • {activeBackgroundAudio?.isPlaying ? 'TOCANDO' : 'PAUSADO'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono tabular-nums" style={{ color: theme.muted }}>
+                            {activeBackgroundAudio
+                              ? `${activeBackgroundAudio.kind === 'radio' ? 'RÁDIO' : 'FAIXA'} ${activeBackgroundAudio.index + 1}/${activeBackgroundAudio.total}`
+                              : 'SEM FILA'}
+                          </span>
+                        </div>
+
+                        <div className="text-[13px] font-bold truncate" style={{ color: theme.text }}>
+                          {activeBackgroundAudio?.title || 'Nenhuma música ou rádio na fila'}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Volume2 className="w-3.5 h-3.5 shrink-0" style={{ color: theme.muted }} />
+                          <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.elevated }}>
+                            <div
+                              className="h-full transition-all"
+                              style={{ width: `${bgAudioVolume}%`, backgroundColor: theme.accent }}
+                            />
+                          </div>
+                          <span className="text-[10.5px] font-mono tabular-nums w-9 text-right" style={{ color: theme.text }}>
+                            {bgAudioVolume}%
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-5 gap-1.5 pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => onBgPrevTrack?.()}
+                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                            style={{ backgroundColor: theme.elevated, color: theme.text }}
+                            title="L2: Voltar música"
+                          >
+                            <SkipBack className="w-3 h-3" /> L2
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onBgTogglePause?.()}
+                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                            style={{ backgroundColor: theme.accent, color: theme.bg }}
+                            title="B / START: Pausar ou retomar"
+                          >
+                            {activeBackgroundAudio?.isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                            B
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onBgNextTrack?.()}
+                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                            style={{ backgroundColor: theme.elevated, color: theme.text }}
+                            title="R2: Pular música"
+                          >
+                            R2 <SkipForward className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onChangeBgAudioVolume?.(-10)}
+                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer"
+                            style={{ backgroundColor: theme.elevated, color: theme.text }}
+                            title="↓ Diminuir volume"
+                          >
+                            Vol-
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onChangeBgAudioVolume?.(10)}
+                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer"
+                            style={{ backgroundColor: theme.elevated, color: theme.text }}
+                            title="↑ Aumentar volume"
+                          >
+                            Vol+
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[9.5px] font-mono pt-1" style={{ color: theme.muted, borderTop: `1px solid ${themeHairline(theme)}` }}>
+                          <span>L2 Voltar • R2 Próxima • B Pausa • ↑↓ Vol</span>
+                          <button
+                            type="button"
+                            onClick={() => setInGameMiniPlayerOpen(false)}
+                            className="font-bold cursor-pointer"
+                            style={{ color: theme.accent }}
+                          >
+                            A / SELECT+R2 Fechar
+                          </button>
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-end gap-2">
-                    {modal.preview.kind === 'script' && (
+                    {modal.preview.kind === 'script' && !inGameMiniPlayerOpen && (
                       <button
                         type="button"
                         onClick={() => void openTextEditor(modal.preview.path)}
@@ -2683,11 +2916,18 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                     )}
                     <button
                       type="button"
-                      onClick={() => setModal(null)}
+                      onClick={() => {
+                        if (inGameMiniPlayerOpen) {
+                          setInGameMiniPlayerOpen(false);
+                        } else {
+                          setSelectArmed(false);
+                          setModal(null);
+                        }
+                      }}
                       className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
                       style={{ backgroundColor: theme.accent, color: theme.bg }}
                     >
-                      Fechar (B)
+                      {inGameMiniPlayerOpen ? 'Voltar ao jogo (A)' : 'Sair do jogo (B)'}
                     </button>
                   </div>
                 </div>

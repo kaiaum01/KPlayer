@@ -302,6 +302,11 @@ static __typeof__(libvlc_audio_get_track_description)
 #define libvlc_audio_get_track_description p_libvlc_audio_get_track_description
 static __typeof__(libvlc_audio_set_track) *p_libvlc_audio_set_track;
 #define libvlc_audio_set_track p_libvlc_audio_set_track
+/* Optional libVLC volume controls for headless background mini-player (v2.1.4) */
+static __typeof__(libvlc_audio_set_volume) *p_libvlc_audio_set_volume;
+#define libvlc_audio_set_volume p_libvlc_audio_set_volume
+static __typeof__(libvlc_audio_get_volume) *p_libvlc_audio_get_volume;
+#define libvlc_audio_get_volume p_libvlc_audio_get_volume
 static __typeof__(libvlc_get_version) *p_libvlc_get_version;
 #define libvlc_get_version p_libvlc_get_version
 static __typeof__(libvlc_media_new_path) *p_libvlc_media_new_path;
@@ -546,5 +551,10 @@ static int load_vlc(void) {
     fprintf(stderr, "Símbolo ausente: libvlc_video_set_spu\n");
     return 0;
   }
+  /* Optional volume symbols for headless in-game mini-player */
+  *(void **)(&p_libvlc_audio_set_volume) =
+      dlsym(handle, "libvlc_audio_set_volume");
+  *(void **)(&p_libvlc_audio_get_volume) =
+      dlsym(handle, "libvlc_audio_get_volume");
   return 1;
 }

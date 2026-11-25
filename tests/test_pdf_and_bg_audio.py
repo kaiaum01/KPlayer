@@ -137,6 +137,82 @@ class BgAudioPreviewTest(unittest.TestCase):
             self.assertEqual(marker.read_text(encoding="utf-8").strip(), "executed")
             self.assertFalse(payload_file.exists())
 
+    def test_native_bg_audio_cmd_dmix_and_env_isolation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            game_sh = tmp_dir / "Port.sh"
+            game_sh.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+            s1 = tmp_dir / "a.mp3"
+            s2 = tmp_dir / "b.mp3"
+            s1.write_bytes(b"ID3" + b"\x00" * 32)
+            s2.write_bytes(b"ID3" + b"\x00" * 32)
+            fake_kplayer = tmp_dir / "kplayer"
+            fake_kplayer.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_kplayer.chmod(0o755)
+            payload_p = tmp_dir / "handoff.json"
+
+            validated = bg_audio.validate_launch_payload(
+                {
+                    "target_path": str(game_sh),
+                    "is_script": True,
+                    "bg_audio_enabled": True,
+                    "auto_play": False,
+                    "media_type": "music",
+                    "media_uri": str(s1),
+                    "volume_pct": 60,
+                    "theme_accent": "#22d3ee",
+                    "track_index": 1,
+                    "tracks": [
+                        {"uri": str(s1), "title": "Song A", "type": "music"},
+                        {"uri": str(s2), "title": "Song B", "type": "music"},
+                        {"uri": "file:///etc/passwd", "title": "Bad", "type": "radio"},
+                    ],
+                }
+            )
+            self.assertTrue(validated["bg_audio_enabled"])
+            self.assertEqual(len(validated["tracks"]), 2)
+            self.assertEqual(validated["track_index"], 1)
+            self.assertEqual(validated["theme_accent"], "#22d3ee")
+
+            # Prefers native ./kplayer --bg-audio <json> <game_pid>
+            cmd = bg_audio.build_audio_cmd(
+                validated,
+                kplayer_bin=fake_kplayer,
+                payload_path=payload_p,
+                game_pid=4321,
+                backend="alsa",
+            )
+            self.assertEqual(cmd, [str(fake_kplayer), "--bg-audio", str(payload_p), "4321"])
+
+            # ALSA dmix config must include /usr/share/alsa/alsa.conf and detected hw:1,2
+            fake_pcm = tmp_dir / "pcm"
+            fake_pcm.write_text("01-02: RK3326 Audio : : playback 1\n", encoding="utf-8")
+            hw = bg_audio.detect_alsa_hw_device(fake_pcm)
+            self.assertEqual(hw, "hw:1,2")
+            dmix_conf = bg_audio.create_alsa_dmix_config(hw, base_dir=tmp_dir)
+            assert dmix_conf is not None and dmix_conf.is_file()
+            text = dmix_conf.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("</usr/share/alsa/alsa.conf>"))
+            self.assertIn('pcm "hw:1,2"', text)
+            self.assertIn("type dmix", text)
+
+            # Game env restores KPLAYER_ORIG_LD_LIBRARY_PATH and strips VLC env vars
+            base_env = {
+                "LD_LIBRARY_PATH": "/roms/ports/kplayer/lib:/usr/local/lib",
+                "KPLAYER_ORIG_LD_LIBRARY_PATH": "/usr/local/lib",
+                "VLC_PLUGIN_PATH": "/usr/lib/aarch64-linux-gnu/vlc/plugins",
+                "VLC_DATA_PATH": "/usr/share/vlc",
+            }
+            game_env = bg_audio.build_target_env(base_env, dmix_conf)
+            self.assertEqual(game_env["LD_LIBRARY_PATH"], "/usr/local/lib")
+            self.assertNotIn("VLC_PLUGIN_PATH", game_env)
+            self.assertEqual(game_env["ALSA_CONFIG_PATH"], str(dmix_conf))
+
+            # Audio daemon env keeps KPLAYER_BG_AOUT and ALSA_CONFIG_PATH
+            audio_env = bg_audio.build_audio_env(base_env, "alsa", dmix_conf, tmp_dir)
+            self.assertEqual(audio_env["KPLAYER_BG_AOUT"], "alsa")
+            self.assertEqual(audio_env["ALSA_CONFIG_PATH"], str(dmix_conf))
+
 
 class PdfOpsPdfCraftCompatTest(unittest.TestCase):
     def test_pure_python_pdf_inspect_and_text_extraction(self) -> None:

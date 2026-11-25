@@ -12,7 +12,9 @@ export type R36SButton =
   | 'SELECT'
   | 'START'
   | 'L1'
-  | 'R1';
+  | 'R1'
+  | 'L2'
+  | 'R2';
 
 export function R36SControls({
   onPress,
@@ -24,16 +26,26 @@ export function R36SControls({
 
   return (
     <div className="w-full max-w-[680px] flex items-center justify-between gap-4 px-5 py-3.5 rounded-2xl bg-[#15171d] border border-white/10 shadow-xl">
-      {/* Left: L1 + D-Pad */}
+      {/* Left: L1/L2 + D-Pad */}
       <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => onPress('L1')}
-          title="L1 (Anterior / [ )"
-          className={`${btnCls} px-3 py-1.5 rounded-lg bg-[#232732] hover:bg-[#2d3240] text-xs text-zinc-200 border border-white/10`}
-        >
-          L1
-        </button>
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => onPress('L1')}
+            title="L1 (Anterior / [ )"
+            className={`${btnCls} px-3 py-1.5 rounded-lg bg-[#232732] hover:bg-[#2d3240] text-xs text-zinc-200 border border-white/10`}
+          >
+            L1
+          </button>
+          <button
+            type="button"
+            onClick={() => onPress('L2')}
+            title="L2 (Voltar música no Mini-Player / PageUp)"
+            className={`${btnCls} px-3 py-1.5 rounded-lg bg-[#1c202a] hover:bg-[#2d3240] text-xs text-zinc-300 border border-white/10`}
+          >
+            L2
+          </button>
+        </div>
 
         <div className="grid grid-cols-3 grid-rows-3 gap-1 w-[92px] h-[92px]">
           <div />
@@ -146,14 +158,24 @@ export function R36SControls({
           <div />
         </div>
 
-        <button
-          type="button"
-          onClick={() => onPress('R1')}
-          title="R1 (Próxima / ] )"
-          className={`${btnCls} px-3 py-1.5 rounded-lg bg-[#232732] hover:bg-[#2d3240] text-xs text-zinc-200 border border-white/10`}
-        >
-          R1
-        </button>
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => onPress('R1')}
+            title="R1 (Próxima / ] )"
+            className={`${btnCls} px-3 py-1.5 rounded-lg bg-[#232732] hover:bg-[#2d3240] text-xs text-zinc-200 border border-white/10`}
+          >
+            R1
+          </button>
+          <button
+            type="button"
+            onClick={() => onPress('R2')}
+            title="R2 (SELECT+R2 Mini-Player / Pular música / PageDown)"
+            className={`${btnCls} px-3 py-1.5 rounded-lg bg-[#1c202a] hover:bg-[#2d3240] text-xs text-zinc-300 border border-white/10`}
+          >
+            R2
+          </button>
+        </div>
       </div>
     </div>
   );

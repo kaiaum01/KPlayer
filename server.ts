@@ -4265,20 +4265,21 @@ async function createServer() {
           }
         }
         if (bgAudioPreview) {
-          lines.push(`[R36S • Teste prévio] Liberando tela SDL2 e pausando gptokeyb via código 43 (KPlayer.sh)...`);
+          lines.push(`[R36S • Teste prévio] Liberando SDL2/gptokeyb via código 43 e isolando LD_LIBRARY_PATH para o jogo...`);
           if (activeMediaKind && activeMediaTitle) {
             lines.push(
-              `[Áudio em fundo] Mantendo ${activeMediaKind === 'radio' ? 'rádio online' : 'música'}: "${activeMediaTitle}" (volume 50% via ALSA/bg_audio.py)`
+              `[Áudio em fundo] ./kplayer --bg-audio (libVLC nativo + ALSA dmix/Pulse): ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" (55% vol)`
             );
           } else {
-            lines.push(`[Áudio em fundo] Modo Teste prévio ativo (nenhuma faixa/rádio tocando no momento).`);
+            lines.push(`[Áudio em fundo] ./kplayer --bg-audio pronto com fila de músicas/rádios (pausado até SELECT+R2).`);
           }
+          lines.push(`[Mini-Player no Jogo] Oculto por padrão • SELECT+R2 abre/fecha • L2 volta faixa • R2 pula faixa • B pausa • ↑↓ volume.`);
           lines.push(`[R36S] Diretório de trabalho: ${gameDir || targetDir}`);
           lines.push(`[R36S] Executando via bg_audio.py: ${interpreter.split(/\s+/)[0]} "${resolved.virtualPath}"`);
           if (execLine) {
             lines.push(`[Script] Alvo principal detectado: ${execLine}`);
           }
-          lines.push(`[R36S • Teste prévio] Ao sair do jogo, o áudio em fundo é encerrado com segurança e o KPlayer retorna automaticamente.`);
+          lines.push(`[R36S • Teste prévio] Ao sair do jogo, o daemon --bg-audio encerra com segurança e o KPlayer retorna automaticamente.`);
         } else {
           lines.push(`[R36S] Encerrando SDL2/libVLC do KPlayer para liberar tela e áudio ALSA...`);
           lines.push(`[R36S] Diretório de trabalho: ${gameDir || targetDir}`);
@@ -4291,8 +4292,12 @@ async function createServer() {
         }
       } else {
         lines.push(`[R36S] Binário ELF detectado (${st.size} bytes).`);
-        if (bgAudioPreview && activeMediaKind && activeMediaTitle) {
-          lines.push(`[R36S • Teste prévio] Mantendo ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" no fundo via bg_audio.py (código 43).`);
+        if (bgAudioPreview) {
+          lines.push(
+            activeMediaKind && activeMediaTitle
+              ? `[R36S • Teste prévio] ./kplayer --bg-audio mantendo ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" com Mini-Player SELECT+R2 (L2/R2 troca faixa).`
+              : `[R36S • Teste prévio] ./kplayer --bg-audio pronto — pressione SELECT+R2 no jogo para abrir o Mini-Player.`
+          );
         } else {
           lines.push(`[R36S] Encerrando SDL2/libVLC do KPlayer para liberar framebuffer DRM/KMS...`);
         }

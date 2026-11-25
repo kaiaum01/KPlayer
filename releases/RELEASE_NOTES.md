@@ -6,9 +6,10 @@ Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita e
 
 ## Novidades da v2.1.4 (R36S Nativo)
 
-- **Música e Rádio em Segundo Plano ao Abrir Jogos `.sh` (`Teste prévio`):**
+- **Música e Rádio em Segundo Plano + Mini-Player no Jogo (`SELECT + R2`) (`Teste prévio`):**
   - Nova opção **`Áudio em jogos (Teste prévio)`** em **`SELECT → Opções`**, permitindo **ativar ou desativar** a qualquer momento (salva em `settings.cfg`, desativada por padrão).
-  - Quando ativada e uma música local ou rádio online estiver tocando, ao lançar um script `.sh` de jogo ou executável pelo Gerenciador de Arquivos (`Arquivos`), o `KPlayer.sh` + `bg_audio.py` mantém o áudio em segundo plano (volume reduzido) via `cvlc`/`mpv`/`ffplay`, pausa o `gptokeyb` para o jogo assumir o controle e retoma o KPlayer automaticamente ao sair do jogo.
+  - Roda diretamente pelo próprio **`./kplayer --bg-audio`** usando a `libvlc.so.5` embarcada (sem depender de `cvlc`/`mpv`/`ffplay`), com mixagem compartilhada automática via **PulseAudio/PipeWire ou ALSA `dmix`** e isolamento de `LD_LIBRARY_PATH` para jogos `.sh` e EmulationStation.
+  - **Mini-Player no Jogo sob demanda:** fica oculto durante a jogatina e **só abre ao pressionar `SELECT + R2`**. Com ele aberto: **`R2`** pula para a próxima música/estação, **`L2`** volta para a anterior, **`B`/`START`** pausa/retoma, **`↑`/`↓`** ajusta o volume (`10%–100%`) e **`A`** (ou **`SELECT + R2`**) fecha voltando imediatamente ao jogo. Ao fechar o jogo, o KPlayer retorna automaticamente.
 - **Leitor de PDF Integrado Compatível com `PdfCraft R36S` (`github.com/kaiaum01/PdfReader-R36s`):**
   - Abra arquivos **`.pdf`** diretamente no Gerenciador de Arquivos (`Arquivos`).
   - Compatibilidade nativa com o motor **`pdfcraft-core.aarch64`** do projeto **`kaiaum01/PdfReader-R36s`** (via protocolo JSON IPC `serve`), opção de abrir no app externo **`PdfCraft.sh`** quando instalado em `/roms(2)/ports/`, suporte a PDFs com senha pelo teclado virtual e fallback automático via `pdftoppm`/`mutool` e extrator de texto Python integrado.

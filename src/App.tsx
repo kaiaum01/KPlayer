@@ -71,9 +71,9 @@ import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_179539140
 
 const APP_VERSION = '2.1.4';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Opção Teste prévio em Opções: "Áudio em jogos (Teste prévio)" (ativar/desativar) para manter música ou rádio tocando no fundo ao abrir jogos .sh.',
-  'Leitor de PDF no Gerenciador de Arquivos (Arquivos) com compatibilidade total com PdfCraft R36S (kaiaum01/PdfReader-R36s), zoom, páginas e modo texto.',
-  'Detecção automática do motor pdfcraft-core.aarch64 e do lançador PdfCraft.sh no console R36S, incluindo PDFs protegidos por senha.',
+  'Áudio em jogos (Teste prévio) com motor libVLC nativo (--bg-audio) + mixagem ALSA dmix/PulseAudio para tocar música ou rádio junto com jogos .sh.',
+  'Mini-Player no Jogo sob demanda: oculto durante o jogo, abre somente com SELECT + R2 (R2 pula faixa, L2 volta faixa, B pausa, ↑/↓ volume, A fecha).',
+  'Leitor de PDF no Gerenciador de Arquivos (Arquivos) compatível com PdfCraft R36S (kaiaum01/PdfReader-R36s), zoom, páginas, senha e modo texto.',
   'Retorno automático ao KPlayer após fechar jogos .sh ou o PdfCraft R36S quando o modo Teste prévio está ativado.',
 ];
 
@@ -210,6 +210,7 @@ export default function App() {
     loadStorage('kp_bg_audio_preview', false)
   );
   const [gameAudioDucked, setGameAudioDucked] = useState<boolean>(false);
+  const [bgAudioVolume, setBgAudioVolume] = useState<number>(55);
   useEffect(() => {
     try {
       localStorage.setItem('kp_bg_audio_preview', JSON.stringify(bgAudioPreview));
@@ -1161,9 +1162,10 @@ export default function App() {
 
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = gameAudioDucked && bgAudioPreview ? 0.45 : 1.0;
+      audioRef.current.volume =
+        gameAudioDucked && bgAudioPreview ? Math.max(0.1, Math.min(1, bgAudioVolume / 100)) : 1.0;
     }
-  }, [gameAudioDucked, bgAudioPreview]);
+  }, [gameAudioDucked, bgAudioPreview, bgAudioVolume]);
 
   // Fetch Radio stations when category changes or Radio opens (instant when preloaded at boot)
   const loadRadioCategory = useCallback(
@@ -1516,11 +1518,19 @@ export default function App() {
       }
 
       if (btn === 'START') {
+        if (screen === 'filemanager' && fileManagerRef.current?.isInGameLaunch()) {
+          fileManagerRef.current.handleButton('START');
+          return;
+        }
         togglePlayPause();
         return;
       }
 
       if (btn === 'SELECT') {
+        if (screen === 'filemanager' && fileManagerRef.current?.isInGameLaunch()) {
+          fileManagerRef.current.handleButton('SELECT');
+          return;
+        }
         if (screen === 'options') {
           setScreen(prevScreen);
         } else if (
@@ -1857,6 +1867,8 @@ export default function App() {
         q: 'L1',
         ']': 'R1',
         e: 'R1',
+        PageUp: 'L2',
+        PageDown: 'R2',
       };
       const mapped = map[e.key];
       if (mapped) {
@@ -4172,12 +4184,39 @@ export default function App() {
                 notify={notify}
                 bgAudioPreview={bgAudioPreview}
                 activeBackgroundAudio={
-                  activeRadio && isPlaying
-                    ? { title: activeRadio.name, kind: 'radio' }
-                    : activeTrack && activeTrack.kind === 'audio' && isPlaying
-                    ? { title: activeTrack.title || activeTrack.name, kind: 'music' }
+                  activeRadio
+                    ? {
+                        title: activeRadio.name,
+                        kind: 'radio',
+                        isPlaying,
+                        index: Math.max(0, radioStations.findIndex((s) => s.url === activeRadio.url)),
+                        total: Math.max(1, radioStations.length),
+                      }
+                    : activeTrack && activeTrack.kind === 'audio'
+                    ? {
+                        title: activeTrack.title || activeTrack.name,
+                        kind: 'music',
+                        isPlaying,
+                        index: Math.max(0, audioTracks.findIndex((t) => t.id === activeTrack.id)),
+                        total: Math.max(1, audioTracks.length),
+                      }
+                    : audioTracks.length > 0
+                    ? {
+                        title: audioTracks[0].title || audioTracks[0].name,
+                        kind: 'music',
+                        isPlaying: false,
+                        index: 0,
+                        total: audioTracks.length,
+                      }
                     : null
                 }
+                bgAudioVolume={bgAudioVolume}
+                onChangeBgAudioVolume={(delta) =>
+                  setBgAudioVolume((v) => Math.max(10, Math.min(100, v + delta)))
+                }
+                onBgPrevTrack={() => stepTrack(-1)}
+                onBgNextTrack={() => stepTrack(1)}
+                onBgTogglePause={togglePlayPause}
                 onSetGameAudioDucking={setGameAudioDucked}
                 onBack={() => setScreen('home')}
                 onPlayMedia={(item) => {
@@ -4352,7 +4391,7 @@ export default function App() {
                     const next = !prev;
                     notify(
                       next
-                        ? 'Teste prévio ativado: mantém música/rádio ao abrir jogos .sh'
+                        ? 'Teste prévio ativo: SELECT+R2 abre Mini-Player no jogo (L2/R2 troca faixa)'
                         : 'Áudio em jogos (Teste prévio) desativado'
                     );
                     return next;
