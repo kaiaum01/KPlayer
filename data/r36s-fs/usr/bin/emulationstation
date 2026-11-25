@@ -1,0 +1,3 @@
+#!/bin/sh
+# EmulationStation Frontend Launcher (R36S / dArkOS)
+exec /usr/bin/emulationstation.bin --no-splash "$@"

@@ -25,10 +25,10 @@ class UpdaterLauncherTest(unittest.TestCase):
                 '#!/bin/bash\n# KPlayer v2.0.8 - dArkOS\nKPLAYER_VERSION="2.0.8"\necho old\n',
                 encoding="utf-8",
             )
-            # Bundled fresh template from the v2.1.2 update package
+            # Bundled fresh template from the v2.1.3 update package
             tmpl = gamedir / "KPlayer.sh.tmpl"
             tmpl.write_text(
-                '#!/bin/bash\n# KPlayer v2.1.2 - dArkOS / Debian 13 ARM64 / PortMaster\nKPLAYER_VERSION="2.1.2"\nexec bash "$script_dir/KPlayer.sh"\n',
+                '#!/bin/bash\n# KPlayer v2.1.3 - dArkOS / Debian 13 ARM64 / PortMaster\nKPLAYER_VERSION="2.1.3"\nexec bash "$script_dir/KPlayer.sh"\n',
                 encoding="utf-8",
             )
 
@@ -36,7 +36,7 @@ class UpdaterLauncherTest(unittest.TestCase):
             gamelist = ports / "gamelist.xml"
             gamelist.write_text(existing_xml, encoding="utf-8")
 
-            res = updater.ensure_stable_launcher(ports, gamedir, "2.1.2")
+            res = updater.ensure_stable_launcher(ports, gamedir, "2.1.3")
             self.assertIsNotNone(res)
 
             stable_sh = ports / "KPlayer.sh"
@@ -44,8 +44,8 @@ class UpdaterLauncherTest(unittest.TestCase):
             self.assertFalse(broken_sh.exists())
 
             sh_text = stable_sh.read_text(encoding="utf-8")
-            self.assertIn('KPLAYER_VERSION="2.1.2"', sh_text)
-            self.assertIn("# KPlayer v2.1.2", sh_text)
+            self.assertIn('KPLAYER_VERSION="2.1.3"', sh_text)
+            self.assertIn("# KPlayer v2.1.3", sh_text)
             self.assertIn('exec bash "$script_dir/KPlayer.sh"', sh_text)
 
             # Confirm gamelist.xml is 100% untouched byte-for-byte
@@ -62,23 +62,23 @@ class UpdaterLauncherTest(unittest.TestCase):
             ports = Path(tmp) / "ports"
             gamedir = ports / "kplayer"
             gamedir.mkdir(parents=True)
-            (gamedir / "installed-version.txt").write_text("2.1.2\n", encoding="utf-8")
+            (gamedir / "installed-version.txt").write_text("2.1.3\n", encoding="utf-8")
             (gamedir / "favorites.txt").write_text("fav-track\n", encoding="utf-8")
             (gamedir / "news.cfg").write_text("api_key=local-test\n", encoding="utf-8")
 
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, "w") as zf:
-                zf.writestr("KPlayer.sh", '#!/bin/bash\n# KPlayer v2.1.2\nKPLAYER_VERSION="2.1.2"\n')
-                zf.writestr("kplayer/changelog.txt", "KPlayer v2.1.2 test\n")
+                zf.writestr("KPlayer.sh", '#!/bin/bash\n# KPlayer v2.1.3\nKPLAYER_VERSION="2.1.3"\n')
+                zf.writestr("kplayer/changelog.txt", "KPlayer v2.1.3 test\n")
                 zf.writestr("kplayer/favorites.txt", "SHOULD-NOT-OVERWRITE\n")
                 zf.writestr("kplayer/news.cfg", "SHOULD-NOT-OVERWRITE\n")
             zip_bytes = buf.getvalue()
             zip_sha = hashlib.sha256(zip_bytes).hexdigest()
 
             fake_info = {
-                "currentVersion": "2.1.2",
-                "latestVersion": "2.1.2",
-                "nextExpectedVersion": "2.1.3",
+                "currentVersion": "2.1.3",
+                "latestVersion": "2.1.3",
+                "nextExpectedVersion": "2.1.4",
                 "updateAvailable": False,
                 "repository": "kaiaum01/KPlayer",
                 "branch": "main",
@@ -86,9 +86,9 @@ class UpdaterLauncherTest(unittest.TestCase):
                 "error": "",
                 "notes": ["Reinstall test"],
                 "r36s": {
-                    "filename": "KPlayer-v2.1.2-R36S.zip",
-                    "path": "updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
-                    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
+                    "filename": "KPlayer-v2.1.3-R36S.zip",
+                    "path": "updates/v2.1.3/KPlayer-v2.1.3-R36S.zip",
+                    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.3/KPlayer-v2.1.3-R36S.zip",
                     "sha256": zip_sha,
                 },
             }
@@ -114,7 +114,7 @@ class UpdaterLauncherTest(unittest.TestCase):
                 with mock.patch.object(updater, "urlopen_with_retry", return_value=_FakeResp(zip_bytes)):
                     rc_force = updater.apply_update(gamedir, force=True)
                 self.assertEqual(rc_force, 42)
-                self.assertEqual((gamedir / "changelog.txt").read_text(encoding="utf-8"), "KPlayer v2.1.2 test\n")
+                self.assertEqual((gamedir / "changelog.txt").read_text(encoding="utf-8"), "KPlayer v2.1.3 test\n")
                 self.assertEqual((gamedir / "favorites.txt").read_text(encoding="utf-8"), "fav-track\n")
                 self.assertEqual((gamedir / "news.cfg").read_text(encoding="utf-8"), "api_key=local-test\n")
 

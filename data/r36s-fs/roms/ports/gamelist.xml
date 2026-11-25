@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gameList>
+  <game>
+    <path>./KPlayer.sh</path>
+    <name>KPlayer</name>
+    <desc>Player de mídia, rádio, IPTV, notícias, placar e gerenciador de arquivos para R36S.</desc>
+  </game>
+  <game>
+    <path>./IniciarJogo.sh</path>
+    <name>Demo PortMaster R36S</name>
+    <desc>Script .sh de exemplo para testar abertura e edição no KPlayer v2.1.3.</desc>
+  </game>
+</gameList>

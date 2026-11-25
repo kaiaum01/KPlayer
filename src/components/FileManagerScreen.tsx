@@ -9,18 +9,24 @@ import {
   EyeOff,
   File as FileIcon,
   FileAudio,
+  FileCode2,
   FileText,
   FileVideo,
   Folder,
   FolderPlus,
   HardDrive,
+  ListMusic,
   Lock,
   MoreHorizontal,
   PackageOpen,
   Pencil,
+  Play,
+  Radio,
   RefreshCw,
+  Save,
   Scissors,
   Square,
+  Terminal,
   Trash2,
   X,
 } from 'lucide-react';
@@ -42,6 +48,26 @@ export interface FileManagerScreenHandle {
   handleButton: (btn: R36SButton) => void;
 }
 
+export interface FmPlayMediaPayload {
+  path: string;
+  name: string;
+  kind: 'audio' | 'video';
+  url: string;
+}
+
+export interface FmPlayRadioPayload {
+  name: string;
+  url: string;
+  group?: string;
+}
+
+export interface FmPlayPlaylistStreamPayload {
+  name: string;
+  url: string;
+  group?: string;
+  isVideo: boolean;
+}
+
 interface FileManagerScreenProps {
   theme: KpTheme;
   language: LanguageCode;
@@ -49,6 +75,9 @@ interface FileManagerScreenProps {
   toast: string | null;
   notify: (msg: string) => void;
   onBack: () => void;
+  onPlayMedia?: (item: FmPlayMediaPayload) => void;
+  onPlayRadio?: (item: FmPlayRadioPayload) => void;
+  onPlayPlaylistStream?: (item: FmPlayPlaylistStreamPayload) => void;
 }
 
 interface FmEntry {
@@ -59,6 +88,13 @@ interface FmEntry {
   mtime: number;
   isHidden: boolean;
   isArchive: boolean;
+  isText?: boolean;
+  isScript?: boolean;
+  isExecutable?: boolean;
+  isPlaylist?: boolean;
+  isRadio?: boolean;
+  isAudio?: boolean;
+  isVideo?: boolean;
   ext: string;
 }
 
@@ -72,6 +108,41 @@ interface ArchiveEntry {
   size: number;
   is_dir: boolean;
   encrypted: boolean;
+}
+
+interface ParsedMediaItem {
+  title: string;
+  url: string;
+  isLocal: boolean;
+  isVideo: boolean;
+  group: string;
+}
+
+interface EditorState {
+  path: string;
+  name: string;
+  ext: string;
+  content: string;
+  savedContent: string;
+  saving: boolean;
+  isScript: boolean;
+}
+
+interface MediaListState {
+  path: string;
+  name: string;
+  kind: 'playlist' | 'radio';
+  items: ParsedMediaItem[];
+  selectedIdx: number;
+}
+
+interface LaunchPreviewState {
+  path: string;
+  name: string;
+  kind: 'script' | 'executable';
+  interpreter: string;
+  targetDir: string;
+  logLines: string[];
 }
 
 interface FmClipboard {
@@ -103,6 +174,9 @@ type ModalMode =
   | { kind: 'rename'; target: FmEntry }
   | { kind: 'compress'; sources: string[] }
   | { kind: 'confirm_delete'; targets: string[]; label: string }
+  | { kind: 'exec_choice'; target: FmEntry }
+  | { kind: 'exec_console'; preview: LaunchPreviewState }
+  | { kind: 'editor_unsaved' }
   | {
       kind: 'password';
       purpose: 'list' | 'extract';
@@ -113,7 +187,34 @@ type ModalMode =
 
 const AUDIO_EXTS = new Set(['.mp3', '.flac', '.wav', '.ogg', '.m4a', '.aac', '.opus', '.wma']);
 const VIDEO_EXTS = new Set(['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.ts']);
-const TEXT_EXTS = new Set(['.txt', '.cfg', '.ini', '.json', '.md', '.log', '.sh', '.py', '.conf', '.pls', '.m3u', '.m3u8']);
+const TEXT_EXTS = new Set([
+  '.txt',
+  '.xml',
+  '.html',
+  '.htm',
+  '.sh',
+  '.cfg',
+  '.conf',
+  '.ini',
+  '.json',
+  '.md',
+  '.log',
+  '.py',
+  '.css',
+  '.js',
+  '.pls',
+  '.m3u',
+  '.m3u8',
+  '.xspf',
+  '.tsv',
+  '.csv',
+  '.yaml',
+  '.yml',
+  '.nfo',
+  '.lrc',
+]);
+const PLAYLIST_EXTS = new Set(['.m3u', '.m3u8', '.xspf']);
+const RADIO_EXTS = new Set(['.pls']);
 
 function formatBytesShort(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
@@ -167,19 +268,72 @@ function baseNamePosix(p: string): string {
 }
 
 function stripArchiveExt(name: string): string {
-  return name.replace(/\.(tar\.gz|tar\.xz|tar\.bz2|zip|7z|rar|tar|gz|tgz|xz|txz|bz2|tbz2|cbz|cbr|iso)$/i, '') || 'extraido';
+  return (
+    name.replace(/\.(tar\.gz|tar\.xz|tar\.bz2|zip|7z|rar|tar|gz|tgz|xz|txz|bz2|tbz2|cbz|cbr|iso)$/i, '') ||
+    'extraido'
+  );
+}
+
+function isEntryAudio(e: FmEntry): boolean {
+  return Boolean(e.isAudio ?? AUDIO_EXTS.has(e.ext));
+}
+
+function isEntryVideo(e: FmEntry): boolean {
+  return Boolean(e.isVideo ?? VIDEO_EXTS.has(e.ext));
+}
+
+function isEntryScript(e: FmEntry): boolean {
+  return Boolean(e.isScript ?? e.ext === '.sh');
+}
+
+function isEntryExecutable(e: FmEntry): boolean {
+  return Boolean(e.isExecutable ?? false);
+}
+
+function isEntryRadio(e: FmEntry): boolean {
+  return Boolean(e.isRadio ?? RADIO_EXTS.has(e.ext));
+}
+
+function isEntryPlaylist(e: FmEntry): boolean {
+  return Boolean(e.isPlaylist ?? PLAYLIST_EXTS.has(e.ext));
+}
+
+function isEntryText(e: FmEntry): boolean {
+  return Boolean(e.isText ?? TEXT_EXTS.has(e.ext));
+}
+
+function formatEntryTag(entry: FmEntry): string {
+  if (entry.isDir) return 'PASTA';
+  if (isEntryScript(entry)) return 'SH';
+  if (isEntryExecutable(entry)) return 'EXEC';
+  if (entry.isArchive) return '7Z/ZIP';
+  if (isEntryRadio(entry)) return 'RÁDIO';
+  if (isEntryPlaylist(entry)) return entry.ext === '.m3u8' ? 'M3U8' : 'PLAYLIST';
+  if (isEntryVideo(entry)) return 'VÍDEO';
+  if (isEntryAudio(entry)) return 'ÁUDIO';
+  if (entry.ext === '.xml') return 'XML';
+  if (entry.ext === '.html' || entry.ext === '.htm') return 'HTML';
+  if (entry.ext === '.txt') return 'TXT';
+  if (isEntryText(entry)) return entry.ext ? entry.ext.slice(1).toUpperCase() : 'TXT';
+  return '';
+}
+
+function formatEditorBadge(ext: string): string {
+  if (!ext) return 'TXT';
+  return ext.replace(/^\./, '').toUpperCase();
 }
 
 export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManagerScreenProps>(
-  ({ theme, locationLabel, toast, notify, onBack }, ref) => {
+  ({ theme, locationLabel, toast, notify, onBack, onPlayMedia, onPlayRadio, onPlayPlaylistStream }, ref) => {
     const [currentPath, setCurrentPath] = useState<string>('/');
     const [parentPath, setParentPath] = useState<string>('/');
     const [entries, setEntries] = useState<FmEntry[]>([]);
     const [quickRoots, setQuickRoots] = useState<QuickRoot[]>([
       { label: '/ (Raiz)', path: '/' },
       { label: '/roms', path: '/roms' },
-      { label: '/roms2', path: '/roms2' },
       { label: '/roms/ports', path: '/roms/ports' },
+      { label: '/roms/iptv', path: '/roms/iptv' },
+      { label: '/roms/radios', path: '/roms/radios' },
       { label: '/home/ark/Downloads', path: '/home/ark/Downloads' },
     ]);
     const [showHidden, setShowHidden] = useState(false);
@@ -189,7 +343,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const [clipboard, setClipboard] = useState<FmClipboard | null>(null);
 
-    // Archive viewer state
+    // Subviews (Archive, Text Editor, Playlist / Radio List)
     const [archiveView, setArchiveView] = useState<{
       path: string;
       name: string;
@@ -200,6 +354,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       items: ArchiveEntry[];
       selectedIdx: number;
     } | null>(null);
+    const [editorView, setEditorView] = useState<EditorState | null>(null);
+    const [mediaListView, setMediaListView] = useState<MediaListState | null>(null);
 
     // Modal state
     const [modal, setModal] = useState<ModalMode>(null);
@@ -216,6 +372,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     } | null>(null);
     const pollTimerRef = useRef<number | null>(null);
     const listRef = useRef<HTMLDivElement>(null);
+    const editorGutterRef = useRef<HTMLDivElement>(null);
 
     const loadDirectory = useCallback(
       async (targetPath: string, hiddenFlag?: boolean) => {
@@ -272,9 +429,14 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     useEffect(() => {
       const container = listRef.current;
       if (!container) return;
-      const el = container.querySelector<HTMLElement>(`[data-fm-row="${selectedIdx}"]`);
+      const idx = archiveView
+        ? archiveView.selectedIdx
+        : mediaListView
+        ? mediaListView.selectedIdx
+        : selectedIdx;
+      const el = container.querySelector<HTMLElement>(`[data-fm-row="${idx}"]`);
       if (el) el.scrollIntoView({ block: 'nearest' });
-    }, [selectedIdx, archiveView]);
+    }, [selectedIdx, archiveView, mediaListView]);
 
     const currentEntry = entries[selectedIdx] ?? null;
 
@@ -439,6 +601,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             return;
           }
           setModal(null);
+          setEditorView(null);
+          setMediaListView(null);
           setArchiveView({
             path: archivePath,
             name: baseNamePosix(archivePath),
@@ -456,6 +620,211 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         }
       },
       [notify]
+    );
+
+    // ==================== v2.1.3 TEXT EDITOR ====================
+    const openTextEditor = useCallback(
+      async (filePath: string) => {
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/fm/text?path=${encodeURIComponent(filePath)}`);
+          const data = (await res.json()) as {
+            ok?: boolean;
+            path?: string;
+            name?: string;
+            ext?: string;
+            content?: string;
+            error?: string;
+          };
+          if (!res.ok || !data.ok) {
+            notify(data.error || 'Não foi possível abrir no editor de texto');
+            return;
+          }
+          setModal(null);
+          setArchiveView(null);
+          setMediaListView(null);
+          const content = data.content ?? '';
+          const ext = data.ext || '';
+          setEditorView({
+            path: data.path || filePath,
+            name: data.name || baseNamePosix(filePath),
+            ext,
+            content,
+            savedContent: content,
+            saving: false,
+            isScript: ext === '.sh',
+          });
+        } catch {
+          notify('Erro ao carregar arquivo de texto');
+        } finally {
+          setLoading(false);
+        }
+      },
+      [notify]
+    );
+
+    const saveEditorFile = useCallback(async () => {
+      if (!editorView || editorView.saving) return false;
+      setEditorView((prev) => (prev ? { ...prev, saving: true } : prev));
+      try {
+        const res = await fetch('/api/fm/text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: editorView.path, content: editorView.content }),
+        });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !data.ok) {
+          notify(data.error || 'Falha ao salvar arquivo');
+          setEditorView((prev) => (prev ? { ...prev, saving: false } : prev));
+          return false;
+        }
+        setEditorView((prev) => (prev ? { ...prev, savedContent: prev.content, saving: false } : prev));
+        notify(`Arquivo "${editorView.name}" salvo`);
+        void loadDirectory(currentPath);
+        return true;
+      } catch {
+        notify('Erro ao salvar arquivo');
+        setEditorView((prev) => (prev ? { ...prev, saving: false } : prev));
+        return false;
+      }
+    }, [currentPath, editorView, loadDirectory, notify]);
+
+    const requestCloseEditor = useCallback(() => {
+      if (!editorView) return;
+      if (editorView.content !== editorView.savedContent) {
+        setModalFocusIdx(0);
+        setModal({ kind: 'editor_unsaved' });
+      } else {
+        setEditorView(null);
+      }
+    }, [editorView]);
+
+    // ==================== v2.1.3 PLAYLIST / RADIO PARSER ====================
+    const openMediaList = useCallback(
+      async (filePath: string) => {
+        setLoading(true);
+        try {
+          const res = await fetch('/api/fm/parse-playlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath }),
+          });
+          const data = (await res.json()) as {
+            ok?: boolean;
+            path?: string;
+            name?: string;
+            kind?: 'playlist' | 'radio';
+            items?: ParsedMediaItem[];
+            error?: string;
+          };
+          if (!res.ok || !data.ok) {
+            notify(data.error || 'Não foi possível ler esta lista');
+            return;
+          }
+          setModal(null);
+          setArchiveView(null);
+          setEditorView(null);
+          setMediaListView({
+            path: data.path || filePath,
+            name: data.name || baseNamePosix(filePath),
+            kind: data.kind === 'radio' ? 'radio' : 'playlist',
+            items: Array.isArray(data.items) ? data.items : [],
+            selectedIdx: 0,
+          });
+        } catch {
+          notify('Falha ao abrir playlist ou arquivo de rádio');
+        } finally {
+          setLoading(false);
+        }
+      },
+      [notify]
+    );
+
+    const playParsedMediaItem = useCallback(
+      (item: ParsedMediaItem, listKind: 'playlist' | 'radio') => {
+        if (item.isLocal) {
+          const mediaUrl = `/api/fm/raw?path=${encodeURIComponent(item.url)}`;
+          onPlayMedia?.({
+            path: item.url,
+            name: item.title || baseNamePosix(item.url),
+            kind: item.isVideo ? 'video' : 'audio',
+            url: mediaUrl,
+          });
+          return;
+        }
+        if (listKind === 'radio' || !item.isVideo) {
+          onPlayRadio?.({
+            name: item.title,
+            url: item.url,
+            group: item.group || 'Arquivo de Rádio',
+          });
+          return;
+        }
+        onPlayPlaylistStream?.({
+          name: item.title,
+          url: item.url,
+          group: item.group || 'Playlist M3U8',
+          isVideo: item.isVideo,
+        });
+      },
+      [onPlayMedia, onPlayPlaylistStream, onPlayRadio]
+    );
+
+    // ==================== v2.1.3 .SH & EMULATIONSTATION LAUNCHER ====================
+    const launchR36sTarget = useCallback(
+      async (filePath: string) => {
+        setLoading(true);
+        try {
+          const res = await fetch('/api/fm/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath }),
+          });
+          const data = (await res.json()) as {
+            ok?: boolean;
+            path?: string;
+            name?: string;
+            kind?: 'script' | 'executable';
+            interpreter?: string;
+            targetDir?: string;
+            logLines?: string[];
+            error?: string;
+          };
+          if (!res.ok || !data.ok) {
+            notify(data.error || 'Não foi possível executar este arquivo');
+            return;
+          }
+          setModal({
+            kind: 'exec_console',
+            preview: {
+              path: data.path || filePath,
+              name: data.name || baseNamePosix(filePath),
+              kind: data.kind === 'executable' ? 'executable' : 'script',
+              interpreter: data.interpreter || '/bin/bash',
+              targetDir: data.targetDir || '/',
+              logLines: Array.isArray(data.logLines) ? data.logLines : [],
+            },
+          });
+        } catch {
+          notify('Falha ao iniciar script ou executável');
+        } finally {
+          setLoading(false);
+        }
+      },
+      [notify]
+    );
+
+    const playDirectMediaEntry = useCallback(
+      (entry: FmEntry) => {
+        const kind: 'audio' | 'video' = isEntryVideo(entry) ? 'video' : 'audio';
+        onPlayMedia?.({
+          path: entry.path,
+          name: entry.name,
+          kind,
+          url: `/api/fm/raw?path=${encodeURIComponent(entry.path)}`,
+        });
+      },
+      [onPlayMedia]
     );
 
     const requestExtract = useCallback(
@@ -586,6 +955,36 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       });
     }, []);
 
+    const execChoiceOptions = useMemo(() => {
+      if (modal?.kind !== 'exec_choice') return [];
+      const target = modal.target;
+      const opts: Array<{ id: string; label: string; desc: string; run: () => void }> = [
+        {
+          id: 'run',
+          label: isEntryScript(target)
+            ? 'Executar script .sh no console (R36S)'
+            : 'Executar binário / EmulationStation',
+          desc: 'Encerra SDL2/libVLC e entrega controle direto ao script/executável',
+          run: () => void launchR36sTarget(target.path),
+        },
+      ];
+      if (isEntryScript(target) || isEntryText(target)) {
+        opts.push({
+          id: 'edit',
+          label: 'Abrir no Editor de Texto',
+          desc: 'Visualizar ou editar comandos do script antes de executar',
+          run: () => void openTextEditor(target.path),
+        });
+      }
+      opts.push({
+        id: 'cancel',
+        label: 'Cancelar',
+        desc: 'Voltar para a lista de arquivos',
+        run: () => setModal(null),
+      });
+      return opts;
+    }, [launchR36sTarget, modal, openTextEditor]);
+
     const actionMenuItems = useMemo(() => {
       if (modal?.kind !== 'actions') return [];
       const target = modal.target;
@@ -598,6 +997,44 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         danger?: boolean;
         run: () => void;
       }> = [];
+
+      if (target && !target.isDir) {
+        if (isEntryAudio(target) || isEntryVideo(target)) {
+          list.push({
+            id: 'play-media',
+            label: isEntryVideo(target) ? 'Reproduzir vídeo' : 'Tocar música',
+            desc: `Abrir ${target.name} direto no KPlayer`,
+            run: () => {
+              setModal(null);
+              playDirectMediaEntry(target);
+            },
+          });
+        }
+        if (isEntryPlaylist(target) || isEntryRadio(target)) {
+          list.push({
+            id: 'open-playlist',
+            label: isEntryRadio(target) ? 'Abrir estações de rádio' : 'Abrir playlist (.m3u8 / .m3u)',
+            desc: 'Listar e reproduzir canais, faixas ou estações',
+            run: () => void openMediaList(target.path),
+          });
+        }
+        if (isEntryScript(target) || isEntryExecutable(target)) {
+          list.push({
+            id: 'launch-sh',
+            label: isEntryScript(target) ? 'Executar script .sh (R36S)' : 'Executar binário / EmulationStation',
+            desc: 'Iniciar jogo ou executável no console',
+            run: () => void launchR36sTarget(target.path),
+          });
+        }
+        if (isEntryText(target) || (!target.isArchive && !isEntryAudio(target) && !isEntryVideo(target) && !isEntryExecutable(target))) {
+          list.push({
+            id: 'edit-text',
+            label: 'Editar no Editor de Texto',
+            desc: 'TXT, XML, HTML, SH, CFG, M3U8, PLS e mais',
+            run: () => void openTextEditor(target.path),
+          });
+        }
+      }
 
       if (target?.isArchive) {
         list.push(
@@ -715,7 +1152,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         {
           id: 'roots',
           label: 'Atalhos de pastas (Raiz / SD)',
-          desc: 'Ir para /, /roms, /roms2, /roms/ports ou Downloads',
+          desc: 'Ir para /, /roms, /roms/ports, /roms/iptv ou /roms/radios',
           run: () => {
             setModalFocusIdx(0);
             setModal({ kind: 'roots' });
@@ -740,10 +1177,14 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       currentPath,
       getEffectiveTargets,
       handlePaste,
+      launchR36sTarget,
       loadDirectory,
       modal,
       notify,
       openArchive,
+      openMediaList,
+      openTextEditor,
+      playDirectMediaEntry,
       requestExtract,
       selectedPaths.size,
       showHidden,
@@ -755,12 +1196,21 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           void loadDirectory(entry.path);
         } else if (entry.isArchive) {
           void openArchive(entry.path);
+        } else if (isEntryAudio(entry) || isEntryVideo(entry)) {
+          playDirectMediaEntry(entry);
+        } else if (isEntryPlaylist(entry) || isEntryRadio(entry)) {
+          void openMediaList(entry.path);
+        } else if (isEntryScript(entry) || isEntryExecutable(entry)) {
+          setModalFocusIdx(0);
+          setModal({ kind: 'exec_choice', target: entry });
+        } else if (isEntryText(entry)) {
+          void openTextEditor(entry.path);
         } else {
           setModalFocusIdx(0);
           setModal({ kind: 'actions', target: entry });
         }
       },
-      [loadDirectory, openArchive]
+      [loadDirectory, openArchive, openMediaList, openTextEditor, playDirectMediaEntry]
     );
 
     const handleButton = useCallback(
@@ -777,6 +1227,36 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         if (modal) {
           if (btn === 'A') {
             setModal(null);
+            return;
+          }
+          if (modal.kind === 'exec_console') {
+            if (btn === 'B') setModal(null);
+            return;
+          }
+          if (modal.kind === 'exec_choice') {
+            if (btn === 'UP') {
+              setModalFocusIdx((i) => (i + execChoiceOptions.length - 1) % Math.max(1, execChoiceOptions.length));
+            } else if (btn === 'DOWN') {
+              setModalFocusIdx((i) => (i + 1) % Math.max(1, execChoiceOptions.length));
+            } else if (btn === 'B') {
+              execChoiceOptions[modalFocusIdx]?.run();
+            }
+            return;
+          }
+          if (modal.kind === 'editor_unsaved') {
+            if (btn === 'LEFT' || btn === 'RIGHT') {
+              setModalFocusIdx((i) => (i === 0 ? 1 : 0));
+            } else if (btn === 'B') {
+              if (modalFocusIdx === 0) {
+                setModal(null);
+                void saveEditorFile().then((ok) => {
+                  if (ok) setEditorView(null);
+                });
+              } else {
+                setModal(null);
+                setEditorView(null);
+              }
+            }
             return;
           }
           if (modal.kind === 'actions') {
@@ -799,6 +1279,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
               if (target) {
                 setModal(null);
                 setArchiveView(null);
+                setEditorView(null);
+                setMediaListView(null);
                 void loadDirectory(target.path);
               }
             }
@@ -831,6 +1313,50 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           if (modal.kind === 'password') {
             if (btn === 'Y') setShowPassword((v) => !v);
             else if (btn === 'B') handlePasswordSubmit();
+            return;
+          }
+          return;
+        }
+
+        // Text Editor navigation
+        if (editorView) {
+          if (btn === 'A') {
+            requestCloseEditor();
+            return;
+          }
+          if (btn === 'START') {
+            void saveEditorFile();
+            return;
+          }
+          return;
+        }
+
+        // Playlist / Radio List viewer navigation
+        if (mediaListView) {
+          if (btn === 'A') {
+            setMediaListView(null);
+            return;
+          }
+          if (btn === 'X') {
+            void openTextEditor(mediaListView.path);
+            return;
+          }
+          if (btn === 'UP' && mediaListView.items.length > 0) {
+            setMediaListView((prev) =>
+              prev
+                ? { ...prev, selectedIdx: (prev.selectedIdx + prev.items.length - 1) % prev.items.length }
+                : prev
+            );
+            return;
+          }
+          if (btn === 'DOWN' && mediaListView.items.length > 0) {
+            setMediaListView((prev) =>
+              prev ? { ...prev, selectedIdx: (prev.selectedIdx + 1) % prev.items.length } : prev
+            );
+            return;
+          }
+          if (btn === 'B' && mediaListView.items[mediaListView.selectedIdx]) {
+            playParsedMediaItem(mediaListView.items[mediaListView.selectedIdx], mediaListView.kind);
             return;
           }
           return;
@@ -911,20 +1437,27 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         cancelActiveJob,
         currentEntry,
         currentPath,
+        editorView,
         entries.length,
+        execChoiceOptions,
         handleCompressSubmit,
         handleMkdirSubmit,
         handlePaste,
         handlePasswordSubmit,
         handleRenameSubmit,
         loadDirectory,
+        mediaListView,
         modal,
         modalFocusIdx,
         onBack,
         openEntry,
+        openTextEditor,
         parentPath,
+        playParsedMediaItem,
         quickRoots,
+        requestCloseEditor,
         requestExtract,
+        saveEditorFile,
         selectedPaths.size,
         startJob,
         toggleSelectPath,
@@ -937,11 +1470,26 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       const color = focused ? theme.accent : entry.isDir ? theme.accent : theme.muted;
       if (entry.isDir) return <Folder className="w-4 h-4 shrink-0" style={{ color }} />;
       if (entry.isArchive) return <Archive className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />;
-      if (AUDIO_EXTS.has(entry.ext)) return <FileAudio className="w-4 h-4 shrink-0" style={{ color }} />;
-      if (VIDEO_EXTS.has(entry.ext)) return <FileVideo className="w-4 h-4 shrink-0" style={{ color }} />;
-      if (TEXT_EXTS.has(entry.ext)) return <FileText className="w-4 h-4 shrink-0" style={{ color }} />;
+      if (isEntryScript(entry) || isEntryExecutable(entry)) {
+        return <Terminal className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />;
+      }
+      if (isEntryRadio(entry)) return <Radio className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />;
+      if (isEntryPlaylist(entry)) return <ListMusic className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />;
+      if (isEntryAudio(entry)) return <FileAudio className="w-4 h-4 shrink-0" style={{ color }} />;
+      if (isEntryVideo(entry)) return <FileVideo className="w-4 h-4 shrink-0" style={{ color }} />;
+      if (entry.ext === '.xml' || entry.ext === '.html' || entry.ext === '.htm' || entry.ext === '.json') {
+        return <FileCode2 className="w-4 h-4 shrink-0" style={{ color }} />;
+      }
+      if (isEntryText(entry)) return <FileText className="w-4 h-4 shrink-0" style={{ color }} />;
       return <FileIcon className="w-4 h-4 shrink-0" style={{ color }} />;
     };
+
+    const isSubView = Boolean(archiveView || editorView || mediaListView);
+    const editorDirty = Boolean(editorView && editorView.content !== editorView.savedContent);
+    const editorLines = useMemo(
+      () => (editorView ? editorView.content.split('\n') : []),
+      [editorView]
+    );
 
     return (
       <div className="w-full h-full relative overflow-hidden flex flex-col kp-screen-enter">
@@ -958,7 +1506,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
               <button
                 type="button"
                 onClick={() => {
-                  if (archiveView) setArchiveView(null);
+                  if (editorView) requestCloseEditor();
+                  else if (mediaListView) setMediaListView(null);
+                  else if (archiveView) setArchiveView(null);
                   else if (currentPath !== '/') void loadDirectory(parentPath);
                   else onBack();
                 }}
@@ -968,22 +1518,48 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                   color: theme.text,
                   border: `1px solid ${themeHairline(theme)}`,
                 }}
-                title={archiveView ? 'Fechar arquivo compactado' : currentPath === '/' ? 'Voltar para Home' : 'Subir pasta'}
+                title={
+                  editorView
+                    ? 'Fechar editor de texto'
+                    : mediaListView
+                    ? 'Fechar lista'
+                    : archiveView
+                    ? 'Fechar arquivo compactado'
+                    : currentPath === '/'
+                    ? 'Voltar para Home'
+                    : 'Subir pasta'
+                }
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: theme.muted }}>
-                  {archiveView ? `7-Zip • ${archiveView.engine}` : 'Raiz do Console'}
+                <div className="text-[10px] uppercase tracking-wider font-semibold flex items-center gap-1.5" style={{ color: theme.muted }}>
+                  <span>
+                    {editorView
+                      ? `Editor de Texto • ${formatEditorBadge(editorView.ext)}${editorDirty ? ' • Alterado' : ''}`
+                      : mediaListView
+                      ? mediaListView.kind === 'radio'
+                        ? 'Arquivo de Rádio'
+                        : 'Playlist M3U8 / M3U'
+                      : archiveView
+                      ? `7-Zip • ${archiveView.engine}`
+                      : 'Raiz do Console'}
+                  </span>
                 </div>
                 <div className="text-[12px] font-bold truncate font-mono" style={{ color: theme.text }}>
-                  {archiveView ? archiveView.path : currentPath}
+                  {editorView
+                    ? editorView.path
+                    : mediaListView
+                    ? mediaListView.path
+                    : archiveView
+                    ? archiveView.path
+                    : currentPath}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              {!archiveView && (
+              {!isSubView && (
                 <>
                   <button
                     type="button"
@@ -1053,6 +1629,58 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                   </button>
                 </>
               )}
+
+              {editorView && (
+                <>
+                  {editorView.isScript && (
+                    <button
+                      type="button"
+                      onClick={() => void launchR36sTarget(editorView.path)}
+                      className="px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
+                      style={{
+                        backgroundColor: mixRgb(theme.elevated, theme.text, 0.08),
+                        color: theme.text,
+                        border: `1px solid ${themeHairline(theme)}`,
+                      }}
+                      title="Executar script .sh no console"
+                    >
+                      <Terminal className="w-3 h-3" style={{ color: theme.accent }} />
+                      <span>Executar</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={editorView.saving}
+                    onClick={() => void saveEditorFile()}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-60"
+                    style={{
+                      backgroundColor: theme.accent,
+                      color: theme.bg,
+                    }}
+                    title="Salvar alterações (START)"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{editorView.saving ? 'Salvando...' : 'Salvar (START)'}</span>
+                  </button>
+                </>
+              )}
+
+              {mediaListView && (
+                <button
+                  type="button"
+                  onClick={() => void openTextEditor(mediaListView.path)}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
+                  style={{
+                    backgroundColor: mixRgb(theme.elevated, theme.text, 0.08),
+                    color: theme.text,
+                    border: `1px solid ${themeHairline(theme)}`,
+                  }}
+                >
+                  <FileText className="w-3 h-3" style={{ color: theme.accent }} />
+                  <span>Editar texto (X)</span>
+                </button>
+              )}
+
               {archiveView && (
                 <>
                   <button
@@ -1089,7 +1717,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           </div>
 
           {/* Quick Roots Navigation Strip */}
-          {!archiveView && (
+          {!isSubView && (
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
               {quickRoots.map((root) => {
                 const active = currentPath === root.path;
@@ -1116,7 +1744,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           )}
 
           {/* Clipboard / Selection Context Bar */}
-          {!archiveView && (clipboard || selectedPaths.size > 0) && (
+          {!isSubView && (clipboard || selectedPaths.size > 0) && (
             <div
               className="rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 shrink-0"
               style={{
@@ -1203,211 +1831,377 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             </div>
           )}
 
-          {/* Main File / Archive List */}
-          <div
-            ref={listRef}
-            className="flex-1 min-h-0 overflow-y-auto kp-scroll rounded-xl p-1.5 space-y-1"
-            style={modernPanelStyle(theme, 12)}
-          >
-            {loading && !archiveView ? (
-              <div className="h-full flex items-center justify-center text-[12px]" style={{ color: theme.muted }}>
-                Carregando arquivos...
+          {/* Main Content Area: Text Editor OR Media/Radio List OR Archive Viewer OR Directory List */}
+          {editorView ? (
+            <div
+              className="flex-1 min-h-0 flex flex-col rounded-xl overflow-hidden"
+              style={modernPanelStyle(theme, 12)}
+            >
+              <div
+                className="px-3 py-1.5 flex items-center justify-between text-[10px] font-mono shrink-0"
+                style={{
+                  color: theme.muted,
+                  borderBottom: `1px solid ${themeHairline(theme)}`,
+                  backgroundColor: mixRgb(theme.panel, theme.bg, 0.35),
+                }}
+              >
+                <span className="truncate font-semibold" style={{ color: theme.text }}>
+                  {editorView.name}
+                  {editorDirty ? ' *' : ''}
+                </span>
+                <span className="tabular-nums shrink-0">
+                  {editorLines.length} linha(s) • {editorView.content.length} caracteres • UTF-8
+                </span>
               </div>
-            ) : error ? (
-              <div className="h-full flex flex-col items-center justify-center gap-2 text-center px-4">
-                <div className="text-[12px] font-semibold text-red-300">{error}</div>
-                <button
-                  type="button"
-                  onClick={() => void loadDirectory('/')}
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
-                  style={{ backgroundColor: theme.accent, color: theme.bg }}
+
+              <div className="flex-1 min-h-0 flex overflow-hidden">
+                <div
+                  ref={editorGutterRef}
+                  aria-hidden="true"
+                  className="w-10 py-2.5 pr-2 text-right font-mono text-[11px] leading-[18px] select-none overflow-hidden shrink-0 tabular-nums"
+                  style={{
+                    color: theme.dim,
+                    backgroundColor: mixRgb(theme.bg, theme.panel, 0.35),
+                    borderRight: `1px solid ${themeHairline(theme)}`,
+                  }}
                 >
-                  Voltar à Raiz (/)
-                </button>
+                  {editorLines.map((_, idx) => (
+                    <div key={idx}>{idx + 1}</div>
+                  ))}
+                </div>
+                <textarea
+                  value={editorView.content}
+                  onChange={(e) =>
+                    setEditorView((prev) => (prev ? { ...prev, content: e.target.value } : prev))
+                  }
+                  onScroll={(e) => {
+                    if (editorGutterRef.current) {
+                      editorGutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                      e.preventDefault();
+                      void saveEditorFile();
+                    }
+                  }}
+                  spellCheck={false}
+                  className="flex-1 min-w-0 h-full resize-none outline-none p-2.5 font-mono text-[11.5px] leading-[18px] kp-scroll"
+                  style={{
+                    backgroundColor: mixRgb(theme.bg, theme.panel, 0.18),
+                    color: theme.text,
+                    tabSize: 2,
+                  }}
+                />
               </div>
-            ) : archiveView ? (
-              archiveView.items.length === 0 ? (
+            </div>
+          ) : (
+            <div
+              ref={listRef}
+              className="flex-1 min-h-0 overflow-y-auto kp-scroll rounded-xl p-1.5 space-y-1"
+              style={modernPanelStyle(theme, 12)}
+            >
+              {loading && !archiveView && !mediaListView ? (
                 <div className="h-full flex items-center justify-center text-[12px]" style={{ color: theme.muted }}>
-                  Arquivo compactado vazio
+                  Carregando arquivos...
+                </div>
+              ) : error ? (
+                <div className="h-full flex flex-col items-center justify-center gap-2 text-center px-4">
+                  <div className="text-[12px] font-semibold text-red-300">{error}</div>
+                  <button
+                    type="button"
+                    onClick={() => void loadDirectory('/')}
+                    className="px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
+                    style={{ backgroundColor: theme.accent, color: theme.bg }}
+                  >
+                    Voltar à Raiz (/)
+                  </button>
+                </div>
+              ) : mediaListView ? (
+                mediaListView.items.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center gap-2 text-[12px]" style={{ color: theme.muted }}>
+                    <span>Nenhuma faixa, canal ou estação encontrada neste arquivo</span>
+                    <button
+                      type="button"
+                      onClick={() => void openTextEditor(mediaListView.path)}
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
+                      style={{ backgroundColor: theme.accent, color: theme.bg }}
+                    >
+                      Abrir no Editor de Texto
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      className="px-2.5 py-1.5 text-[10px] flex items-center justify-between border-b"
+                      style={{ color: theme.muted, borderColor: themeHairline(theme) }}
+                    >
+                      <span className="tabular-nums">
+                        {mediaListView.items.length}{' '}
+                        {mediaListView.kind === 'radio' ? 'estação(ões) de rádio' : 'item(ns) na playlist'}
+                      </span>
+                      <span>B reproduzir • X editar texto • A voltar</span>
+                    </div>
+                    {mediaListView.items.map((item, idx) => {
+                      const focused = idx === mediaListView.selectedIdx;
+                      return (
+                        <div
+                          key={`${item.url}-${idx}`}
+                          data-fm-row={idx}
+                          onClick={() => {
+                            setMediaListView((prev) => (prev ? { ...prev, selectedIdx: idx } : prev));
+                            playParsedMediaItem(item, mediaListView.kind);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 cursor-pointer"
+                          style={modernCardStyle(theme, focused, 8)}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            {mediaListView.kind === 'radio' ? (
+                              <Radio className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
+                            ) : item.isVideo ? (
+                              <FileVideo className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
+                            ) : (
+                              <FileAudio className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[11.5px] font-semibold truncate" style={{ color: theme.text }}>
+                                {item.title}
+                              </div>
+                              <div className="text-[9.5px] font-mono truncate" style={{ color: theme.muted }}>
+                                {item.group} • {item.url}
+                              </div>
+                            </div>
+                          </div>
+                          <span
+                            className="text-[10px] font-bold flex items-center gap-1 shrink-0"
+                            style={{ color: focused ? theme.accent : theme.muted }}
+                          >
+                            <Play className="w-3 h-3" />
+                            <span>{item.isLocal ? 'LOCAL' : item.isVideo ? 'HLS' : 'RÁDIO'}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </>
+                )
+              ) : archiveView ? (
+                archiveView.items.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-[12px]" style={{ color: theme.muted }}>
+                    Arquivo compactado vazio
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      className="px-2.5 py-1.5 text-[10px] flex items-center justify-between border-b"
+                      style={{ color: theme.muted, borderColor: themeHairline(theme) }}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {archiveView.encrypted && <Lock className="w-3 h-3" style={{ color: theme.accent }} />}
+                        <span>
+                          {archiveView.items.length} item(ns) • Total descompactado:{' '}
+                          <strong className="tabular-nums" style={{ color: theme.text }}>
+                            {formatBytesShort(archiveView.totalSize)}
+                          </strong>
+                        </span>
+                      </span>
+                      <span>A voltar • B extrair</span>
+                    </div>
+                    {archiveView.items.map((item, idx) => {
+                      const focused = idx === archiveView.selectedIdx;
+                      return (
+                        <div
+                          key={`${item.path}-${idx}`}
+                          data-fm-row={idx}
+                          onClick={() => setArchiveView((prev) => (prev ? { ...prev, selectedIdx: idx } : prev))}
+                          className="px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 cursor-pointer"
+                          style={modernCardStyle(theme, focused, 8)}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            {item.is_dir ? (
+                              <Folder className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
+                            ) : (
+                              <FileIcon className="w-3.5 h-3.5 shrink-0" style={{ color: theme.muted }} />
+                            )}
+                            <span className="text-[11px] font-medium truncate font-mono" style={{ color: theme.text }}>
+                              {item.path}
+                            </span>
+                            {item.encrypted && <Lock className="w-3 h-3 shrink-0" style={{ color: theme.accent }} />}
+                          </div>
+                          <span
+                            className="text-[10px] tabular-nums shrink-0 font-mono"
+                            style={{ color: theme.muted }}
+                          >
+                            {item.is_dir ? 'PASTA' : formatBytesShort(item.size)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </>
+                )
+              ) : entries.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center gap-1.5 text-[12px]" style={{ color: theme.muted }}>
+                  <Folder className="w-6 h-6 opacity-50" />
+                  <span>Pasta vazia</span>
+                  <span className="text-[10px]">Pressione X para criar uma pasta ou colar itens</span>
                 </div>
               ) : (
-                <>
-                  <div
-                    className="px-2.5 py-1.5 text-[10px] flex items-center justify-between border-b"
-                    style={{ color: theme.muted, borderColor: themeHairline(theme) }}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      {archiveView.encrypted && <Lock className="w-3 h-3" style={{ color: theme.accent }} />}
-                      <span>
-                        {archiveView.items.length} item(ns) • Total descompactado:{' '}
-                        <strong className="tabular-nums" style={{ color: theme.text }}>
-                          {formatBytesShort(archiveView.totalSize)}
-                        </strong>
-                      </span>
-                    </span>
-                    <span>A voltar • B extrair</span>
-                  </div>
-                  {archiveView.items.map((item, idx) => {
-                    const focused = idx === archiveView.selectedIdx;
-                    return (
-                      <div
-                        key={`${item.path}-${idx}`}
-                        data-fm-row={idx}
-                        onClick={() => setArchiveView((prev) => (prev ? { ...prev, selectedIdx: idx } : prev))}
-                        className="px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 cursor-pointer"
-                        style={modernCardStyle(theme, focused, 8)}
-                      >
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          {item.is_dir ? (
-                            <Folder className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
-                          ) : (
-                            <FileIcon className="w-3.5 h-3.5 shrink-0" style={{ color: theme.muted }} />
-                          )}
-                          <span className="text-[11px] font-medium truncate font-mono" style={{ color: theme.text }}>
-                            {item.path}
-                          </span>
-                          {item.encrypted && <Lock className="w-3 h-3 shrink-0" style={{ color: theme.accent }} />}
-                        </div>
-                        <span
-                          className="text-[10px] tabular-nums shrink-0 font-mono"
-                          style={{ color: theme.muted }}
+                entries.map((entry, idx) => {
+                  const focused = idx === selectedIdx;
+                  const checked = selectedPaths.has(entry.path);
+                  const typeTag = formatEntryTag(entry);
+                  return (
+                    <div
+                      key={entry.path}
+                      data-fm-row={idx}
+                      onClick={() => setSelectedIdx(idx)}
+                      onDoubleClick={() => openEntry(entry)}
+                      className="px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                      style={modernCardStyle(theme, focused, 9)}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelectPath(entry.path);
+                          }}
+                          className="p-0.5 cursor-pointer shrink-0"
+                          style={{ color: checked ? theme.accent : theme.dim }}
+                          title="Selecionar item (Y)"
                         >
-                          {item.is_dir ? 'PASTA' : formatBytesShort(item.size)}
-                        </span>
+                          {checked ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                        </button>
+                        {renderEntryIcon(entry, focused)}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedIdx(idx);
+                            openEntry(entry);
+                          }}
+                          className="text-left min-w-0 flex-1 cursor-pointer"
+                        >
+                          <div className="text-[12px] font-semibold truncate" style={{ color: theme.text }}>
+                            {entry.name}
+                          </div>
+                        </button>
                       </div>
-                    );
-                  })}
-                </>
-              )
-            ) : entries.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center gap-1.5 text-[12px]" style={{ color: theme.muted }}>
-                <Folder className="w-6 h-6 opacity-50" />
-                <span>Pasta vazia</span>
-                <span className="text-[10px]">Pressione X para criar uma pasta ou colar itens</span>
-              </div>
-            ) : (
-              entries.map((entry, idx) => {
-                const focused = idx === selectedIdx;
-                const checked = selectedPaths.has(entry.path);
-                return (
-                  <div
-                    key={entry.path}
-                    data-fm-row={idx}
-                    onClick={() => setSelectedIdx(idx)}
-                    onDoubleClick={() => openEntry(entry)}
-                    className="px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 cursor-pointer transition-colors"
-                    style={modernCardStyle(theme, focused, 9)}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleSelectPath(entry.path);
-                        }}
-                        className="p-0.5 cursor-pointer shrink-0"
-                        style={{ color: checked ? theme.accent : theme.dim }}
-                        title="Selecionar item (Y)"
-                      >
-                        {checked ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-                      </button>
-                      {renderEntryIcon(entry, focused)}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedIdx(idx);
-                          openEntry(entry);
-                        }}
-                        className="text-left min-w-0 flex-1 cursor-pointer"
-                      >
-                        <div className="text-[12px] font-semibold truncate" style={{ color: theme.text }}>
-                          {entry.name}
-                        </div>
-                      </button>
-                    </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] font-mono tabular-nums" style={{ color: theme.muted }}>
-                        {entry.isDir
-                          ? 'PASTA'
-                          : entry.isArchive
-                          ? `7Z/ZIP • ${formatBytesShort(entry.size)}`
-                          : formatBytesShort(entry.size)}
-                      </span>
-                      <div className="flex items-center gap-0.5">
-                        {entry.isArchive && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-mono tabular-nums" style={{ color: theme.muted }}>
+                          {entry.isDir
+                            ? 'PASTA'
+                            : typeTag
+                            ? `${typeTag} • ${formatBytesShort(entry.size)}`
+                            : formatBytesShort(entry.size)}
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          {entry.isArchive && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                requestExtract(entry.path, true);
+                              }}
+                              className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                              style={{ color: theme.accent }}
+                              title="Descompactar em subpasta"
+                            >
+                              <PackageOpen className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {(isEntryScript(entry) || isEntryExecutable(entry)) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalFocusIdx(0);
+                                setModal({ kind: 'exec_choice', target: entry });
+                              }}
+                              className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                              style={{ color: theme.accent }}
+                              title="Executar script .sh / EmulationStation"
+                            >
+                              <Terminal className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {!entry.isDir && isEntryText(entry) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void openTextEditor(entry.path);
+                              }}
+                              className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                              style={{ color: theme.muted }}
+                              title="Editar no Editor de Texto"
+                            >
+                              <FileText className="w-3 h-3" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              requestExtract(entry.path, true);
+                              setClipboard({ mode: 'copy', items: [entry.path] });
+                              notify(`"${entry.name}" copiado`);
                             }}
                             className="p-1 rounded hover:bg-white/10 cursor-pointer"
-                            style={{ color: theme.accent }}
-                            title="Descompactar em subpasta"
+                            style={{ color: theme.muted }}
+                            title="Copiar"
                           >
-                            <PackageOpen className="w-3.5 h-3.5" />
+                            <Copy className="w-3 h-3" />
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setClipboard({ mode: 'copy', items: [entry.path] });
-                            notify(`"${entry.name}" copiado`);
-                          }}
-                          className="p-1 rounded hover:bg-white/10 cursor-pointer"
-                          style={{ color: theme.muted }}
-                          title="Copiar"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTextInput(entry.name);
-                            setModal({ kind: 'rename', target: entry });
-                          }}
-                          className="p-1 rounded hover:bg-white/10 cursor-pointer"
-                          style={{ color: theme.muted }}
-                          title="Renomear"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setModalFocusIdx(0);
-                            setModal({ kind: 'actions', target: entry });
-                          }}
-                          className="p-1 rounded hover:bg-white/10 cursor-pointer"
-                          style={{ color: theme.muted }}
-                          title="Mais ações"
-                        >
-                          <MoreHorizontal className="w-3.5 h-3.5" />
-                        </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTextInput(entry.name);
+                              setModal({ kind: 'rename', target: entry });
+                            }}
+                            className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                            style={{ color: theme.muted }}
+                            title="Renomear"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setModalFocusIdx(0);
+                              setModal({ kind: 'actions', target: entry });
+                            }}
+                            className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                            style={{ color: theme.muted }}
+                            title="Mais ações"
+                          >
+                            <MoreHorizontal className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                  );
+                })
+              )}
+            </div>
+          )}
 
           {/* Compact Status Footer */}
           <div
             className="px-2 py-0.5 flex items-center justify-between text-[10px] shrink-0"
             style={{ color: theme.muted }}
           >
-            <span className="tabular-nums">
-              {archiveView
+            <span className="tabular-nums truncate">
+              {editorView
+                ? 'START / Ctrl+S salvar • A sair do editor'
+                : mediaListView
+                ? `${mediaListView.items.length} item(ns) • B reproduzir • X editar • A voltar`
+                : archiveView
                 ? `${archiveView.items.length} item(ns) no arquivo`
-                : `${entries.length} item(ns) • B abrir • X ações • Y selecionar • L1 atalhos`}
+                : `${entries.length} item(ns) • B abrir/tocar • X ações • Y selecionar • L1 atalhos`}
             </span>
-            <span className="font-mono">7-Zip • ZIP / 7Z / RAR</span>
+            <span className="font-mono shrink-0">Editor • .sh • M3U8 • 7-Zip</span>
           </div>
         </div>
 
@@ -1419,7 +2213,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             onClick={() => setModal(null)}
           >
             <div
-              className="w-full max-w-[420px] rounded-2xl p-3.5 space-y-2.5 max-h-[88%] flex flex-col"
+              className="w-full max-w-[440px] rounded-2xl p-3.5 space-y-2.5 max-h-[88%] flex flex-col"
               style={{
                 backgroundColor: theme.panel,
                 border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
@@ -1427,6 +2221,162 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
               }}
               onClick={(e) => e.stopPropagation()}
             >
+              {modal.kind === 'exec_choice' && (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Terminal className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-bold truncate" style={{ color: theme.text }}>
+                          {isEntryScript(modal.target) ? 'Script de Jogo R36S (.sh)' : 'Executável / EmulationStation'}
+                        </div>
+                        <div className="text-[10px] font-mono truncate" style={{ color: theme.muted }}>
+                          {modal.target.path}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModal(null)}
+                      className="p-1 rounded-lg cursor-pointer"
+                      style={{ color: theme.muted }}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {execChoiceOptions.map((opt, idx) => {
+                      const focused = idx === modalFocusIdx;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={opt.run}
+                          onMouseEnter={() => setModalFocusIdx(idx)}
+                          className="w-full text-left px-3 py-2 rounded-xl cursor-pointer transition-colors"
+                          style={modernCardStyle(theme, focused, 10)}
+                        >
+                          <div className="text-[12px] font-semibold" style={{ color: theme.text }}>
+                            {opt.label}
+                          </div>
+                          <div className="text-[10px]" style={{ color: theme.muted }}>
+                            {opt.desc}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {modal.kind === 'exec_console' && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Terminal className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-bold truncate" style={{ color: theme.text }}>
+                          Lançador R36S • {modal.preview.name}
+                        </div>
+                        <div className="text-[10px] font-mono truncate" style={{ color: theme.muted }}>
+                          {modal.preview.interpreter} • {modal.preview.targetDir}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModal(null)}
+                      className="p-1 rounded-lg cursor-pointer"
+                      style={{ color: theme.muted }}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div
+                    className="rounded-xl p-2.5 font-mono text-[10.5px] leading-relaxed space-y-1 max-h-[200px] overflow-y-auto kp-scroll"
+                    style={{
+                      backgroundColor: mixRgb(theme.bg, '#000000', 0.45),
+                      border: `1px solid ${themeHairline(theme)}`,
+                      color: theme.text,
+                    }}
+                  >
+                    {modal.preview.logLines.map((line, i) => (
+                      <div key={i} className="break-words">
+                        <span style={{ color: theme.accent }}>$ </span>
+                        <span>{line}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2">
+                    {modal.preview.kind === 'script' && (
+                      <button
+                        type="button"
+                        onClick={() => void openTextEditor(modal.preview.path)}
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer"
+                        style={{ backgroundColor: theme.elevated, color: theme.text }}
+                      >
+                        Editar script
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setModal(null)}
+                      className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
+                      style={{ backgroundColor: theme.accent, color: theme.bg }}
+                    >
+                      Fechar (B)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {modal.kind === 'editor_unsaved' && (
+                <div className="space-y-3">
+                  <div className="text-[13px] font-bold" style={{ color: theme.text }}>
+                    Alterações não salvas
+                  </div>
+                  <div className="text-[12px]" style={{ color: theme.muted }}>
+                    Deseja salvar as alterações em <strong style={{ color: theme.text }}>{editorView?.name}</strong> antes de sair do editor?
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModal(null);
+                        setEditorView(null);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer"
+                      style={{
+                        backgroundColor: theme.elevated,
+                        color: theme.text,
+                        border: modalFocusIdx === 1 ? `1px solid ${theme.accent}` : `1px solid ${themeHairline(theme)}`,
+                      }}
+                    >
+                      Descartar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModal(null);
+                        void saveEditorFile().then((ok) => {
+                          if (ok) setEditorView(null);
+                        });
+                      }}
+                      className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
+                      style={{
+                        backgroundColor: theme.accent,
+                        color: theme.bg,
+                        boxShadow: modalFocusIdx === 0 ? `0 0 0 2px ${rgbToRgba(theme.accent, 0.55)}` : undefined,
+                      }}
+                    >
+                      Salvar e Sair
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {modal.kind === 'actions' && (
                 <>
                   <div className="flex items-center justify-between">
@@ -1502,6 +2452,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                           onClick={() => {
                             setModal(null);
                             setArchiveView(null);
+                            setEditorView(null);
+                            setMediaListView(null);
                             void loadDirectory(root.path);
                           }}
                           onMouseEnter={() => setModalFocusIdx(idx)}

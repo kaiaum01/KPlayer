@@ -69,12 +69,12 @@ import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_179539140
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.1.2';
+const APP_VERSION = '2.1.3';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Novo Gerenciador de Arquivos completo em Arquivos (separado de Músicas e Vídeos): acesso à raiz (/), criar pastas, copiar, mover, renomear, apagar com confirmação e seleção múltipla.',
-  'Integração oficial do 7-Zip público (ip7z/7zip) para abrir e descompactar ZIP, 7Z, RAR e TAR — incluindo arquivos protegidos por senha.',
-  'Barra de progresso em tempo real ao copiar, mover, apagar ou descompactar com velocidade (MB/s), tempo restante (ETA) e botão de cancelar.',
-  'Gerenciador de Músicas e Vídeos preservado intacto, com áudio ALSA/libVLC e carregamento assíncrono da biblioteca mantidos.',
+  'Editor de texto integrado no Gerenciador de Arquivos (Arquivos): abra, edite e salve arquivos .txt, .xml, .html, .sh, .cfg, .json, .m3u8 e .pls direto no console.',
+  'Execução de scripts .sh de jogos do R36S e binários/executáveis do EmulationStation a partir do Gerenciador de Arquivos, com opção de executar ou editar.',
+  'Reprodução direta pelo Gerenciador de Arquivos de vídeos, músicas, playlists .m3u8/.m3u e arquivos de rádio (.pls, .xspf e .tsv).',
+  'Tela de novidades (changelog) unificada em um único quadro limpo e contínuo no aplicativo.',
 ];
 
 const RADIO_CATEGORIES = [
@@ -1194,7 +1194,7 @@ export default function App() {
   }, [screen, radioCategory, loadRadioCategory]);
 
   const playIptvItem = useCallback(
-    (ch: IptvChannel, sectionLabel: string) => {
+    (ch: IptvChannel, sectionLabel: string, fromScreen: ScreenMode = 'iptv') => {
       audioRef.current?.pause();
       setActiveRadio(null);
       setActiveVideoTitle(ch.name);
@@ -1205,7 +1205,7 @@ export default function App() {
       setIsPaused(false);
       setShowVideoOsd(true);
       recordHistory('iptv', ch.name, ch.group || sectionLabel);
-      setPrevScreen('iptv');
+      setPrevScreen(fromScreen);
       setScreen('video');
     },
     [recordHistory]
@@ -1701,7 +1701,15 @@ export default function App() {
       if (screen === 'video') {
         if (btn === 'A') {
           setIsPaused(true);
-          setScreen(prevScreen === 'iptv' ? 'iptv' : 'library');
+          setScreen(
+            prevScreen === 'iptv'
+              ? 'iptv'
+              : prevScreen === 'filemanager'
+              ? 'filemanager'
+              : prevScreen === 'news'
+              ? 'news'
+              : 'library'
+          );
         } else if (btn === 'B') {
           setIsPaused((p) => !p);
         } else if (btn === 'X') {
@@ -2218,7 +2226,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.1.2 • R36S
+                      v2.1.3 • R36S
                     </div>
                   </div>
 
@@ -2497,7 +2505,7 @@ export default function App() {
                     location={locationLabel}
                   />
                   <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-4 flex flex-col w-full max-w-[820px] mx-auto">
-                    <div className="shrink-0 mb-3 flex items-center justify-between gap-2">
+                    <div className="shrink-0 mb-3 flex items-baseline justify-between gap-2">
                       <div>
                         <h2
                           style={{ color: theme.text }}
@@ -2510,30 +2518,33 @@ export default function App() {
                         </p>
                       </div>
                       <span
-                        style={{
-                          backgroundColor: rgbToRgba(theme.accent, 0.16),
-                          border: `1px solid ${rgbToRgba(theme.accent, 0.45)}`,
-                          color: theme.accent,
-                        }}
-                        className="px-2.5 py-1 rounded-full text-[11px] font-extrabold shrink-0"
+                        style={{ color: theme.accent }}
+                        className="text-[12px] font-extrabold font-mono tabular-nums tracking-wide shrink-0"
                       >
-                        v{ver}
+                        v{ver} • R36S
                       </span>
                     </div>
 
-                    <div className="flex-1 min-h-0 overflow-y-auto kp-scroll space-y-2 pr-0.5">
+                    {/* Unified single changelog frame */}
+                    <div
+                      style={{ ...modernPanelStyle(theme, 16) }}
+                      className="flex-1 min-h-0 overflow-y-auto kp-scroll px-4 py-2"
+                    >
                       {notes.map((item, idx) => (
                         <div
                           key={idx}
-                          style={{ ...modernPanelStyle(theme, 12) }}
-                          className="px-3.5 py-2.5 flex items-start gap-3"
+                          className="py-3 flex items-start gap-3"
+                          style={{
+                            borderBottom:
+                              idx < notes.length - 1 ? `1px solid ${themeHairline(theme)}` : undefined,
+                          }}
                         >
                           <span
                             style={{
                               backgroundColor: theme.accent,
-                              boxShadow: `0 0 8px ${rgbToRgba(theme.accent, 0.55)}`,
+                              boxShadow: `0 0 8px ${rgbToRgba(theme.accent, 0.5)}`,
                             }}
-                            className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+                            className="w-2 h-2 rounded-full mt-1.5 shrink-0"
                           />
                           <div
                             style={{ color: theme.text }}
@@ -2932,7 +2943,7 @@ export default function App() {
                           spriteCol: 2,
                           tag: 'Gerenciador',
                           name: tr('Arquivos', language),
-                          desc: 'Raiz, pastas e 7-Zip',
+                          desc: 'Raiz, Editor, .sh e 7-Zip',
                         },
                         {
                           kind: 'radio',
@@ -3841,7 +3852,15 @@ export default function App() {
                 onToggleOsd={() => setShowVideoOsd((v) => !v)}
                 onBack={() => {
                   setIsPaused(true);
-                  setScreen(prevScreen === 'iptv' ? 'iptv' : 'library');
+                  setScreen(
+                    prevScreen === 'iptv'
+                      ? 'iptv'
+                      : prevScreen === 'filemanager'
+                      ? 'filemanager'
+                      : prevScreen === 'news'
+                      ? 'news'
+                      : 'library'
+                  );
                 }}
                 onOpenOptions={() => {
                   setPrevScreen('video');
@@ -4125,7 +4144,7 @@ export default function App() {
               />
             )}
 
-            {/* ==================== GERENCIADOR DE ARQUIVOS COMPLETO (RAIZ + 7-ZIP) ==================== */}
+            {/* ==================== GERENCIADOR DE ARQUIVOS COMPLETO (RAIZ + EDITOR + .SH + 7-ZIP) ==================== */}
             {screen === 'filemanager' && (
               <FileManagerScreen
                 ref={fileManagerRef}
@@ -4135,6 +4154,66 @@ export default function App() {
                 toast={toast}
                 notify={notify}
                 onBack={() => setScreen('home')}
+                onPlayMedia={(item) => {
+                  const extMatch = item.name.match(/\.([^.]+)$/);
+                  playMediaTrack({
+                    id: `fm:${item.path}`,
+                    name: item.name,
+                    title: item.name.replace(/\.[^.]+$/, ''),
+                    artist: item.kind === 'video' ? 'Vídeo (Arquivos)' : 'Áudio (Arquivos)',
+                    album: 'Gerenciador de Arquivos',
+                    folder: item.path.slice(0, Math.max(1, item.path.lastIndexOf('/'))),
+                    format: (extMatch ? extMatch[1] : item.kind === 'video' ? 'MP4' : 'WAV').toUpperCase(),
+                    sizeBytes: 0,
+                    kind: item.kind,
+                    durationMs: 0,
+                    url: item.url,
+                  });
+                  if (item.kind === 'audio') {
+                    notify(`Tocando áudio: ${item.name}`);
+                  }
+                }}
+                onPlayRadio={(item) => {
+                  playRadioStation({
+                    uuid: `fm-radio:${item.url}`,
+                    name: item.name,
+                    url: item.url,
+                    country: item.group || 'Arquivo de Rádio',
+                    tags: 'Arquivo local',
+                    codec: 'STREAM',
+                    favicon: '',
+                    bitrate: 0,
+                  });
+                  notify(`Sintonizando rádio: ${item.name}`);
+                }}
+                onPlayPlaylistStream={(item) => {
+                  if (item.isVideo) {
+                    playIptvItem(
+                      {
+                        id: `fm-pl:${item.url}`,
+                        name: item.name,
+                        url: item.url,
+                        group: item.group || 'Playlist',
+                        logo: '',
+                        mediaType: 'live',
+                      },
+                      item.group || 'Playlist M3U8',
+                      'filemanager'
+                    );
+                  } else {
+                    playRadioStation({
+                      uuid: `fm-stream:${item.url}`,
+                      name: item.name,
+                      url: item.url,
+                      country: item.group || 'Playlist',
+                      tags: 'Stream M3U8',
+                      codec: 'STREAM',
+                      favicon: '',
+                      bitrate: 0,
+                    });
+                    notify(`Reproduzindo stream: ${item.name}`);
+                  }
+                }}
               />
             )}
 
@@ -4515,7 +4594,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.1.2 — Edição R36S
+                  KPlayer v2.1.3 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4531,7 +4610,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.1.2 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.1.3 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4540,13 +4619,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.1.2-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.1.3-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer.sh (v2.1.2 estável)
+                    KPlayer.sh (v2.1.3 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4610,7 +4689,7 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.2-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.3-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
@@ -4623,22 +4702,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.1.2, Gerenciador de Arquivos completo com acesso à raiz (/), motor oficial 7-Zip (ip7z/7zip) para ZIP/7Z/RAR com senha, barra de progresso com velocidade (MB/s) e tempo restante (ETA), áudio ALSA/libVLC, Notícias com fotos/vídeos e artes PNG transparentes em kplayer/scraper/.
+                Inclui binário ARM64 nativo v2.1.3, Gerenciador de Arquivos completo com Editor de Texto (.txt/.xml/.html/.sh), execução de scripts .sh de jogos e binários do EmulationStation, reprodução direta de vídeos, músicas, playlists .m3u8 e rádios, 7-Zip com senha e barra de progresso/velocidade/ETA.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.1.2-R36S.zip"
+                download="KPlayer-v2.1.3-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.1.2-R36S.zip
+                ⬇ Baixar KPlayer-v2.1.3-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.1.2-R36S.zip.sha256"
+                download="KPlayer-v2.1.3-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

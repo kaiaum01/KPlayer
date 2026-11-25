@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "version": "2.1.2",
-  "nextVersion": "2.1.3",
+  "version": "2.1.3",
+  "nextVersion": "2.1.4",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.1.2",
-  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.2",
-  "releasedAt": "2026-11-25T11:25:55Z",
+  "releaseTag": "v2.1.3",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.3",
+  "releasedAt": "2026-11-25T12:00:00Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -25,24 +25,22 @@
     "resume.cfg"
   ],
   "notes": [
-    "Novo Gerenciador de Arquivos Completo (Arquivos na Home — Separado de Músicas e Vídeos):",
-    "Mantém o gerenciador de Músicas e Vídeos 100% intacto e adiciona um Gerenciador de Arquivos independente com acesso à pasta raiz do console (/) e a todos os arquivos e diretórios (",
-    "Operações completas: criar pastas, apagar arquivos e pastas (com confirmação explícita e proteção contra exclusão de pastas críticas do sistema), copiar, mover/recortar, colar (R1)",
-    "Integração Oficial do 7-Zip Público (github.com/ip7z/7zip):",
-    "Inclui o binário oficial estático ARM64 7zzs (com fallback automático em Python zipfile/tarfile) para abrir/navegar e descompactar .zip, .7z, .rar, .tar.*, .cbz, .cbr e .iso.",
-    "Suporte completo a arquivos protegidos por senha: detecta automaticamente arquivos criptografados, abre prompt de senha com máscara (Y para exibir/ocultar) e envia a senha de forma"
+    "Editor de texto integrado no Gerenciador de Arquivos (Arquivos): abra, edite e salve arquivos .txt, .xml, .html, .sh, .cfg, .json, .m3u8 e .pls direto no R36S.",
+    "Execução direta de scripts .sh de jogos do R36S e binários/executáveis do EmulationStation a partir do Gerenciador de Arquivos, com opção de executar no console ou editar o script.",
+    "Abertura e reprodução direta de vídeos, músicas, playlists .m3u8/.m3u e arquivos de rádio (.pls, .xspf e .tsv) sem sair do Gerenciador de Arquivos.",
+    "Tela de novidades (changelog) unificada em um único quadro limpo e contínuo no aplicativo."
   ],
   "r36s": {
-    "filename": "KPlayer-v2.1.2-R36S.zip",
-    "path": "updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
-    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
-    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.2/KPlayer-v2.1.2-R36S.zip",
-    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.2/KPlayer-v2.1.2-R36S.zip.sha256",
-    "sha256": "293d37de8948e0e112f4b40a918defb1ab63ee9f4575c97fa1c30087f87b1817",
-    "sizeBytes": 18133873
+    "filename": "KPlayer-v2.1.3-R36S.zip",
+    "path": "updates/v2.1.3/KPlayer-v2.1.3-R36S.zip",
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.3/KPlayer-v2.1.3-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.3/KPlayer-v2.1.3-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.3/KPlayer-v2.1.3-R36S.zip.sha256",
+    "sha256": "",
+    "sizeBytes": 0
   },
   "web": {
-    "version": "2.1.2",
+    "version": "2.1.3",
     "reloadRequired": true
   }
 }

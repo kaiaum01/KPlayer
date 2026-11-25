@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-CURRENT_FALLBACK = "2.1.2"
+CURRENT_FALLBACK = "2.1.3"
 UA = f"KPlayer-Updater/{CURRENT_FALLBACK}"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",

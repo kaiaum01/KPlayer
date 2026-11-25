@@ -17,6 +17,9 @@
 #define FM_MAX_ENTRIES 4096
 #define FM_MAX_CLIP 256
 #define FM_MAX_ARC_ENTRIES 2000
+#define FM_ED_MAX_LINES 2000
+#define FM_ED_MAX_BYTES (512 * 1024)
+#define FM_MAX_MEDIA_ITEMS 512
 
 typedef struct {
   char name[256];
@@ -24,6 +27,11 @@ typedef struct {
   bool is_dir;
   bool is_link;
   bool is_archive;
+  bool is_text;
+  bool is_script;
+  bool is_executable;
+  bool is_playlist;
+  bool is_radio;
   bool selected;
   long long size;
 } FmEntry;
@@ -35,9 +43,18 @@ typedef struct {
   long long size;
 } FmArcEntry;
 
+typedef struct {
+  char title[160];
+  char url[1024];
+  bool is_local;
+  bool is_video;
+} FmMediaItem;
+
 enum {
   FM_VIEW_BROWSE = 0,
-  FM_VIEW_ARCHIVE = 1
+  FM_VIEW_ARCHIVE = 1,
+  FM_VIEW_EDITOR = 2,
+  FM_VIEW_MEDIA_LIST = 3
 };
 
 enum {
@@ -46,15 +63,24 @@ enum {
   FM_MODAL_DELETE_CONFIRM = 2,
   FM_MODAL_KEYBOARD = 3,
   FM_MODAL_PROGRESS = 4,
-  FM_MODAL_ROOTS = 5
+  FM_MODAL_ROOTS = 5,
+  FM_MODAL_EXEC = 6,
+  FM_MODAL_EDITOR_MENU = 7,
+  FM_MODAL_EDITOR_EXIT = 8
 };
 
 enum {
   FM_KB_MKDIR = 0,
   FM_KB_RENAME = 1,
   FM_KB_PASSWORD_OPEN = 2,
-  FM_KB_PASSWORD_EXTRACT = 3
+  FM_KB_PASSWORD_EXTRACT = 3,
+  FM_KB_EDIT_LINE = 4,
+  FM_KB_NEW_LINE = 5
 };
+
+static bool fm_return_on_exit = false;
+static char fm_exec_target_path[PATH_MAX] = "";
+static bool fm_exec_is_script = false;
 
 static char fm_cwd[PATH_MAX] = "/";
 static char fm_app_dir[PATH_MAX] = ".";
@@ -82,12 +108,39 @@ static int fm_arc_count = 0;
 static int fm_arc_cursor = 0;
 static int fm_arc_scroll = 0;
 
+/* Native Text Editor state (v2.1.3) */
+static char fm_ed_path[PATH_MAX] = "";
+static char fm_ed_name[256] = "";
+static char **fm_ed_lines = NULL;
+static int fm_ed_count = 0;
+static int fm_ed_cap = 0;
+static int fm_ed_cursor = 0;
+static int fm_ed_scroll = 0;
+static bool fm_ed_dirty = false;
+static int fm_ed_menu_cursor = 0;
+static int fm_ed_exit_cursor = 0;
+
+/* Playlist (.m3u8/.m3u) & Radio (.pls/.tsv/.xspf) viewer state (v2.1.3) */
+static char fm_ml_path[PATH_MAX] = "";
+static char fm_ml_name[256] = "";
+static bool fm_ml_is_radio = false;
+static FmMediaItem *fm_ml_items = NULL;
+static int fm_ml_count = 0;
+static int fm_ml_cursor = 0;
+static int fm_ml_scroll = 0;
+
+/* Script (.sh) & EmulationStation executable launcher modal state (v2.1.3) */
+static char fm_exec_modal_path[PATH_MAX] = "";
+static char fm_exec_modal_name[256] = "";
+static bool fm_exec_modal_is_script = false;
+static int fm_exec_modal_cursor = 0;
+
 /* Modals & keyboard state */
 static int fm_modal = FM_MODAL_NONE;
 static int fm_action_cursor = 0;
 static int fm_root_cursor = 0;
 static int fm_kb_purpose = FM_KB_MKDIR;
-static char fm_kb_buf[160] = "";
+static char fm_kb_buf[512] = "";
 static char fm_kb_title[96] = "";
 static char fm_kb_sub[160] = "";
 static bool fm_kb_upper = false;
@@ -155,6 +208,12 @@ static const FmQuickRoot fm_quick_roots[] = {
 };
 #define FM_QUICK_ROOT_COUNT ((int)(sizeof(fm_quick_roots) / sizeof(fm_quick_roots[0])))
 
+static bool fm_has_ext(const char *name, const char *ext) {
+  if (!name || !ext) return false;
+  size_t nlen = strlen(name), elen = strlen(ext);
+  return nlen > elen && strcasecmp(name + nlen - elen, ext) == 0;
+}
+
 static bool fm_is_archive_name(const char *name) {
   if (!name || !name[0]) return false;
   static const char *exts[] = {
@@ -162,13 +221,84 @@ static bool fm_is_archive_name(const char *name) {
       ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".gz", ".bz2",
       ".xz", ".cbz", ".cbr", ".iso"
   };
-  size_t nlen = strlen(name);
   for (size_t i = 0; i < sizeof(exts) / sizeof(exts[0]); i++) {
-    size_t elen = strlen(exts[i]);
-    if (nlen > elen && strcasecmp(name + nlen - elen, exts[i]) == 0)
+    if (fm_has_ext(name, exts[i])) return true;
+  }
+  return false;
+}
+
+static bool fm_is_script_name(const char *name) {
+  return name && fm_has_ext(name, ".sh");
+}
+
+static bool fm_is_playlist_name(const char *name) {
+  return name && (fm_has_ext(name, ".m3u8") || fm_has_ext(name, ".m3u"));
+}
+
+static bool fm_strcasestr_local(const char *hay, const char *needle) {
+  if (!hay || !needle || !needle[0]) return false;
+  size_t nlen = strlen(needle);
+  for (const char *p = hay; *p; p++) {
+    if (strncasecmp(p, needle, nlen) == 0) return true;
+  }
+  return false;
+}
+
+static bool fm_is_radio_file(const char *name, const char *full_path) {
+  if (!name || !name[0]) return false;
+  if (fm_has_ext(name, ".pls") || fm_has_ext(name, ".xspf"))
+    return true;
+  if (fm_has_ext(name, ".tsv") || fm_has_ext(name, ".m3u")) {
+    if (fm_strcasestr_local(name, "radio") ||
+        (full_path && (fm_strcasestr_local(full_path, "/radios") ||
+                       fm_strcasestr_local(full_path, "radios_usuario"))))
       return true;
   }
   return false;
+}
+
+static bool fm_is_text_name(const char *name) {
+  if (!name || !name[0]) return false;
+  static const char *exts[] = {
+      ".txt", ".xml", ".html", ".htm", ".sh", ".cfg", ".conf", ".ini",
+      ".json", ".log", ".md", ".css", ".js", ".py", ".m3u", ".m3u8",
+      ".pls", ".xspf", ".tsv", ".csv", ".yaml", ".yml", ".nfo", ".lrc"
+  };
+  for (size_t i = 0; i < sizeof(exts) / sizeof(exts[0]); i++) {
+    if (fm_has_ext(name, exts[i])) return true;
+  }
+  return false;
+}
+
+static bool fm_is_executable_file(const char *full_path, mode_t mode_bits) {
+  if (!full_path || !S_ISREG(mode_bits)) return false;
+  FILE *f = fopen(full_path, "rb");
+  if (!f) return false;
+  unsigned char magic[4] = {0, 0, 0, 0};
+  size_t n = fread(magic, 1, 4, f);
+  fclose(f);
+  if (n >= 4 && magic[0] == 0x7f && magic[1] == 'E' && magic[2] == 'L' && magic[3] == 'F')
+    return true;
+  if (n >= 2 && magic[0] == '#' && magic[1] == '!' &&
+      (mode_bits & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0)
+    return true;
+  return false;
+}
+
+static const char *fm_file_badge(const FmEntry *e) {
+  if (!e) return "ARQ";
+  if (e->is_dir) return strcmp(e->name, "..") == 0 ? "VOLTAR" : "PASTA";
+  if (e->is_archive) return "7Z/ZIP";
+  if (e->is_script) return "SH";
+  if (e->is_executable) return "EXEC";
+  if (e->is_radio) return "RÁDIO";
+  if (e->is_playlist) return "M3U8";
+  if (supported(e->name)) return audio_file(e->name) ? "ÁUDIO" : "VÍDEO";
+  if (fm_has_ext(e->name, ".xml")) return "XML";
+  if (fm_has_ext(e->name, ".html") || fm_has_ext(e->name, ".htm")) return "HTML";
+  if (fm_has_ext(e->name, ".txt") || fm_has_ext(e->name, ".md")) return "TXT";
+  if (e->is_text) return "CFG";
+  return "ARQ";
 }
 
 static bool fm_is_protected_path(const char *path) {
@@ -237,11 +367,28 @@ static int fm_sort_entries(const void *a, const void *b) {
   return strcasecmp(ea->name, eb->name);
 }
 
+static void fm_ed_free(void) {
+  if (fm_ed_lines) {
+    for (int i = 0; i < fm_ed_count; i++) free(fm_ed_lines[i]);
+    free(fm_ed_lines);
+  }
+  fm_ed_lines = NULL;
+  fm_ed_count = 0;
+  fm_ed_cap = 0;
+  fm_ed_cursor = 0;
+  fm_ed_scroll = 0;
+  fm_ed_dirty = false;
+  fm_ed_path[0] = 0;
+  fm_ed_name[0] = 0;
+}
+
 static void fm_ensure_buffers(void) {
   if (!fm_entries)
     fm_entries = (FmEntry *)calloc(FM_MAX_ENTRIES, sizeof(FmEntry));
   if (!fm_arc_entries)
     fm_arc_entries = (FmArcEntry *)calloc(FM_MAX_ARC_ENTRIES, sizeof(FmArcEntry));
+  if (!fm_ml_items)
+    fm_ml_items = (FmMediaItem *)calloc(FM_MAX_MEDIA_ITEMS, sizeof(FmMediaItem));
 }
 
 static void fm_free_buffers(void) {
@@ -251,6 +398,10 @@ static void fm_free_buffers(void) {
   free(fm_arc_entries);
   fm_arc_entries = NULL;
   fm_arc_count = 0;
+  free(fm_ml_items);
+  fm_ml_items = NULL;
+  fm_ml_count = 0;
+  fm_ed_free();
 }
 
 static int fm_selected_count(void) {
@@ -307,9 +458,11 @@ static bool fm_scan_dir(const char *path) {
     bool is_link = S_ISLNK(lst.st_mode);
     bool is_dir = false;
     long long sz = 0;
+    mode_t eff_mode = lst.st_mode;
     if (stat(full, &st) == 0) {
       is_dir = S_ISDIR(st.st_mode);
       sz = is_dir ? 0 : (long long)st.st_size;
+      eff_mode = st.st_mode;
     } else {
       is_dir = S_ISDIR(lst.st_mode);
       sz = (long long)lst.st_size;
@@ -321,6 +474,12 @@ static bool fm_scan_dir(const char *path) {
     e->is_dir = is_dir;
     e->is_link = is_link;
     e->is_archive = !is_dir && fm_is_archive_name(de->d_name);
+    e->is_script = !is_dir && fm_is_script_name(de->d_name);
+    e->is_radio = !is_dir && fm_is_radio_file(de->d_name, full);
+    e->is_playlist = !is_dir && !e->is_radio && fm_is_playlist_name(de->d_name);
+    e->is_text = !is_dir && fm_is_text_name(de->d_name);
+    e->is_executable = !is_dir && !e->is_script && !e->is_archive && !e->is_text &&
+                       !supported(de->d_name) && fm_is_executable_file(full, eff_mode);
     e->size = sz;
   }
   closedir(d);
@@ -863,6 +1022,403 @@ static void fm_open_archive_entry(const char *arc_path, const char *arc_name,
   fm_modal = FM_MODAL_NONE;
 }
 
+/* ==================== v2.1.3 NATIVE TEXT EDITOR ==================== */
+
+static bool fm_ed_ensure_cap(int need) {
+  if (need <= fm_ed_cap) return true;
+  int ncap = fm_ed_cap ? fm_ed_cap * 2 : 64;
+  while (ncap < need) ncap *= 2;
+  if (ncap > FM_ED_MAX_LINES) ncap = FM_ED_MAX_LINES;
+  if (need > ncap) return false;
+  char **nl = (char **)realloc(fm_ed_lines, (size_t)ncap * sizeof(char *));
+  if (!nl) return false;
+  fm_ed_lines = nl;
+  fm_ed_cap = ncap;
+  return true;
+}
+
+static bool fm_ed_push_line(const char *s, size_t len) {
+  if (fm_ed_count >= FM_ED_MAX_LINES) return false;
+  if (!fm_ed_ensure_cap(fm_ed_count + 1)) return false;
+  char *copy = (char *)malloc(len + 1);
+  if (!copy) return false;
+  if (len > 0) memcpy(copy, s, len);
+  copy[len] = 0;
+  fm_ed_lines[fm_ed_count++] = copy;
+  return true;
+}
+
+static bool fm_ed_open(const char *path, const char *name) {
+  if (!path || !path[0]) return false;
+  struct stat st;
+  if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+    notify("Não foi possível abrir este arquivo");
+    return false;
+  }
+  if (st.st_size > FM_ED_MAX_BYTES) {
+    notify("Arquivo muito grande para o editor (máx. 512 KB)");
+    return false;
+  }
+  FILE *f = fopen(path, "rb");
+  if (!f) {
+    notify("Sem permissão para ler este arquivo");
+    return false;
+  }
+  size_t sz = (size_t)st.st_size;
+  char *buf = (char *)malloc(sz + 1);
+  if (!buf) { fclose(f); notify("Memória insuficiente"); return false; }
+  size_t rd = sz > 0 ? fread(buf, 1, sz, f) : 0;
+  fclose(f);
+  buf[rd] = 0;
+
+  /* Reject binary files containing NUL bytes */
+  for (size_t i = 0; i < rd; i++) {
+    if (buf[i] == '\0') {
+      free(buf);
+      notify("Arquivo binário não suportado no editor de texto");
+      return false;
+    }
+  }
+
+  fm_ed_free();
+  snprintf(fm_ed_path, sizeof(fm_ed_path), "%s", path);
+  snprintf(fm_ed_name, sizeof(fm_ed_name), "%.255s", name && name[0] ? name : path);
+
+  size_t start = 0;
+  for (size_t i = 0; i < rd; i++) {
+    if (buf[i] == '\n') {
+      size_t llen = i - start;
+      if (llen > 0 && buf[start + llen - 1] == '\r') llen--;
+      if (!fm_ed_push_line(buf + start, llen)) break;
+      start = i + 1;
+    }
+  }
+  if (start < rd || fm_ed_count == 0) {
+    size_t llen = rd - start;
+    if (llen > 0 && buf[start + llen - 1] == '\r') llen--;
+    fm_ed_push_line(buf + start, llen);
+  }
+  free(buf);
+
+  fm_ed_cursor = 0;
+  fm_ed_scroll = 0;
+  fm_ed_dirty = false;
+  fm_view = FM_VIEW_EDITOR;
+  fm_modal = FM_MODAL_NONE;
+  return true;
+}
+
+static bool fm_ed_replace_line(int idx, const char *text) {
+  if (idx < 0 || idx >= fm_ed_count || !text) return false;
+  size_t len = strlen(text);
+  char *copy = (char *)malloc(len + 1);
+  if (!copy) return false;
+  memcpy(copy, text, len + 1);
+  free(fm_ed_lines[idx]);
+  fm_ed_lines[idx] = copy;
+  fm_ed_dirty = true;
+  return true;
+}
+
+static bool fm_ed_insert_line(int after_idx, const char *text) {
+  if (fm_ed_count >= FM_ED_MAX_LINES) {
+    notify("Limite de linhas do editor atingido");
+    return false;
+  }
+  if (!fm_ed_ensure_cap(fm_ed_count + 1)) return false;
+  int pos = after_idx + 1;
+  if (pos < 0) pos = 0;
+  if (pos > fm_ed_count) pos = fm_ed_count;
+  size_t len = text ? strlen(text) : 0;
+  char *copy = (char *)malloc(len + 1);
+  if (!copy) return false;
+  if (len > 0) memcpy(copy, text, len);
+  copy[len] = 0;
+  for (int i = fm_ed_count; i > pos; i--)
+    fm_ed_lines[i] = fm_ed_lines[i - 1];
+  fm_ed_lines[pos] = copy;
+  fm_ed_count++;
+  fm_ed_cursor = pos;
+  fm_ed_dirty = true;
+  return true;
+}
+
+static void fm_ed_delete_line(int idx) {
+  if (idx < 0 || idx >= fm_ed_count) return;
+  if (fm_ed_count == 1) {
+    fm_ed_replace_line(0, "");
+    return;
+  }
+  free(fm_ed_lines[idx]);
+  for (int i = idx; i < fm_ed_count - 1; i++)
+    fm_ed_lines[i] = fm_ed_lines[i + 1];
+  fm_ed_count--;
+  if (fm_ed_cursor >= fm_ed_count) fm_ed_cursor = fm_ed_count - 1;
+  fm_ed_dirty = true;
+}
+
+static bool fm_ed_save(void) {
+  if (!fm_ed_path[0]) return false;
+  struct stat st;
+  bool had_stat = (stat(fm_ed_path, &st) == 0);
+  char tmp[PATH_MAX];
+  int tn = snprintf(tmp, sizeof(tmp), "%.4000s.kp_tmp", fm_ed_path);
+  if (tn < 0 || tn >= (int)sizeof(tmp)) {
+    notify("Caminho muito longo para salvar");
+    return false;
+  }
+  FILE *f = fopen(tmp, "wb");
+  if (!f) {
+    notify("Sem permissão de escrita neste arquivo");
+    return false;
+  }
+  bool ok = true;
+  for (int i = 0; i < fm_ed_count; i++) {
+    const char *line = fm_ed_lines[i] ? fm_ed_lines[i] : "";
+    size_t len = strlen(line);
+    if (len > 0 && fwrite(line, 1, len, f) != len) { ok = false; break; }
+    if (fputc('\n', f) == EOF) { ok = false; break; }
+  }
+  if (fclose(f) != 0) ok = false;
+  if (!ok) {
+    unlink(tmp);
+    notify("Falha ao gravar arquivo");
+    return false;
+  }
+  if (had_stat) chmod(tmp, st.st_mode & 07777);
+  if (rename(tmp, fm_ed_path) != 0) {
+    unlink(tmp);
+    notify("Não foi possível substituir arquivo (permissão)");
+    return false;
+  }
+  fm_ed_dirty = false;
+  notify("Arquivo salvo com sucesso");
+  return true;
+}
+
+/* ==================== v2.1.3 PLAYLIST (.m3u8/.m3u) & RADIO PARSER ==================== */
+
+static bool fm_is_http_url(const char *s) {
+  return s && (strncasecmp(s, "http://", 7) == 0 || strncasecmp(s, "https://", 8) == 0);
+}
+
+static void fm_trim_crlf(char *s) {
+  if (!s) return;
+  size_t len = strlen(s);
+  while (len > 0 && (s[len - 1] == '\n' || s[len - 1] == '\r' || s[len - 1] == ' ' || s[len - 1] == '\t'))
+    s[--len] = 0;
+}
+
+static bool fm_parse_media_list(const char *path, const char *name, bool is_radio_hint) {
+  fm_ensure_buffers();
+  if (!fm_ml_items || !path || !path[0]) return false;
+  FILE *f = fopen(path, "r");
+  if (!f) {
+    notify("Não foi possível ler o arquivo de mídia/lista");
+    return false;
+  }
+  fm_ml_count = 0;
+  fm_ml_is_radio = is_radio_hint;
+  snprintf(fm_ml_path, sizeof(fm_ml_path), "%s", path);
+  snprintf(fm_ml_name, sizeof(fm_ml_name), "%.255s", name && name[0] ? name : path);
+
+  char base_dir[PATH_MAX];
+  snprintf(base_dir, sizeof(base_dir), "%s", path);
+  char *sl = strrchr(base_dir, '/');
+  if (sl && sl > base_dir) *sl = 0;
+  else snprintf(base_dir, sizeof(base_dir), "/");
+
+  char line[1280];
+  if (fm_has_ext(name, ".pls")) {
+    char pls_urls[64][1024];
+    char pls_titles[64][160];
+    memset(pls_urls, 0, sizeof(pls_urls));
+    memset(pls_titles, 0, sizeof(pls_titles));
+    int max_idx = 0;
+    while (fgets(line, sizeof(line), f)) {
+      fm_trim_crlf(line);
+      if (strncasecmp(line, "File", 4) == 0) {
+        char *eq = strchr(line, '=');
+        if (eq) {
+          int idx = atoi(line + 4);
+          if (idx >= 1 && idx <= 64) {
+            snprintf(pls_urls[idx - 1], sizeof(pls_urls[0]), "%.1023s", eq + 1);
+            if (idx > max_idx) max_idx = idx;
+          }
+        }
+      } else if (strncasecmp(line, "Title", 5) == 0) {
+        char *eq = strchr(line, '=');
+        if (eq) {
+          int idx = atoi(line + 5);
+          if (idx >= 1 && idx <= 64) {
+            snprintf(pls_titles[idx - 1], sizeof(pls_titles[0]), "%.159s", eq + 1);
+            if (idx > max_idx) max_idx = idx;
+          }
+        }
+      }
+    }
+    for (int i = 0; i < max_idx && fm_ml_count < FM_MAX_MEDIA_ITEMS; i++) {
+      if (!pls_urls[i][0]) continue;
+      FmMediaItem *it = &fm_ml_items[fm_ml_count++];
+      memset(it, 0, sizeof(*it));
+      snprintf(it->title, sizeof(it->title), "%.159s",
+               pls_titles[i][0] ? pls_titles[i] : pls_urls[i]);
+      snprintf(it->url, sizeof(it->url), "%.1023s", pls_urls[i]);
+      it->is_local = !fm_is_http_url(it->url);
+      it->is_video = false;
+    }
+  } else if (fm_has_ext(name, ".tsv")) {
+    while (fgets(line, sizeof(line), f) && fm_ml_count < FM_MAX_MEDIA_ITEMS) {
+      fm_trim_crlf(line);
+      if (!line[0] || line[0] == '#') continue;
+      char *tab = strchr(line, '\t');
+      if (!tab) continue;
+      *tab = 0;
+      char *url = tab + 1;
+      char *tab2 = strchr(url, '\t');
+      if (tab2) *tab2 = 0;
+      if (!url[0]) continue;
+      FmMediaItem *it = &fm_ml_items[fm_ml_count++];
+      memset(it, 0, sizeof(*it));
+      snprintf(it->title, sizeof(it->title), "%.159s", line[0] ? line : url);
+      snprintf(it->url, sizeof(it->url), "%.1023s", url);
+      it->is_local = !fm_is_http_url(it->url);
+      it->is_video = false;
+    }
+  } else if (fm_has_ext(name, ".xspf")) {
+    char cur_title[160] = "";
+    while (fgets(line, sizeof(line), f) && fm_ml_count < FM_MAX_MEDIA_ITEMS) {
+      char *t1 = strstr(line, "<title>");
+      if (t1) {
+        t1 += 7;
+        char *t2 = strstr(t1, "</title>");
+        if (t2) {
+          size_t n = (size_t)(t2 - t1);
+          if (n >= sizeof(cur_title)) n = sizeof(cur_title) - 1;
+          memcpy(cur_title, t1, n);
+          cur_title[n] = 0;
+        }
+      }
+      char *l1 = strstr(line, "<location>");
+      if (l1) {
+        l1 += 10;
+        char *l2 = strstr(l1, "</location>");
+        if (l2) {
+          char u[1024];
+          size_t n = (size_t)(l2 - l1);
+          if (n >= sizeof(u)) n = sizeof(u) - 1;
+          memcpy(u, l1, n);
+          u[n] = 0;
+          if (u[0]) {
+            FmMediaItem *it = &fm_ml_items[fm_ml_count++];
+            memset(it, 0, sizeof(*it));
+            snprintf(it->title, sizeof(it->title), "%.159s", cur_title[0] ? cur_title : u);
+            snprintf(it->url, sizeof(it->url), "%.1023s", u);
+            it->is_local = !fm_is_http_url(u);
+            it->is_video = !is_radio_hint;
+            cur_title[0] = 0;
+          }
+        }
+      }
+    }
+  } else {
+    /* M3U / M3U8 playlist parser */
+    char pending_title[160] = "";
+    bool is_hls_manifest = false;
+    while (fgets(line, sizeof(line), f) && fm_ml_count < FM_MAX_MEDIA_ITEMS) {
+      fm_trim_crlf(line);
+      if (!line[0]) continue;
+      if (strncmp(line, "#EXT-X-STREAM-INF", 17) == 0 ||
+          strncmp(line, "#EXT-X-TARGETDURATION", 21) == 0) {
+        is_hls_manifest = true;
+      }
+      if (strncmp(line, "#EXTINF:", 8) == 0) {
+        char *comma = strrchr(line, ',');
+        if (comma && comma[1])
+          snprintf(pending_title, sizeof(pending_title), "%.159s", comma + 1);
+        continue;
+      }
+      if (line[0] == '#') continue;
+      FmMediaItem *it = &fm_ml_items[fm_ml_count++];
+      memset(it, 0, sizeof(*it));
+      if (fm_is_http_url(line)) {
+        snprintf(it->url, sizeof(it->url), "%.1023s", line);
+        it->is_local = false;
+      } else if (line[0] == '/') {
+        snprintf(it->url, sizeof(it->url), "%.1023s", line);
+        it->is_local = true;
+      } else {
+        snprintf(it->url, sizeof(it->url), "%.500s/%.500s", base_dir, line);
+        it->is_local = true;
+      }
+      if (pending_title[0]) {
+        snprintf(it->title, sizeof(it->title), "%.159s", pending_title);
+      } else {
+        const char *bn = strrchr(it->url, '/');
+        snprintf(it->title, sizeof(it->title), "%.159s", (bn && bn[1]) ? bn + 1 : it->url);
+      }
+      if (it->is_local) {
+        it->is_video = !audio_file(it->url);
+      } else {
+        it->is_video = !is_radio_hint && (fm_has_ext(it->url, ".m3u8") ||
+                       fm_has_ext(it->url, ".mp4") || fm_has_ext(it->url, ".ts") ||
+                       fm_has_ext(name, ".m3u8"));
+      }
+      pending_title[0] = 0;
+    }
+    /* If it's a pure HLS segment playlist (.ts chunks), play the .m3u8 file directly */
+    if (is_hls_manifest && fm_ml_count > 0 && fm_ml_items[0].is_local &&
+        fm_has_ext(fm_ml_items[0].url, ".ts")) {
+      fclose(f);
+      fm_return_on_exit = true;
+      play_path(path);
+      return true;
+    }
+  }
+  fclose(f);
+
+  if (fm_ml_count == 0) {
+    notify("Lista vazia — abrindo no Editor de Texto");
+    return fm_ed_open(path, name);
+  }
+  fm_ml_cursor = 0;
+  fm_ml_scroll = 0;
+  fm_view = FM_VIEW_MEDIA_LIST;
+  fm_modal = FM_MODAL_NONE;
+  return true;
+}
+
+static void fm_play_media_item(const FmMediaItem *it) {
+  if (!it || !it->url[0]) return;
+  if (it->is_local) {
+    fm_return_on_exit = true;
+    play_path(it->url);
+    return;
+  }
+  if (!fm_is_http_url(it->url)) {
+    notify("Endereço de mídia não suportado");
+    return;
+  }
+  RadioStation st;
+  memset(&st, 0, sizeof(st));
+  snprintf(st.name, sizeof(st.name), "%.127s", it->title[0] ? it->title : "Stream");
+  snprintf(st.url, sizeof(st.url), "%.511s", it->url);
+  snprintf(st.country, sizeof(st.country), "%s", fm_ml_is_radio ? "Rádio" : "Playlist M3U8");
+  snprintf(st.codec, sizeof(st.codec), "%s", it->is_video ? "HLS/M3U8" : "STREAM");
+  st.is_iptv = it->is_video;
+  fm_return_on_exit = true;
+  radio_start_async(st);
+  notify(it->is_video ? "Conectando canal da playlist..." : "Sintonizando rádio...");
+}
+
+static void fm_open_exec_modal(const char *path, const char *name, bool is_script) {
+  snprintf(fm_exec_modal_path, sizeof(fm_exec_modal_path), "%s", path);
+  snprintf(fm_exec_modal_name, sizeof(fm_exec_modal_name), "%.255s", name);
+  fm_exec_modal_is_script = is_script;
+  fm_exec_modal_cursor = 0;
+  fm_modal = FM_MODAL_EXEC;
+}
+
 /* Action menu list builder */
 enum {
   FM_ACT_OPEN = 0,
@@ -876,17 +1432,35 @@ enum {
   FM_ACT_RENAME = 8,
   FM_ACT_DELETE = 9,
   FM_ACT_ROOTS = 10,
-  FM_ACT_HIDDEN = 11
+  FM_ACT_HIDDEN = 11,
+  FM_ACT_EDIT_TEXT = 12,
+  FM_ACT_EXEC_RUN = 13,
+  FM_ACT_PLAY_MEDIA = 14,
+  FM_ACT_OPEN_PLAYLIST = 15
 };
 
 static int fm_build_actions(int *out_ids, int max_n) {
   int n = 0;
   FmEntry *cur = (fm_cursor >= 0 && fm_cursor < fm_count) ? &fm_entries[fm_cursor] : NULL;
   bool valid_item = cur && strcmp(cur->name, "..") != 0;
-  if (valid_item && cur->is_archive && n < max_n) {
-    out_ids[n++] = FM_ACT_OPEN;
-    if (n < max_n) out_ids[n++] = FM_ACT_EXTRACT_HERE;
-    if (n < max_n) out_ids[n++] = FM_ACT_EXTRACT_FOLDER;
+  if (valid_item && !cur->is_dir) {
+    if (cur->is_script || cur->is_executable) {
+      if (n < max_n) out_ids[n++] = FM_ACT_EXEC_RUN;
+    }
+    if (cur->is_playlist || cur->is_radio) {
+      if (n < max_n) out_ids[n++] = FM_ACT_OPEN_PLAYLIST;
+    }
+    if (supported(cur->name)) {
+      if (n < max_n) out_ids[n++] = FM_ACT_PLAY_MEDIA;
+    }
+    if (!cur->is_archive && !cur->is_executable && !supported(cur->name)) {
+      if (n < max_n) out_ids[n++] = FM_ACT_EDIT_TEXT;
+    }
+    if (cur->is_archive && n < max_n) {
+      out_ids[n++] = FM_ACT_OPEN;
+      if (n < max_n) out_ids[n++] = FM_ACT_EXTRACT_HERE;
+      if (n < max_n) out_ids[n++] = FM_ACT_EXTRACT_FOLDER;
+    }
   }
   if (fm_clip_count > 0 && n < max_n)
     out_ids[n++] = FM_ACT_PASTE;
@@ -906,6 +1480,10 @@ static int fm_build_actions(int *out_ids, int max_n) {
 
 static const char *fm_action_label(int id) {
   switch (id) {
+  case FM_ACT_EXEC_RUN: return "Executar script (.sh) / EmulationStation";
+  case FM_ACT_EDIT_TEXT: return "Editar no Editor de Texto";
+  case FM_ACT_PLAY_MEDIA: return "Reproduzir mídia (Vídeo / Música)";
+  case FM_ACT_OPEN_PLAYLIST: return "Abrir playlist (.m3u8) / Rádio";
   case FM_ACT_OPEN: return "Abrir conteúdo compactado";
   case FM_ACT_EXTRACT_HERE: return "Descompactar aqui (7-Zip / ZIP)";
   case FM_ACT_EXTRACT_FOLDER: return "Descompactar em subpasta";
@@ -925,7 +1503,16 @@ static const char *fm_action_label(int id) {
 static void fm_exec_action(int id) {
   FmEntry *cur = (fm_cursor >= 0 && fm_cursor < fm_count) ? &fm_entries[fm_cursor] : NULL;
   fm_modal = FM_MODAL_NONE;
-  if (id == FM_ACT_OPEN && cur && cur->is_archive) {
+  if (id == FM_ACT_EXEC_RUN && cur && !cur->is_dir) {
+    fm_open_exec_modal(cur->path, cur->name, cur->is_script);
+  } else if (id == FM_ACT_EDIT_TEXT && cur && !cur->is_dir) {
+    fm_ed_open(cur->path, cur->name);
+  } else if (id == FM_ACT_PLAY_MEDIA && cur && !cur->is_dir) {
+    fm_return_on_exit = true;
+    play_path(cur->path);
+  } else if (id == FM_ACT_OPEN_PLAYLIST && cur && !cur->is_dir) {
+    fm_parse_media_list(cur->path, cur->name, cur->is_radio);
+  } else if (id == FM_ACT_OPEN && cur && cur->is_archive) {
     fm_open_archive_entry(cur->path, cur->name, "");
   } else if (id == FM_ACT_EXTRACT_HERE && cur && cur->is_archive) {
     fm_begin_extract(cur->path, fm_cwd, "");
@@ -1031,6 +1618,14 @@ static void fm_kb_submit(void) {
     fm_modal = FM_MODAL_NONE;
     fm_begin_extract(fm_pending_arc_path, fm_pending_extract_dest, pwd);
     memset(pwd, 0, sizeof(pwd));
+  } else if (fm_kb_purpose == FM_KB_EDIT_LINE) {
+    fm_ed_replace_line(fm_ed_cursor, fm_kb_buf);
+    memset(fm_kb_buf, 0, sizeof(fm_kb_buf));
+    fm_modal = FM_MODAL_NONE;
+  } else if (fm_kb_purpose == FM_KB_NEW_LINE) {
+    fm_ed_insert_line(fm_ed_cursor, fm_kb_buf);
+    memset(fm_kb_buf, 0, sizeof(fm_kb_buf));
+    fm_modal = FM_MODAL_NONE;
   }
 }
 
@@ -1086,6 +1681,82 @@ static void fm_key(SDL_Keycode k, bool repeat) {
     fm_kb_key(k);
     return;
   }
+  if (fm_modal == FM_MODAL_EXEC) {
+    int opts = fm_exec_modal_is_script ? 3 : 2;
+    if (k == SDLK_UP)
+      fm_exec_modal_cursor = (fm_exec_modal_cursor + opts - 1) % opts;
+    else if (k == SDLK_DOWN)
+      fm_exec_modal_cursor = (fm_exec_modal_cursor + 1) % opts;
+    else if (k == SDLK_BACKSPACE && !repeat)
+      fm_modal = FM_MODAL_NONE;
+    else if (k == SDLK_RETURN && !repeat) {
+      if (fm_exec_modal_cursor == 0) {
+        snprintf(fm_exec_target_path, sizeof(fm_exec_target_path), "%s", fm_exec_modal_path);
+        fm_exec_is_script = fm_exec_modal_is_script;
+        fm_modal = FM_MODAL_NONE;
+        running = 0;
+      } else if (fm_exec_modal_is_script && fm_exec_modal_cursor == 1) {
+        fm_modal = FM_MODAL_NONE;
+        fm_ed_open(fm_exec_modal_path, fm_exec_modal_name);
+      } else {
+        fm_modal = FM_MODAL_NONE;
+      }
+    }
+    return;
+  }
+  if (fm_modal == FM_MODAL_EDITOR_MENU) {
+    bool is_sh = fm_is_script_name(fm_ed_name);
+    int opts = is_sh ? 7 : 6;
+    if (k == SDLK_UP) fm_ed_menu_cursor = (fm_ed_menu_cursor + opts - 1) % opts;
+    else if (k == SDLK_DOWN) fm_ed_menu_cursor = (fm_ed_menu_cursor + 1) % opts;
+    else if ((k == SDLK_BACKSPACE || k == SDLK_SPACE) && !repeat) fm_modal = FM_MODAL_NONE;
+    else if (k == SDLK_RETURN && !repeat) {
+      int pick = fm_ed_menu_cursor;
+      fm_modal = FM_MODAL_NONE;
+      if (pick == 0 && fm_ed_count > 0) {
+        fm_open_keyboard(FM_KB_EDIT_LINE, "Editar linha", fm_ed_name,
+                         fm_ed_lines[fm_ed_cursor], false);
+      } else if (pick == 1) {
+        fm_open_keyboard(FM_KB_NEW_LINE, "Nova linha abaixo", fm_ed_name, "", false);
+      } else if (pick == 2) {
+        fm_ed_delete_line(fm_ed_cursor);
+        notify("Linha removida");
+      } else if (pick == 3) {
+        fm_ed_save();
+      } else if (pick == 4) {
+        if (fm_ed_save()) {
+          fm_view = FM_VIEW_BROWSE;
+          fm_scan_dir(fm_cwd);
+        }
+      } else if (is_sh && pick == 5) {
+        if (fm_ed_dirty) fm_ed_save();
+        fm_open_exec_modal(fm_ed_path, fm_ed_name, true);
+      } else {
+        fm_ed_dirty = false;
+        fm_view = FM_VIEW_BROWSE;
+      }
+    }
+    return;
+  }
+  if (fm_modal == FM_MODAL_EDITOR_EXIT) {
+    if (k == SDLK_UP) fm_ed_exit_cursor = (fm_ed_exit_cursor + 2) % 3;
+    else if (k == SDLK_DOWN) fm_ed_exit_cursor = (fm_ed_exit_cursor + 1) % 3;
+    else if (k == SDLK_BACKSPACE && !repeat) fm_modal = FM_MODAL_NONE;
+    else if (k == SDLK_RETURN && !repeat) {
+      int pick = fm_ed_exit_cursor;
+      fm_modal = FM_MODAL_NONE;
+      if (pick == 0) {
+        if (fm_ed_save()) {
+          fm_view = FM_VIEW_BROWSE;
+          fm_scan_dir(fm_cwd);
+        }
+      } else if (pick == 1) {
+        fm_ed_dirty = false;
+        fm_view = FM_VIEW_BROWSE;
+      }
+    }
+    return;
+  }
   if (fm_modal == FM_MODAL_DELETE_CONFIRM) {
     if (k == SDLK_BACKSPACE && !repeat) {
       fm_modal = FM_MODAL_NONE;
@@ -1118,8 +1789,8 @@ static void fm_key(SDL_Keycode k, bool repeat) {
     return;
   }
   if (fm_modal == FM_MODAL_ACTIONS) {
-    int ids[14];
-    int cnt = fm_build_actions(ids, 14);
+    int ids[18];
+    int cnt = fm_build_actions(ids, 18);
     if (cnt <= 0) { fm_modal = FM_MODAL_NONE; return; }
     if (k == SDLK_UP) fm_action_cursor = (fm_action_cursor + cnt - 1) % cnt;
     else if (k == SDLK_DOWN) fm_action_cursor = (fm_action_cursor + 1) % cnt;
@@ -1127,6 +1798,55 @@ static void fm_key(SDL_Keycode k, bool repeat) {
     else if (k == SDLK_RETURN && !repeat) {
       if (fm_action_cursor >= 0 && fm_action_cursor < cnt)
         fm_exec_action(ids[fm_action_cursor]);
+    }
+    return;
+  }
+
+  /* Inside Text Editor (v2.1.3) */
+  if (fm_view == FM_VIEW_EDITOR) {
+    if (k == SDLK_UP && fm_ed_count > 0)
+      fm_ed_cursor = fm_ed_cursor > 0 ? fm_ed_cursor - 1 : fm_ed_count - 1;
+    else if (k == SDLK_DOWN && fm_ed_count > 0)
+      fm_ed_cursor = (fm_ed_cursor + 1) % fm_ed_count;
+    else if ((k == SDLK_q || k == SDLK_PAGEUP) && fm_ed_count > 0)
+      fm_ed_cursor = fm_ed_cursor > 10 ? fm_ed_cursor - 10 : 0;
+    else if ((k == SDLK_e || k == SDLK_PAGEDOWN) && fm_ed_count > 0)
+      fm_ed_cursor = fm_ed_cursor + 10 < fm_ed_count ? fm_ed_cursor + 10 : fm_ed_count - 1;
+    else if (k == SDLK_RETURN && !repeat && fm_ed_count > 0) {
+      fm_open_keyboard(FM_KB_EDIT_LINE, "Editar linha", fm_ed_name,
+                       fm_ed_lines[fm_ed_cursor], false);
+    } else if (k == SDLK_m && !repeat) {
+      fm_open_keyboard(FM_KB_NEW_LINE, "Nova linha abaixo", fm_ed_name, "", false);
+    } else if (k == SDLK_SPACE && !repeat) {
+      fm_ed_menu_cursor = 0;
+      fm_modal = FM_MODAL_EDITOR_MENU;
+    } else if (k == SDLK_BACKSPACE && !repeat) {
+      if (fm_ed_dirty) {
+        fm_ed_exit_cursor = 0;
+        fm_modal = FM_MODAL_EDITOR_EXIT;
+      } else {
+        fm_view = FM_VIEW_BROWSE;
+      }
+    }
+    return;
+  }
+
+  /* Inside Playlist (.m3u8/.m3u) / Radio (.pls/.tsv/.xspf) Viewer (v2.1.3) */
+  if (fm_view == FM_VIEW_MEDIA_LIST) {
+    if (k == SDLK_UP && fm_ml_count > 0)
+      fm_ml_cursor = (fm_ml_cursor + fm_ml_count - 1) % fm_ml_count;
+    else if (k == SDLK_DOWN && fm_ml_count > 0)
+      fm_ml_cursor = (fm_ml_cursor + 1) % fm_ml_count;
+    else if ((k == SDLK_q || k == SDLK_PAGEUP) && fm_ml_count > 0)
+      fm_ml_cursor = fm_ml_cursor > 7 ? fm_ml_cursor - 7 : 0;
+    else if ((k == SDLK_e || k == SDLK_PAGEDOWN) && fm_ml_count > 0)
+      fm_ml_cursor = fm_ml_cursor + 7 < fm_ml_count ? fm_ml_cursor + 7 : fm_ml_count - 1;
+    else if (k == SDLK_BACKSPACE && !repeat) {
+      fm_view = FM_VIEW_BROWSE;
+    } else if (k == SDLK_SPACE && !repeat) {
+      fm_ed_open(fm_ml_path, fm_ml_name);
+    } else if (k == SDLK_RETURN && !repeat && fm_ml_count > 0 && fm_ml_cursor < fm_ml_count) {
+      fm_play_media_item(&fm_ml_items[fm_ml_cursor]);
     }
     return;
   }
@@ -1191,8 +1911,15 @@ static void fm_key(SDL_Keycode k, bool repeat) {
         fm_scan_dir(next_path);
       } else if (e->is_archive) {
         fm_open_archive_entry(e->path, e->name, "");
+      } else if (e->is_script || e->is_executable) {
+        fm_open_exec_modal(e->path, e->name, e->is_script);
+      } else if (e->is_radio || e->is_playlist) {
+        fm_parse_media_list(e->path, e->name, e->is_radio);
       } else if (supported(e->name)) {
+        fm_return_on_exit = true;
         play_path(e->path);
+      } else if (e->is_text) {
+        fm_ed_open(e->path, e->name);
       } else {
         fm_action_cursor = 0;
         fm_modal = FM_MODAL_ACTIONS;
@@ -1279,9 +2006,75 @@ static void draw_file_manager(void) {
   }
 
   backdrop();
-  draw_header(fm_view == FM_VIEW_ARCHIVE ? "ARQUIVO COMPACTADO (7-ZIP)" : "GERENCIADOR DE ARQUIVOS");
+  draw_header(fm_view == FM_VIEW_ARCHIVE ? "ARQUIVO COMPACTADO (7-ZIP)"
+              : fm_view == FM_VIEW_EDITOR ? "EDITOR DE TEXTO"
+              : fm_view == FM_VIEW_MEDIA_LIST ? (fm_ml_is_radio ? "ARQUIVO DE RÁDIO" : "PLAYLIST M3U8")
+                                              : "GERENCIADOR DE ARQUIVOS");
 
-  if (fm_view == FM_VIEW_ARCHIVE) {
+  if (fm_view == FM_VIEW_EDITOR) {
+    char title_buf[160];
+    snprintf(title_buf, sizeof(title_buf), "%.90s%s", fm_ed_name, fm_ed_dirty ? " *" : "");
+    label(title_buf, 24, 42, 19, textc, 456);
+    char meta[128];
+    snprintf(meta, sizeof(meta), "Linha %d/%d • %s",
+             fm_ed_count > 0 ? fm_ed_cursor + 1 : 0, fm_ed_count,
+             fm_ed_dirty ? "Alterações não salvas" : "Salvo");
+    label(meta, 24, 68, 12, fm_ed_dirty ? (SDL_Color){251, 191, 36, 255} : muted, 592);
+
+    panel_card(24, 92, 592, 328, 12);
+    int visible = 10;
+    if (fm_ed_cursor < fm_ed_scroll) fm_ed_scroll = fm_ed_cursor;
+    if (fm_ed_cursor >= fm_ed_scroll + visible) fm_ed_scroll = fm_ed_cursor - visible + 1;
+    if (fm_ed_scroll < 0) fm_ed_scroll = 0;
+
+    for (int i = 0; i < visible && fm_ed_scroll + i < fm_ed_count; i++) {
+      int idx = fm_ed_scroll + i;
+      int ry = 100 + i * 31;
+      bool focus = (idx == fm_ed_cursor);
+      if (focus) {
+        rounded_gradient(32, ry, 576, 28, 7, mix(elevated, accent, 0.24f), panel);
+        rounded_outline(32, ry, 576, 28, 7, accent);
+      }
+      char ln[16];
+      snprintf(ln, sizeof(ln), "%4d", idx + 1);
+      label(ln, 40, ry + 7, 11, focus ? accent : muted, 42);
+      const char *txt = fm_ed_lines[idx] ? fm_ed_lines[idx] : "";
+      label(txt[0] ? txt : " ", 86, ry + 6, 13, focus ? textc : mix(textc, muted, 0.14f), 514);
+    }
+    centered("B Editar linha • Y Nova linha • X Salvar/Menu • L1/R1 Página • A Sair",
+             20, 434, W - 40, 11, muted);
+  } else if (fm_view == FM_VIEW_MEDIA_LIST) {
+    char title_buf[140];
+    snprintf(title_buf, sizeof(title_buf), "%.90s", fm_ml_name);
+    label(title_buf, 24, 42, 20, textc, 456);
+    char meta[96];
+    snprintf(meta, sizeof(meta), "%d itens • %s",
+             fm_ml_count, fm_ml_is_radio ? "Estações de Rádio" : "Playlist de Mídia / M3U8");
+    label(meta, 24, 68, 12, accent, 592);
+
+    panel_card(24, 92, 592, 326, 12);
+    int visible = 8;
+    if (fm_ml_cursor < fm_ml_scroll) fm_ml_scroll = fm_ml_cursor;
+    if (fm_ml_cursor >= fm_ml_scroll + visible) fm_ml_scroll = fm_ml_cursor - visible + 1;
+    if (fm_ml_scroll < 0) fm_ml_scroll = 0;
+
+    for (int i = 0; i < visible && fm_ml_scroll + i < fm_ml_count; i++) {
+      int idx = fm_ml_scroll + i;
+      FmMediaItem *it = &fm_ml_items[idx];
+      int ry = 102 + i * 38;
+      bool focus = (idx == fm_ml_cursor);
+      if (focus) {
+        rounded_gradient(32, ry, 576, 34, 9, mix(elevated, accent, 0.24f), panel);
+        rounded_outline(32, ry, 576, 34, 9, accent);
+      }
+      label(it->is_local ? (it->is_video ? "VÍDEO" : "ÁUDIO")
+                         : (it->is_video ? "M3U8" : "RÁDIO"),
+            42, ry + 10, 10, accent, 54);
+      label(it->title, 100, ry + 9, 13, focus ? textc : mix(textc, muted, 0.14f), 496);
+    }
+    centered("B Reproduzir selecionado • X Abrir no Editor de Texto • A Voltar",
+             20, 434, W - 40, 12, muted);
+  } else if (fm_view == FM_VIEW_ARCHIVE) {
     char title_buf[140];
     snprintf(title_buf, sizeof(title_buf), "%.80s", fm_arc_name);
     label(title_buf, 24, 42, 20, textc, 430);
@@ -1333,7 +2126,7 @@ static void draw_file_manager(void) {
       snprintf(sub, sizeof(sub), "%d itens • %d marcado(s) • X Ações • L1 Raízes",
                fm_count, sel_n);
     else
-      snprintf(sub, sizeof(sub), "%d itens • B Abrir • X Ações • Y Marcar • L1 Raízes",
+      snprintf(sub, sizeof(sub), "%d itens • B Abrir/Editar/Tocar • X Ações • Y Marcar",
                fm_count);
     label(sub, 24, 67, 12, fm_clip_count > 0 ? accent : muted, 592);
 
@@ -1360,11 +2153,12 @@ static void draw_file_manager(void) {
           rounded(32, ry, 576, 36, 9, mix(panel, accent, 0.14f));
         }
 
-        const char *tag = e->is_dir ? (strcmp(e->name, "..") == 0 ? "VOLTAR" : "PASTA")
-                                    : (e->is_archive ? "7Z/ZIP" : (supported(e->name) ? "MÍDIA" : "ARQ"));
+        const char *tag = fm_file_badge(e);
         SDL_Color tag_c = e->selected ? accent
                          : (e->is_dir ? accent
-                         : (e->is_archive ? (SDL_Color){251, 191, 36, 255} : muted));
+                         : (e->is_archive ? (SDL_Color){251, 191, 36, 255}
+                         : ((e->is_script || e->is_executable) ? (SDL_Color){74, 222, 128, 255}
+                         : ((e->is_playlist || e->is_radio) ? accent : muted))));
         if (e->selected) {
           label("[✓]", 40, ry + 10, 12, accent, 30);
           label(tag, 70, ry + 11, 10, tag_c, 52);
@@ -1381,14 +2175,14 @@ static void draw_file_manager(void) {
         }
       }
     }
-    centered("B Abrir/ZIP • X Menu completo • Y Selecionar • L1 Raiz/SD • A Voltar",
+    centered("B Abrir/Editor/.sh/Mídia • X Ações • Y Selecionar • L1 Raiz/SD • A Voltar",
              20, 438, W - 40, 11, muted);
   }
 
   /* Overlay modals */
   if (fm_modal == FM_MODAL_ACTIONS) {
-    int ids[14];
-    int cnt = fm_build_actions(ids, 14);
+    int ids[18];
+    int cnt = fm_build_actions(ids, 18);
     SDL_Color scrim = {0, 0, 0, 175};
     rect(0, 0, W, H, scrim);
     int mh = 58 + cnt * 32;
@@ -1411,6 +2205,95 @@ static void draw_file_manager(void) {
       bool danger = (ids[idx] == FM_ACT_DELETE);
       SDL_Color tc = danger ? (SDL_Color){255, 130, 130, 255} : (foc ? textc : muted);
       label(fm_action_label(ids[idx]), 134, iy + 6, 13, tc, 372);
+    }
+  } else if (fm_modal == FM_MODAL_EXEC) {
+    SDL_Color scrim = {0, 0, 0, 185};
+    rect(0, 0, W, H, scrim);
+    int opts = fm_exec_modal_is_script ? 3 : 2;
+    int mh = 114 + opts * 38;
+    int my = (H - mh) / 2;
+    rounded_gradient(86, my, 468, mh, 14, elevated, panel);
+    rounded_outline(86, my, 468, mh, 14, accent);
+    label(fm_exec_modal_is_script ? "Script de Jogo / R36S (.sh)" : "Executável / EmulationStation",
+          106, my + 16, 16, accent, 428);
+    char ename[140];
+    snprintf(ename, sizeof(ename), "%.96s", fm_exec_modal_name);
+    label(ename, 106, my + 42, 13, textc, 428);
+    label("Fecha o KPlayer com segurança para liberar tela e áudio no R36S.",
+          106, my + 64, 11, muted, 428);
+    const char *sh_labels[3] = {
+        "Executar script (.sh) no console",
+        "Abrir no Editor de Texto",
+        "Cancelar"
+    };
+    const char *bin_labels[2] = {
+        "Executar programa / EmulationStation",
+        "Cancelar"
+    };
+    for (int i = 0; i < opts; i++) {
+      bool foc = (i == fm_exec_modal_cursor);
+      int iy = my + 92 + i * 38;
+      if (foc) {
+        rounded_gradient(104, iy, 432, 32, 8, mix(elevated, accent, 0.28f), panel);
+        rounded_outline(104, iy, 432, 32, 8, accent);
+      }
+      label(fm_exec_modal_is_script ? sh_labels[i] : bin_labels[i],
+            118, iy + 8, 13, foc ? textc : muted, 404);
+    }
+  } else if (fm_modal == FM_MODAL_EDITOR_MENU) {
+    SDL_Color scrim = {0, 0, 0, 175};
+    rect(0, 0, W, H, scrim);
+    bool is_sh = fm_is_script_name(fm_ed_name);
+    int opts = is_sh ? 7 : 6;
+    const char *labels_sh[7] = {
+        "Editar linha atual",
+        "Inserir nova linha abaixo",
+        "Apagar linha atual",
+        "Salvar arquivo",
+        "Salvar e sair",
+        "Executar script (.sh) no console",
+        "Sair sem salvar"
+    };
+    const char *labels_txt[6] = {
+        "Editar linha atual",
+        "Inserir nova linha abaixo",
+        "Apagar linha atual",
+        "Salvar arquivo",
+        "Salvar e sair",
+        "Sair sem salvar"
+    };
+    int mh = 58 + opts * 32;
+    int my = (H - mh) / 2;
+    rounded_gradient(110, my, 420, mh, 14, elevated, panel);
+    rounded_outline(110, my, 420, mh, 14, accent);
+    label("Menu do Editor de Texto", 128, my + 14, 15, textc, 384);
+    for (int i = 0; i < opts; i++) {
+      bool foc = (i == fm_ed_menu_cursor);
+      int iy = my + 44 + i * 32;
+      if (foc) {
+        rounded_gradient(122, iy, 396, 28, 8, mix(elevated, accent, 0.28f), panel);
+        rounded_outline(122, iy, 396, 28, 8, accent);
+      }
+      label(is_sh ? labels_sh[i] : labels_txt[i], 134, iy + 6, 13, foc ? textc : muted, 372);
+    }
+  } else if (fm_modal == FM_MODAL_EDITOR_EXIT) {
+    SDL_Color scrim = {0, 0, 0, 185};
+    rect(0, 0, W, H, scrim);
+    int mh = 196;
+    int my = (H - mh) / 2;
+    rounded_gradient(104, my, 432, mh, 14, elevated, panel);
+    rounded_outline(104, my, 432, mh, 14, accent);
+    label("Alterações não salvas", 124, my + 18, 16, textc, 392);
+    label("Deseja salvar antes de fechar o editor?", 124, my + 44, 12, muted, 392);
+    const char *elabels[3] = {"Salvar e sair", "Sair sem salvar", "Continuar editando"};
+    for (int i = 0; i < 3; i++) {
+      bool foc = (i == fm_ed_exit_cursor);
+      int iy = my + 74 + i * 36;
+      if (foc) {
+        rounded_gradient(120, iy, 400, 30, 8, mix(elevated, accent, 0.28f), panel);
+        rounded_outline(120, iy, 400, 30, 8, accent);
+      }
+      label(elabels[i], 134, iy + 7, 13, foc ? textc : muted, 372);
     }
   } else if (fm_modal == FM_MODAL_ROOTS) {
     SDL_Color scrim = {0, 0, 0, 175};

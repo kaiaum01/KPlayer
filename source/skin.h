@@ -214,7 +214,7 @@ static void draw_home(void) {
     draw_home_mini_player();
   const char *names[] = {tr("Músicas e Vídeos"), tr("Arquivos"), tr("Rádio Online"),
                          tr("IPTV"), tr("Notícias"), tr("Placar da Bola")},
-             *desc[] = {tr("Áudio, vídeo e letras"), tr("Raiz, pastas e 7-Zip"),
+             *desc[] = {tr("Áudio, vídeo e letras"), tr("Raiz, Editor, .sh e 7-Zip"),
                         tr("Estações do mundo"), tr("Canais ao vivo"),
                         tr("Últimas do dia"), tr("Jogos e estatísticas")},
              *tags[] = {tr("LRC & Cinema"), tr("Gerenciador"), tr("Radio Browser"),

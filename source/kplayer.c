@@ -1322,16 +1322,19 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Novo Gerenciador de Arquivos completo em Arquivos: acesso a raiz (/), copiar, mover, apagar, renomear, criar pastas e selecao multipla.",
-        "Integracao oficial do 7-Zip (ip7z/7zip) para abrir e descompactar ZIP, 7Z, RAR e TAR — incluindo arquivos protegidos por senha.",
-        "Barra de progresso em tempo real ao copiar, mover, apagar ou descompactar com velocidade (MB/s), tempo faltante (ETA) e cancelamento.",
-        "Gerenciador de Musicas e Videos intacto + audio ALSA/libVLC e carregamento assincrono da biblioteca preservados.",
+        "Editor de texto nativo no Gerenciador de Arquivos: abra e edite TXT, XML, HTML, SH, CFG, JSON e M3U8 direto no R36S.",
+        "Execucao de scripts .sh de jogos do R36S e executaveis do EmulationStation com encerramento limpo de audio/video.",
+        "Abertura direta de videos, musicas, playlists .m3u8/.m3u e arquivos de radio (.pls/.tsv) pelo Gerenciador de Arquivos.",
+        "Changelog do aplicativo agora reunido em um unico quadro limpo com rolagem suave pelo D-Pad.",
+        "Gerenciador de Musicas e Videos intacto, preservando 7-Zip oficial, progresso em tempo real e audio ALSA/libVLC.",
     };
     int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
     for (int i = 0; i < n && changelog_count < 6; i++)
       snprintf(changelog_items[changelog_count++], sizeof(changelog_items[0]), "%.159s", builtin[i]);
   }
 }
+
+static int changelog_scroll = 0;
 
 static void draw_changelog(void) {
   changelog_ensure_loaded();
@@ -1340,28 +1343,58 @@ static void draw_changelog(void) {
   char heading[96];
   snprintf(heading, sizeof(heading), "Novidades da versão v%s", KPLAYER_VERSION);
   label(heading, 24, 42, 24, textc, 592);
-  label("O que mudou nesta atualização • exibido apenas uma vez", 24, 72, 13, muted, 592);
+  label("O que mudou nesta atualização • exibido apenas uma vez", 24, 71, 13, muted, 592);
+
+  /* Single unified frame for the entire changelog (v2.1.3) */
+  const int bx = 20, by = 94, bw = 600, bh = 312;
+  panel_card(bx, by, bw, bh, 14);
 
   int count = changelog_count;
-  int row_h = count <= 5 ? 54 : 46;
-  int gap = count <= 5 ? 8 : 6;
-  int y = 100;
-  for (int i = 0; i < count; i++) {
-    panel_card(20, y, 600, row_h, 12);
-    fill_circle(38, y + row_h / 2, 5, accent);
-    wrapped(changelog_items[i], 54, y + (row_h > 48 ? 11 : 8), 550, 14, 17, 2, textc);
-    y += row_h + gap;
+  int max_visible = 5;
+  int max_scroll = count > max_visible ? count - max_visible : 0;
+  if (changelog_scroll < 0) changelog_scroll = 0;
+  if (changelog_scroll > max_scroll) changelog_scroll = max_scroll;
+
+  int visible = count - changelog_scroll;
+  if (visible > max_visible) visible = max_visible;
+  int row_h = visible <= 4 ? 72 : 58;
+  int y = by + 10;
+
+  for (int i = 0; i < visible; i++) {
+    int idx = changelog_scroll + i;
+    if (i > 0)
+      rect(bx + 18, y - 3, bw - 36, 1, hairline());
+    fill_circle(bx + 24, y + 18, 4, accent);
+    wrapped(changelog_items[idx], bx + 40, y + 8, bw - 62, 13, 17, 3, textc);
+    y += row_h;
   }
 
-  rounded(20, 416, 600, 48, 12, accent);
-  centered("B  •  Continuar para o K PLAYER", 20, 430, 600, 16, bg);
+  if (max_scroll > 0) {
+    char pg[48];
+    snprintf(pg, sizeof(pg), "D-Pad rolar (%d/%d)", changelog_scroll + 1, max_scroll + 1);
+    int pw = (int)measure(pg, 11);
+    label(pg, bx + bw - pw - 14, by + bh - 18, 11, muted, 160);
+  }
+
+  rounded(20, 418, 600, 46, 12, accent);
+  centered("B  •  Continuar para o K PLAYER", 20, 431, 600, 16, bg);
   footer_hints(NULL, 0);
 }
 
 static void changelog_key(SDL_Keycode k) {
+  int max_scroll = changelog_count > 5 ? changelog_count - 5 : 0;
+  if (k == SDLK_UP && changelog_scroll > 0) {
+    changelog_scroll--;
+    return;
+  }
+  if (k == SDLK_DOWN && changelog_scroll < max_scroll) {
+    changelog_scroll++;
+    return;
+  }
   if (k == SDLK_RETURN || k == SDLK_BACKSPACE || k == SDLK_SPACE || k == SDLK_m) {
     snprintf(seen_version, sizeof(seen_version), "%s", KPLAYER_VERSION);
     save_settings();
+    changelog_scroll = 0;
     mode = 3;
     menu_dirty = true;
   }
@@ -2358,7 +2391,12 @@ static void key(SDL_Keycode k, bool repeat) {
     if (k == SDLK_BACKSPACE && !repeat) {
       if (audio_panel == 2 && parent_music_folder())
         return;
-      mode = 3;
+      if (fm_return_on_exit) {
+        fm_return_on_exit = false;
+        mode = 16;
+      } else {
+        mode = 3;
+      }
       return;
     }
     if (k == SDLK_SPACE && !repeat)
@@ -2399,9 +2437,11 @@ static void key(SDL_Keycode k, bool repeat) {
   if (k == SDLK_BACKSPACE && !repeat) {
     bool was_iptv = playing_iptv;
     bool was_news = playing_news_video;
+    bool was_fm = fm_return_on_exit;
+    fm_return_on_exit = false;
     if (mode == 1)
       stop_media();
-    mode = was_news ? 15 : was_iptv ? 8 : 3;
+    mode = was_fm ? 16 : was_news ? 15 : was_iptv ? 8 : 3;
     return;
   }
   if (k == SDLK_RETURN && !repeat)
@@ -2936,5 +2976,26 @@ int main(int argc, char **argv) {
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();
+  if (fm_exec_target_path[0]) {
+    char exec_dir[PATH_MAX];
+    snprintf(exec_dir, sizeof(exec_dir), "%s", fm_exec_target_path);
+    char *sl = strrchr(exec_dir, '/');
+    if (sl && sl > exec_dir) {
+      *sl = 0;
+      if (chdir(exec_dir) != 0) {
+        /* continue even if chdir fails */
+      }
+    }
+    if (fm_exec_is_script) {
+      char *const bash_argv[] = {"/bin/bash", fm_exec_target_path, NULL};
+      execv("/bin/bash", bash_argv);
+      char *const sh_argv[] = {"/bin/sh", fm_exec_target_path, NULL};
+      execv("/bin/sh", sh_argv);
+    } else {
+      char *const bin_argv[] = {fm_exec_target_path, NULL};
+      execv(fm_exec_target_path, bin_argv);
+    }
+    _exit(127);
+  }
   return kp_upd_exit_code ? kp_upd_exit_code : 0;
 }

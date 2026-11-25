@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="KPlayer v2.1.2 — Portable Media Center for R36S" width="100%" />
+  <img src="docs/images/banner.svg" alt="KPlayer v2.1.3 — Portable Media Center for R36S" width="100%" />
 </p>
 
-<h1 align="center">KPlayer v2.1.2</h1>
+<h1 align="center">KPlayer v2.1.3</h1>
 
 <p align="center">
   <strong>Native Portable Media Center for R36S (dArkOS / PortMaster — C + SDL2 + libVLC ARM64)</strong><br />
-  Music &amp; Videos (.LRC) · Full File Manager + 7-Zip · 10 Visualizers · 14 Themes · Online Radio · IPTV + EPG · News · Weather · Placar da Bola
+  Music &amp; Videos (.LRC) · File Manager + Editor + .sh + 7-Zip · 10 Visualizers · 14 Themes · Online Radio · IPTV + EPG · News · Weather · Placar da Bola
 </p>
 
 <p align="center">
@@ -17,23 +17,24 @@
   <a href="docs/BUILD.md">Build Guide</a> ·
   <a href="TERMS.md">Terms &amp; Transparency</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="releases/RELEASE_NOTES.md">v2.1.2 Release Notes</a> ·
+  <a href="releases/RELEASE_NOTES.md">v2.1.3 Release Notes</a> ·
   <a href="THIRD_PARTY.md">Licenses</a>
 </p>
 
 ---
 
-## What's New in v2.1.2 (R36S Native)
+## What's New in v2.1.3 (R36S Native)
 
-- **Standalone Full File Manager (`Arquivos` — Separate from `Músicas e Vídeos`):**
-  - Keeps **`Músicas e Vídeos`** completely untouched while giving **`Arquivos`** a dedicated, full-featured console File Manager starting from root **`/`** (with quick shortcuts via `L1`: `/`, `/roms`, `/roms2`, `/roms/ports`, `/home`).
-  - Supports **creating folders**, **deleting** files & folders (with confirmation + system-root protection), **copying**, **moving/cutting**, **pasting (`R1`)**, **renaming**, **multi-select (`Y`)**, **compressing to `.zip`**, and toggling hidden dotfiles.
-- **Official Public 7-Zip (`github.com/ip7z/7zip`) + Password-Protected Archives:**
-  - Bundles the official static ARM64 **`7zzs`** binary (with automatic Python `zipfile`/`tarfile` fallback) to browse and extract `.zip`, `.7z`, `.rar`, `.tar.*`, `.cbz`, `.cbr`, and `.iso` — **including password-protected archives** (masked password prompt piped securely via `stdin`, plus Zip Slip path validation).
-- **Live Progress Bar with Transfer Speed & Remaining Time (ETA):**
-  - Asynchronous off-thread progress overlay for copying, moving, deleting, extracting, and compressing showing **progress bar (`0%–100%`)**, **live speed (`KB/s`, `MB/s`)**, **remaining time (ETA)**, transferred bytes/items, current file name, and **Cancel (`A`)**.
-- **All v2.1.1 Stability Fixes Preserved:**
-  - ALSA/libVLC audio fix for tactile key clicks, asynchronous lazy-loading media library, same-version reinstall with warning, and News with cached images & videos.
+- **Built-in Text Editor in File Manager (`Arquivos`):**
+  - Open, edit, and atomically save `.txt`, `.xml`, `.html`, `.htm`, `.sh`, `.cfg`, `.json`, `.m3u8`, `.pls`, and more directly on the R36S with binary-file rejection and unsaved-changes confirmation.
+- **Launch R36S `.sh` Game Scripts & EmulationStation Executables:**
+  - Detects `.sh` scripts and ELF binaries (`\x7fELF` without false positives on FAT32/exFAT `/roms`), offering a clean modal to **Run on console** (tearing down SDL2/libVLC/ALSA and handing off via `execv`) or **Edit script**.
+- **Direct Playback of Videos, Music, `.m3u8` Playlists & Radio Files:**
+  - Press `B` on audio/video files to play directly in KPlayer (`A` returns to File Manager), or open `.m3u8`/`.m3u` playlists and `.pls`/`.xspf`/`.tsv` radio files in a dedicated picker (`B` plays, `X` edits text).
+- **Single Unified Changelog Frame:**
+  - The one-time post-update changelog now renders inside **one clean, unified scrollable frame** with hairline dividers instead of separate cards per bullet.
+- **Full v2.1.2 File Manager + 7-Zip Preserved:**
+  - Root (`/`) access separate from Music & Videos, mkdir/copy/move/paste/rename/delete/multi-select, official **7-Zip** (`7zzs`) password-protected extraction, and live progress bar with speed & ETA.
 - **Stripe-Free Smooth Gradients Across All 14 R36S Themes:**
   - Fixed alpha double-blending stripes inside translucent panels and screensaver HUD boxes across every theme by rewriting `rounded()`, converting `glow_rect()` to hollow rings (`rounded_outline()`), and using smooth theme-aware `rounded_gradient()` fills everywhere.
 - **10 Audio-Reactive Screensaver Visualizers (+ Auto Cycle):**
@@ -61,7 +62,7 @@
 | :--- | :--- |
 | **Music Player** | Local ID3 tags & embedded/sidecar cover art, synced **`.LRC`** & embedded lyrics, Queue & Folder panes, Favorites, Speed, Repeat, Shuffle, Sleep Timer, libVLC Equalizer, and **10-visualizer Screensaver**. |
 | **Video Player** | Hardware-friendly libVLC playback, Aspect Ratio (`Original / Fill / Stretch`), Speed, Repeat, and auto-hiding OSD. |
-| **File Manager (`Arquivos`)** | Full console root (`/`) access separate from Music & Videos: create folders, copy, move, paste, rename, multi-select, delete with confirmation, official **7-Zip** (`7zzs`) ZIP/7Z/RAR/TAR browsing & password-protected extraction, and live progress bar with speed & ETA. |
+| **File Manager (`Arquivos`)** | Full console root (`/`) access separate from Music & Videos: built-in **Text Editor** (`.txt`, `.xml`, `.html`, `.sh`, `.cfg`), launch R36S `.sh` game scripts & EmulationStation executables, play videos/music/`.m3u8` playlists/radio files directly, mkdir/copy/move/paste/rename/delete, official **7-Zip** (`7zzs`) password-protected extraction, and live progress/speed/ETA. |
 | **Online Radio** | Powered by the open **Radio-Browser** directory (Brazil, Popular, Pop, Rock, News, Favorites) + personal stations in `ports/kplayer/radios_usuario/`. |
 | **IPTV + Live EPG** | Unlimited category-by-category **Canais** (with live Brazilian EPG), **Filmes**, **Séries** (full seasons/episodes), and **User IPTV** (on-screen virtual keyboard + `ports/kplayer/iptv_usuario/`). |
 | **Brazil News (`Notícias`)** | Latest Portuguese headlines from Brazil (**Todas, Urgente, Mundo, Polícia, Entretenimento, Esportes**) via **NewsData.io** (configure `ports/kplayer/news.cfg` or `NEWSDATA_API_KEY`) with automatic live RSS fallback and full D-pad article reader. |
@@ -72,7 +73,7 @@
 
 ## Installation on R36S (dArkOS / PortMaster)
 
-1. Download **`KPlayer-v2.1.2-R36S.zip`** from **[Releases](../../releases)**. *(Do not install the GitHub source archive.)*
+1. Download **`KPlayer-v2.1.3-R36S.zip`** from **[Releases](../../releases)**. *(Do not install the GitHub source archive.)*
 2. Extract it and copy **`KPlayer.sh`** and the **`kplayer/`** directory to `/roms/ports/` (or `/roms2/ports/` on SD2).
 3. Add your media to the dedicated folders (fast boot — ROMs/BIOS/saves are never scanned):
 

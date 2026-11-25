@@ -217,7 +217,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.1.2' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.1.3' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -872,7 +872,7 @@ async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<s
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-EPG/2.1.2' },
+      headers: { 'User-Agent': 'KPlayer-EPG/2.1.3' },
     });
     clearTimeout(timer);
     if (!res.ok) return '';
@@ -1651,7 +1651,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.1.2' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.1.3' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1672,7 +1672,7 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipFilename = 'KPlayer-v2.1.2-R36S.zip';
+  const r36sZipFilename = 'KPlayer-v2.1.3-R36S.zip';
   const r36sZipPath = path.join(__dirname, 'releases', r36sZipFilename);
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
@@ -1687,14 +1687,14 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.1.2',
+        version: '2.1.3',
         filename: r36sZipFilename,
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
       });
     } catch {
-      return res.status(404).json({ ready: false, version: '2.1.2', filename: r36sZipFilename });
+      return res.status(404).json({ ready: false, version: '2.1.3', filename: r36sZipFilename });
     }
   });
 
@@ -1751,7 +1751,7 @@ async function createServer() {
 
   function nextPatchVersion(ver: string): string {
     const m = ver.trim().replace(/^v/i, '').match(SEMVER_RE);
-    if (!m) return '2.1.3';
+    if (!m) return '2.1.4';
     return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
   }
 
@@ -1777,7 +1777,7 @@ async function createServer() {
     } catch {
       // Fallback below
     }
-    return '2.1.2';
+    return '2.1.3';
   }
 
   async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
@@ -2482,7 +2482,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.2' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.3' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -2593,7 +2593,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.2' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.3' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -2791,7 +2791,7 @@ async function createServer() {
     try {
       const r = await fetch('https://ipwho.is/', {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.2' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.3' },
       });
       const data = (await r.json()) as {
         success?: boolean;
@@ -2886,7 +2886,7 @@ async function createServer() {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=pt&format=json`;
       const upstream = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.2' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.3' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ results: [], error: 'geocoding_unavailable' });
@@ -2949,7 +2949,7 @@ async function createServer() {
         `&timezone=auto&forecast_days=7`;
       const upstream = await fetch(apiUrl, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.2' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.3' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ error: 'weather_unavailable' });
@@ -3216,7 +3216,7 @@ async function createServer() {
         });
         const upstream = await fetch(`https://newsdata.io/api/1/latest?${params.toString()}`, {
           signal: controller.signal,
-          headers: { 'User-Agent': 'KPlayer-R36S/2.1.2', Accept: 'application/json' },
+          headers: { 'User-Agent': 'KPlayer-R36S/2.1.3', Accept: 'application/json' },
         });
         clearTimeout(timer);
         if (upstream.ok) {
@@ -3326,7 +3326,7 @@ async function createServer() {
     return res.status(502).json({ ok: false, error: 'news_fetch_failed', articles: [] });
   });
 
-  // ==================== STANDALONE R36S FILE MANAGER + 7-ZIP API (v2.1.2) ====================
+  // ==================== STANDALONE R36S FILE MANAGER + EDITOR + 7-ZIP API (v2.1.3) ====================
   // Confines all Web Simulator file operations strictly inside data/r36s-fs/ (presented as "/").
   // Real R36S hardware accesses the real Linux root "/" directly via source/file_manager.h.
 
@@ -3335,8 +3335,31 @@ async function createServer() {
   const FM_ARCHIVE_EXTS = new Set([
     '.zip', '.7z', '.rar', '.tar', '.gz', '.tgz', '.xz', '.txz', '.bz2', '.tbz2', '.cbz', '.cbr', '.iso',
   ]);
+  const FM_TEXT_EXTS = new Set([
+    '.txt', '.xml', '.html', '.htm', '.sh', '.cfg', '.conf', '.ini', '.json', '.log',
+    '.md', '.css', '.js', '.py', '.m3u', '.m3u8', '.pls', '.xspf', '.tsv', '.csv',
+    '.yaml', '.yml', '.nfo', '.lrc',
+  ]);
+  const FM_AUDIO_EXTS: Record<string, string> = {
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac',
+    '.m4a': 'audio/mp4',
+    '.aac': 'audio/aac',
+    '.opus': 'audio/opus',
+  };
+  const FM_VIDEO_EXTS: Record<string, string> = {
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mkv': 'video/x-matroska',
+    '.mov': 'video/quicktime',
+    '.m4v': 'video/mp4',
+    '.avi': 'video/x-msvideo',
+    '.ts': 'video/mp2t',
+  };
   const FM_PROTECTED_VIRTUAL_PATHS = new Set([
-    '/', '/roms', '/roms2', '/roms/ports', '/home', '/etc', '/usr', '/var',
+    '/', '/roms', '/roms2', '/roms/ports', '/home', '/etc', '/usr', '/usr/bin', '/var',
   ]);
 
   interface FmJobState {
@@ -3366,6 +3389,53 @@ async function createServer() {
     const low = name.toLowerCase();
     for (const ext of FM_ARCHIVE_EXTS) {
       if (low.endsWith(ext)) return true;
+    }
+    return false;
+  }
+
+  function isFmTextName(name: string): boolean {
+    return FM_TEXT_EXTS.has(path.extname(name).toLowerCase());
+  }
+
+  function isFmScriptName(name: string): boolean {
+    return name.toLowerCase().endsWith('.sh');
+  }
+
+  function isFmPlaylistName(name: string): boolean {
+    const ext = path.extname(name).toLowerCase();
+    return ext === '.m3u8' || ext === '.m3u';
+  }
+
+  function isFmRadioFile(name: string, virtualPath: string): boolean {
+    const ext = path.extname(name).toLowerCase();
+    if (ext === '.pls' || ext === '.xspf') return true;
+    if (ext === '.tsv' || ext === '.m3u') {
+      const low = `${virtualPath}/${name}`.toLowerCase();
+      if (low.includes('radio') || low.includes('/radios')) return true;
+    }
+    return false;
+  }
+
+  async function isFmExecutableBinary(realPath: string, name: string): Promise<boolean> {
+    if (isFmScriptName(name) || isFmArchiveName(name) || isFmTextName(name)) return false;
+    const ext = path.extname(name).toLowerCase();
+    if (FM_AUDIO_EXTS[ext] || FM_VIDEO_EXTS[ext]) return false;
+    if (name.toLowerCase() === 'emulationstation' || name.toLowerCase().startsWith('emulationstation')) {
+      return true;
+    }
+    try {
+      const fh = await fs.open(realPath, 'r');
+      const buf = Buffer.alloc(4);
+      const { bytesRead } = await fh.read(buf, 0, 4, 0);
+      await fh.close();
+      if (bytesRead >= 4 && buf[0] === 0x7f && buf[1] === 0x45 && buf[2] === 0x4c && buf[3] === 0x46) {
+        return true;
+      }
+      if (bytesRead >= 2 && buf[0] === 0x23 && buf[1] === 0x21) {
+        return true;
+      }
+    } catch {
+      // ignore
     }
     return false;
   }
@@ -3400,9 +3470,12 @@ async function createServer() {
         'roms/videos',
         'roms/ports/kplayer',
         'roms/gba',
+        'roms/iptv',
+        'roms/radios',
         'roms2/roms',
         'home/ark/Downloads',
         'etc',
+        'usr/bin',
         'usr/share',
       ];
       for (const d of dirs) {
@@ -3420,19 +3493,47 @@ async function createServer() {
 
       await writeIfMissing(
         'roms/ports/kplayer/settings.cfg',
-        'theme=0\nvisualizer=0\nkey_sfx=1\nversion=2.1.2\n'
+        'theme=0\nvisualizer=0\nkey_sfx=1\nversion=2.1.3\n'
       );
       await writeIfMissing(
         'roms/ports/kplayer/changelog.txt',
-        'KPlayer v2.1.2 (R36S)\n- Gerenciador de arquivos completo na raiz (/)\n- Suporte oficial 7-Zip (ip7z/7zip) + arquivos com senha\n- Barra de progresso com velocidade (MB/s) e tempo restante (ETA)\n'
+        'KPlayer v2.1.3 (R36S)\n- Editor de texto nativo (TXT, XML, HTML, SH, CFG, JSON, M3U8)\n- Execucao de scripts .sh de jogos do R36S e executaveis do EmulationStation\n- Abertura direta de videos, musicas, playlists .m3u8 e arquivos de radio\n- Changelog unificado em um unico quadro no aplicativo\n'
+      );
+      await writeIfMissing(
+        'roms/ports/kplayer/guia.html',
+        '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8" />\n  <title>Guia R36S — KPlayer v2.1.3</title>\n</head>\n<body>\n  <h1>KPlayer R36S v2.1.3</h1>\n  <p>Edite arquivos HTML, XML, TXT e scripts .sh diretamente pelo Gerenciador de Arquivos.</p>\n</body>\n</html>\n'
+      );
+      await writeIfMissing(
+        'roms/ports/gamelist.xml',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n  <game>\n    <path>./KPlayer.sh</path>\n    <name>KPlayer</name>\n    <desc>Player de mídia, rádio, IPTV, notícias, placar e gerenciador de arquivos para R36S.</desc>\n  </game>\n  <game>\n    <path>./IniciarJogo.sh</path>\n    <name>Demo PortMaster R36S</name>\n    <desc>Script .sh de exemplo para testar abertura e edição no KPlayer v2.1.3.</desc>\n  </game>\n</gameList>\n'
+      );
+      await writeIfMissing(
+        'roms/ports/IniciarJogo.sh',
+        '#!/bin/bash\n# Script de jogo PortMaster / R36S\nXDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}\nGAMEDIR="/roms/ports/demo_port"\nexport SDL_GAMECONTROLLERCONFIG_FILE="$GAMEDIR/gamecontrollerdb.txt"\ncd "$GAMEDIR"\n$ESUDO chmod 666 /dev/uinput\n./game_arm64 --fullscreen\n'
+      );
+      await writeIfMissing(
+        'usr/bin/emulationstation',
+        '#!/bin/sh\n# EmulationStation Frontend Launcher (R36S / dArkOS)\nexec /usr/bin/emulationstation.bin --no-splash "$@"\n'
+      );
+      await writeIfMissing(
+        'roms/iptv/canais-demo.m3u8',
+        '#EXTM3U\n#EXTINF:-1 tvg-name="NASA TV Public" group-title="Ciência",NASA TV Public (HLS)\nhttps://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8\n#EXTINF:-1 tvg-name="Big Buck Bunny" group-title="Cinema",Big Buck Bunny (Demo HLS)\nhttps://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n'
+      );
+      await writeIfMissing(
+        'roms/radios/estacoes-brasil.pls',
+        '[playlist]\nNumberOfEntries=2\nFile1=https://stream.zeno.fm/f3wvbbqmdg8uv\nTitle1=Lofi Beats 24h (Rádio Online)\nLength1=-1\nFile2=https://ice1.somafm.com/groovesalad-128-mp3\nTitle2=SomaFM Groove Salad\nLength2=-1\nVersion=2\n'
+      );
+      await writeIfMissing(
+        'roms/radios/radios-favoritas.m3u',
+        '#EXTM3U\n#EXTINF:-1,SomaFM Groove Salad (128kbps)\nhttps://ice1.somafm.com/groovesalad-128-mp3\n#EXTINF:-1,SomaFM DEF CON Radio\nhttps://ice1.somafm.com/defcon-128-mp3\n'
       );
       await writeIfMissing(
         'roms/bgmusic/LEIA-ME.txt',
-        'Pasta de músicas do console R36S (/roms/bgmusic).\nUse Músicas e Vídeos na Home para tocar sua biblioteca.\n'
+        'Pasta de músicas do console R36S (/roms/bgmusic).\nPressione B em qualquer música ou vídeo aqui no Gerenciador de Arquivos para reproduzir direto!\n'
       );
       await writeIfMissing(
         'home/ark/Downloads/LEIA-ME-SENHA.txt',
-        'Arquivos de teste do Gerenciador de Arquivos KPlayer v2.1.2:\n' +
+        'Arquivos de teste do Gerenciador de Arquivos KPlayer v2.1.3:\n' +
           '- pacote-temas-r36s.zip (ZIP padrão, sem senha)\n' +
           '- backup-protegido.zip (ZIP protegido por senha -> senha: r36s)\n'
       );
@@ -3440,6 +3541,40 @@ async function createServer() {
         'etc/os-release',
         'PRETTY_NAME="dArkOS Debian 13 (R36S Simulator Root)"\nID=darkos\nARCH=aarch64\n'
       );
+
+      // Generate a real tiny playable WAV audio sample in /roms/bgmusic/KPlayer-Chime.wav
+      const demoWav = path.join(FM_SANDBOX_ROOT, 'roms/bgmusic/KPlayer-Chime.wav');
+      const hasWav = await fs.access(demoWav).then(() => true).catch(() => false);
+      if (!hasWav) {
+        const sampleRate = 22050;
+        const durationSec = 1.4;
+        const numSamples = Math.floor(sampleRate * durationSec);
+        const dataSize = numSamples * 2;
+        const buf = Buffer.alloc(44 + dataSize);
+        buf.write('RIFF', 0);
+        buf.writeUInt32LE(36 + dataSize, 4);
+        buf.write('WAVE', 8);
+        buf.write('fmt ', 12);
+        buf.writeUInt32LE(16, 16);
+        buf.writeUInt16LE(1, 20);
+        buf.writeUInt16LE(1, 22);
+        buf.writeUInt32LE(sampleRate, 24);
+        buf.writeUInt32LE(sampleRate * 2, 28);
+        buf.writeUInt16LE(2, 32);
+        buf.writeUInt16LE(16, 34);
+        buf.write('data', 36);
+        buf.writeUInt32LE(dataSize, 40);
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        for (let i = 0; i < numSamples; i++) {
+          const t = i / sampleRate;
+          const noteIdx = Math.min(notes.length - 1, Math.floor(t / 0.35));
+          const localT = t - noteIdx * 0.35;
+          const env = Math.min(1, localT * 40) * Math.exp(-localT * 5.2);
+          const s = Math.sin(2 * Math.PI * notes[noteIdx] * t) * 0.32 * env;
+          buf.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(s * 32767))), 44 + i * 2);
+        }
+        await fs.writeFile(demoWav, buf);
+      }
 
       // Generate sample plain ZIP and password-protected ZIP (password: "r36s") once
       const plainZip = path.join(FM_SANDBOX_ROOT, 'home/ark/Downloads/pacote-temas-r36s.zip');
@@ -3571,6 +3706,13 @@ async function createServer() {
         mtime: number;
         isHidden: boolean;
         isArchive: boolean;
+        isText: boolean;
+        isScript: boolean;
+        isExecutable: boolean;
+        isPlaylist: boolean;
+        isRadio: boolean;
+        isAudio: boolean;
+        isVideo: boolean;
         ext: string;
       }> = [];
 
@@ -3582,6 +3724,15 @@ async function createServer() {
         if (!st) continue;
         const isDir = st.isDirectory();
         const vPath = resolved.virtualPath === '/' ? `/${d.name}` : `${resolved.virtualPath}/${d.name}`;
+        const ext = isDir ? '' : path.extname(d.name).toLowerCase();
+        const isArchive = !isDir && isFmArchiveName(d.name);
+        const isScript = !isDir && isFmScriptName(d.name);
+        const isRadio = !isDir && isFmRadioFile(d.name, vPath);
+        const isPlaylist = !isDir && !isRadio && isFmPlaylistName(d.name);
+        const isText = !isDir && isFmTextName(d.name);
+        const isAudio = !isDir && Boolean(FM_AUDIO_EXTS[ext]);
+        const isVideo = !isDir && Boolean(FM_VIDEO_EXTS[ext]);
+        const isExecutable = !isDir && (await isFmExecutableBinary(full, d.name));
         entries.push({
           name: d.name,
           path: vPath,
@@ -3589,8 +3740,15 @@ async function createServer() {
           size: isDir ? 0 : st.size,
           mtime: Math.floor(st.mtimeMs),
           isHidden,
-          isArchive: !isDir && isFmArchiveName(d.name),
-          ext: isDir ? '' : path.extname(d.name).toLowerCase(),
+          isArchive,
+          isText,
+          isScript,
+          isExecutable,
+          isPlaylist,
+          isRadio,
+          isAudio,
+          isVideo,
+          ext,
         });
       }
 
@@ -3611,13 +3769,335 @@ async function createServer() {
         quickRoots: [
           { label: '/ (Raiz)', path: '/' },
           { label: '/roms', path: '/roms' },
-          { label: '/roms2', path: '/roms2' },
           { label: '/roms/ports', path: '/roms/ports' },
+          { label: '/roms/iptv', path: '/roms/iptv' },
+          { label: '/roms/radios', path: '/roms/radios' },
           { label: '/home/ark/Downloads', path: '/home/ark/Downloads' },
         ],
       });
     } catch {
       return res.status(500).json({ ok: false, error: 'Falha ao listar pasta' });
+    }
+  });
+
+  // v2.1.3 Text Editor Read/Write (TXT, XML, HTML, SH, CFG, JSON, M3U8, PLS...)
+  app.get('/api/fm/text', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const resolved = resolveFmPath(req.query.path);
+      if (!resolved) {
+        return res.status(400).json({ ok: false, error: 'Caminho inválido' });
+      }
+      const st = await fs.stat(resolved.realPath).catch(() => null);
+      if (!st || !st.isFile()) {
+        return res.status(404).json({ ok: false, error: 'Arquivo não encontrado' });
+      }
+      if (st.size > 1024 * 1024) {
+        return res.status(413).json({ ok: false, error: 'Arquivo muito grande para o editor (máx. 1 MB)' });
+      }
+      const rawBuf = await fs.readFile(resolved.realPath);
+      if (rawBuf.includes(0)) {
+        return res.status(415).json({ ok: false, error: 'Arquivo binário não suportado no editor de texto' });
+      }
+      const content = rawBuf.toString('utf8');
+      const lineCount = content.length === 0 ? 1 : content.split(/\r?\n/).length;
+      return res.json({
+        ok: true,
+        path: resolved.virtualPath,
+        name: path.posix.basename(resolved.virtualPath),
+        ext: path.extname(resolved.virtualPath).toLowerCase(),
+        size: st.size,
+        lineCount,
+        content,
+      });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao abrir arquivo de texto' });
+    }
+  });
+
+  app.post('/api/fm/text', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const resolved = resolveFmPath(req.body?.path);
+      if (!resolved || resolved.virtualPath === '/' || FM_PROTECTED_VIRTUAL_PATHS.has(resolved.virtualPath)) {
+        return res.status(400).json({ ok: false, error: 'Caminho inválido ou protegido' });
+      }
+      if (typeof req.body?.content !== 'string') {
+        return res.status(400).json({ ok: false, error: 'Conteúdo inválido' });
+      }
+      const buf = Buffer.from(req.body.content, 'utf8');
+      if (buf.byteLength > 1024 * 1024) {
+        return res.status(413).json({ ok: false, error: 'Arquivo excede o limite de 1 MB' });
+      }
+      await fs.mkdir(path.dirname(resolved.realPath), { recursive: true });
+      const tmpPath = `${resolved.realPath}.kp_tmp_${randomUUID().slice(0, 8)}`;
+      await fs.writeFile(tmpPath, buf);
+      await fs.rename(tmpPath, resolved.realPath);
+      const lineCount = req.body.content.length === 0 ? 1 : req.body.content.split(/\r?\n/).length;
+      return res.json({
+        ok: true,
+        path: resolved.virtualPath,
+        size: buf.byteLength,
+        lineCount,
+      });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao salvar arquivo de texto' });
+    }
+  });
+
+  // v2.1.3 Confined Media File Streamer (only allowed audio/video extensions inside sandbox)
+  app.get('/api/fm/raw', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const resolved = resolveFmPath(req.query.path);
+      if (!resolved) {
+        return res.status(400).json({ ok: false, error: 'Caminho inválido' });
+      }
+      const ext = path.extname(resolved.realPath).toLowerCase();
+      const mime = FM_AUDIO_EXTS[ext] || FM_VIDEO_EXTS[ext];
+      if (!mime) {
+        return res.status(415).json({ ok: false, error: 'Formato de mídia não suportado para reprodução direta' });
+      }
+      const st = await fs.stat(resolved.realPath).catch(() => null);
+      if (!st || !st.isFile()) {
+        return res.status(404).json({ ok: false, error: 'Arquivo de mídia não encontrado' });
+      }
+      res.setHeader('Content-Type', mime);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Accept-Ranges', 'bytes');
+
+      const range = req.headers.range;
+      if (range && /^bytes=\d*-\d*$/.test(range)) {
+        const [startStr, endStr] = range.replace(/^bytes=/, '').split('-');
+        const start = startStr ? Math.min(st.size - 1, Math.max(0, parseInt(startStr, 10))) : 0;
+        const end = endStr ? Math.min(st.size - 1, Math.max(start, parseInt(endStr, 10))) : st.size - 1;
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${st.size}`);
+        res.setHeader('Content-Length', String(end - start + 1));
+        const fh = await fs.open(resolved.realPath, 'r');
+        const chunk = Buffer.alloc(end - start + 1);
+        await fh.read(chunk, 0, chunk.length, start);
+        await fh.close();
+        return res.end(chunk);
+      }
+      res.setHeader('Content-Length', String(st.size));
+      const fullBuf = await fs.readFile(resolved.realPath);
+      return res.end(fullBuf);
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao reproduzir mídia' });
+    }
+  });
+
+  // v2.1.3 Playlist (.m3u8/.m3u) & Radio (.pls/.xspf/.tsv) parser inside sandbox
+  app.post('/api/fm/parse-playlist', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const resolved = resolveFmPath(req.body?.path);
+      if (!resolved) {
+        return res.status(400).json({ ok: false, error: 'Arquivo inválido' });
+      }
+      const st = await fs.stat(resolved.realPath).catch(() => null);
+      if (!st || !st.isFile() || st.size > 2 * 1024 * 1024) {
+        return res.status(404).json({ ok: false, error: 'Lista não encontrada ou muito grande' });
+      }
+      const raw = await fs.readFile(resolved.realPath, 'utf8');
+      const name = path.posix.basename(resolved.virtualPath);
+      const ext = path.extname(name).toLowerCase();
+      const isRadioHint = isFmRadioFile(name, resolved.virtualPath);
+      const baseDir = path.posix.dirname(resolved.virtualPath) || '/';
+
+      const sanitizeEntryUrl = (candidate: string): { url: string; isLocal: boolean } | null => {
+        const trimmed = candidate.trim();
+        if (!trimmed) return null;
+        if (/^https?:\/\//i.test(trimmed)) {
+          try {
+            const parsed = new URL(trimmed);
+            if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+              return { url: parsed.toString(), isLocal: false };
+            }
+          } catch {
+            return null;
+          }
+          return null;
+        }
+        if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+          return null; // block javascript:, data:, file:, etc.
+        }
+        const localVirtual = trimmed.startsWith('/') ? trimmed : path.posix.join(baseDir, trimmed);
+        const localResolved = resolveFmPath(localVirtual);
+        if (!localResolved) return null;
+        return { url: localResolved.virtualPath, isLocal: true };
+      };
+
+      const items: Array<{ title: string; url: string; isLocal: boolean; isVideo: boolean; group: string }> = [];
+
+      if (ext === '.pls') {
+        const files = new Map<number, string>();
+        const titles = new Map<number, string>();
+        for (const rawLine of raw.split(/\r?\n/)) {
+          const line = rawLine.trim();
+          const fm = line.match(/^File(\d+)\s*=\s*(.+)$/i);
+          if (fm) files.set(Number(fm[1]), fm[2].trim());
+          const tm = line.match(/^Title(\d+)\s*=\s*(.+)$/i);
+          if (tm) titles.set(Number(tm[1]), tm[2].trim());
+        }
+        const keys = Array.from(files.keys()).sort((a, b) => a - b);
+        for (const k of keys) {
+          const safe = sanitizeEntryUrl(files.get(k) || '');
+          if (!safe) continue;
+          items.push({
+            title: titles.get(k) || path.posix.basename(safe.url) || safe.url,
+            url: safe.url,
+            isLocal: safe.isLocal,
+            isVideo: false,
+            group: 'Rádio PLS',
+          });
+        }
+      } else if (ext === '.tsv') {
+        for (const rawLine of raw.split(/\r?\n/)) {
+          const line = rawLine.trim();
+          if (!line || line.startsWith('#')) continue;
+          const parts = line.split('\t');
+          if (parts.length < 2) continue;
+          const safe = sanitizeEntryUrl(parts[1]);
+          if (!safe) continue;
+          items.push({
+            title: parts[0].trim() || safe.url,
+            url: safe.url,
+            isLocal: safe.isLocal,
+            isVideo: false,
+            group: (parts[2] || 'Rádio').trim(),
+          });
+        }
+      } else if (ext === '.xspf') {
+        const trackBlocks = raw.match(/<track\b[^>]*>[\s\S]*?<\/track>/gi) || [];
+        for (const blk of trackBlocks) {
+          const lm = blk.match(/<location>([^<]+)<\/location>/i);
+          if (!lm) continue;
+          const safe = sanitizeEntryUrl(lm[1]);
+          if (!safe) continue;
+          const tm = blk.match(/<title>([^<]+)<\/title>/i);
+          items.push({
+            title: (tm ? tm[1].trim() : '') || path.posix.basename(safe.url) || safe.url,
+            url: safe.url,
+            isLocal: safe.isLocal,
+            isVideo: !isRadioHint,
+            group: isRadioHint ? 'Rádio XSPF' : 'Playlist XSPF',
+          });
+        }
+      } else {
+        let pendingTitle = '';
+        let pendingGroup = isRadioHint ? 'Rádio M3U' : 'Playlist M3U8';
+        for (const rawLine of raw.split(/\r?\n/)) {
+          const line = rawLine.trim();
+          if (!line) continue;
+          if (line.startsWith('#EXTINF:')) {
+            const gm = line.match(/group-title="([^"]+)"/i);
+            if (gm) pendingGroup = gm[1].trim();
+            const comma = line.lastIndexOf(',');
+            if (comma >= 0 && comma + 1 < line.length) {
+              pendingTitle = line.slice(comma + 1).trim();
+            }
+            continue;
+          }
+          if (line.startsWith('#')) continue;
+          const safe = sanitizeEntryUrl(line);
+          if (!safe) continue;
+          const lowerUrl = safe.url.toLowerCase();
+          const isVid = safe.isLocal
+            ? Boolean(FM_VIDEO_EXTS[path.extname(lowerUrl)])
+            : !isRadioHint && (lowerUrl.includes('.m3u8') || lowerUrl.endsWith('.mp4') || lowerUrl.endsWith('.ts') || ext === '.m3u8');
+          items.push({
+            title: pendingTitle || path.posix.basename(safe.url) || safe.url,
+            url: safe.url,
+            isLocal: safe.isLocal,
+            isVideo: isVid,
+            group: pendingGroup,
+          });
+          pendingTitle = '';
+        }
+      }
+
+      return res.json({
+        ok: true,
+        path: resolved.virtualPath,
+        name,
+        kind: isRadioHint ? 'radio' : 'playlist',
+        count: items.length,
+        items: items.slice(0, 500),
+      });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao ler playlist ou arquivo de rádio' });
+    }
+  });
+
+  // v2.1.3 Safe R36S Script (.sh) & EmulationStation Launcher Preview (never executes shell on server host)
+  app.post('/api/fm/launch', async (req, res) => {
+    try {
+      await ensureFmSandboxSeeded();
+      const resolved = resolveFmPath(req.body?.path);
+      if (!resolved) {
+        return res.status(400).json({ ok: false, error: 'Caminho inválido' });
+      }
+      const st = await fs.stat(resolved.realPath).catch(() => null);
+      if (!st || !st.isFile()) {
+        return res.status(404).json({ ok: false, error: 'Arquivo não encontrado' });
+      }
+      const name = path.posix.basename(resolved.virtualPath);
+      const isScript = isFmScriptName(name);
+      const isExec = isScript || (await isFmExecutableBinary(resolved.realPath, name));
+      if (!isExec) {
+        return res.status(400).json({ ok: false, error: 'Arquivo não é um script .sh nem executável do EmulationStation' });
+      }
+      const rawBuf = await fs.readFile(resolved.realPath);
+      const isElf = rawBuf.length >= 4 && rawBuf[0] === 0x7f && rawBuf[1] === 0x45 && rawBuf[2] === 0x4c && rawBuf[3] === 0x46;
+      const lines: string[] = [];
+      let interpreter = isElf ? 'ELF ARM64 (Execução direta)' : '/bin/bash';
+      let targetDir = path.posix.dirname(resolved.virtualPath) || '/';
+      let gameDir = '';
+      let execLine = '';
+
+      if (!isElf) {
+        const text = rawBuf.toString('utf8', 0, Math.min(rawBuf.length, 16384));
+        const textLines = text.split(/\r?\n/);
+        if (textLines[0]?.startsWith('#!')) {
+          interpreter = textLines[0].slice(2).trim();
+        }
+        for (const l of textLines) {
+          const s = l.trim();
+          if (!s || s.startsWith('#')) continue;
+          const gdm = s.match(/^GAMEDIR\s*=\s*["']?([^"']+)["']?/);
+          if (gdm) gameDir = gdm[1];
+          if (s.startsWith('exec ') || s.startsWith('./') || s.includes('emulationstation')) {
+            execLine = s;
+          }
+        }
+        lines.push(`[R36S] Encerrando SDL2/libVLC do KPlayer para liberar tela e áudio ALSA...`);
+        lines.push(`[R36S] Diretório de trabalho: ${gameDir || targetDir}`);
+        lines.push(`[R36S] Interpretador: ${interpreter}`);
+        lines.push(`[R36S] Comando de handoff nativo: execv("${interpreter.split(/\s+/)[0]}", ["${resolved.virtualPath}"])`);
+        if (execLine) {
+          lines.push(`[Script] Alvo principal detectado: ${execLine}`);
+        }
+        lines.push(`[Simulador Web] Script validado com segurança (no console R36S real, o jogo/EmulationStation assume a tela imediatamente).`);
+      } else {
+        lines.push(`[R36S] Binário ELF detectado (${st.size} bytes).`);
+        lines.push(`[R36S] Encerrando SDL2/libVLC do KPlayer para liberar framebuffer DRM/KMS...`);
+        lines.push(`[R36S] Comando de handoff nativo: execv("${resolved.virtualPath}", ["${resolved.virtualPath}"])`);
+        lines.push(`[Simulador Web] Executável pronto para iniciar diretamente no hardware R36S.`);
+      }
+
+      return res.json({
+        ok: true,
+        path: resolved.virtualPath,
+        name,
+        kind: isScript ? 'script' : 'executable',
+        interpreter,
+        targetDir: gameDir || targetDir,
+        logLines: lines,
+      });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Falha ao preparar execução do arquivo' });
     }
   });
 
@@ -3970,7 +4450,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.2',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.3',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -4066,7 +4546,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.1.2 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.1.3 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

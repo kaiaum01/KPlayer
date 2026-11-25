@@ -765,11 +765,19 @@ int main(void) {
   show_osd = false;
   draw_video();
   assert(screenshot("../../video-native.bmp"));
-  /* Verify v2.1.2 standalone File Manager helpers & rendering before font cleanup */
+  /* Verify v2.1.2 + v2.1.3 standalone File Manager helpers, editor, .sh/ELF, playlists & rendering before font cleanup */
   assert(fm_is_archive_name("roms.zip"));
   assert(fm_is_archive_name("BACKUP.7Z"));
   assert(fm_is_archive_name("pacote.tar.gz"));
   assert(!fm_is_archive_name("musica.mp3"));
+  assert(fm_is_text_name("gamelist.xml"));
+  assert(fm_is_text_name("guia.html"));
+  assert(fm_is_text_name("notas.txt"));
+  assert(fm_is_script_name("IniciarJogo.sh"));
+  assert(!fm_is_script_name("musica.mp3"));
+  assert(fm_is_playlist_name("canais.m3u8"));
+  assert(fm_is_playlist_name("lista.m3u"));
+  assert(fm_is_radio_file("estacoes.pls", "/roms/radios/estacoes.pls"));
   assert(fm_is_protected_path("/"));
   assert(fm_is_protected_path("/roms"));
   assert(!fm_is_protected_path("/roms/bgmusic/album"));
@@ -778,9 +786,71 @@ int main(void) {
   assert(strstr(fm_spd, "MB/s") != NULL);
   fm_format_eta(85, fm_eta, sizeof(fm_eta));
   assert(strcmp(fm_eta, "1m 25s") == 0);
+  {
+    char fm_tmp[] = "/tmp/kplayer-fm213-XXXXXX";
+    assert(mkdtemp(fm_tmp));
+    char f_txt[512], f_m3u8[512], f_pls[512], f_elf[512];
+    snprintf(f_txt, sizeof(f_txt), "%s/guia.html", fm_tmp);
+    snprintf(f_m3u8, sizeof(f_m3u8), "%s/canais.m3u8", fm_tmp);
+    snprintf(f_pls, sizeof(f_pls), "%s/radios.pls", fm_tmp);
+    snprintf(f_elf, sizeof(f_elf), "%s/emulationstation", fm_tmp);
+    FILE *ff = fopen(f_txt, "wb");
+    assert(ff);
+    fputs("<html>\n<body>KPlayer</body>\n</html>\n", ff);
+    fclose(ff);
+    ff = fopen(f_m3u8, "wb");
+    assert(ff);
+    fputs("#EXTM3U\n#EXTINF:-1,Canal Teste\nhttps://example.org/stream.m3u8\n", ff);
+    fclose(ff);
+    ff = fopen(f_pls, "wb");
+    assert(ff);
+    fputs("[playlist]\nNumberOfEntries=1\nFile1=https://example.org/radio.mp3\nTitle1=Radio Teste\n", ff);
+    fclose(ff);
+    ff = fopen(f_elf, "wb");
+    assert(ff);
+    const unsigned char elf_hdr[8] = {0x7f, 'E', 'L', 'F', 2, 1, 1, 0};
+    assert(fwrite(elf_hdr, 1, sizeof(elf_hdr), ff) == sizeof(elf_hdr));
+    fclose(ff);
+    assert(chmod(f_elf, 0755) == 0);
+    assert(fm_is_executable_file(f_elf, S_IFREG | 0755));
+    assert(!fm_is_executable_file(f_txt, S_IFREG | 0644));
+    fm_ensure_buffers();
+
+    /* Native Text Editor open -> replace -> insert -> save -> render */
+    assert(fm_ed_open(f_txt, "guia.html"));
+    assert(fm_ed_count == 3 && strcmp(fm_ed_lines[1], "<body>KPlayer</body>") == 0);
+    assert(fm_ed_replace_line(1, "<body>KPlayer v2.1.3</body>"));
+    assert(fm_ed_insert_line(2, "<!-- ok -->"));
+    assert(fm_ed_dirty && fm_ed_count == 4);
+    assert(fm_ed_save());
+    assert(!fm_ed_dirty);
+    fm_view = FM_VIEW_EDITOR;
+    draw_file_manager();
+    fm_ed_free();
+
+    /* Native Playlist & Radio parser -> render */
+    assert(fm_parse_media_list(f_m3u8, "canais.m3u8", false));
+    assert(fm_ml_count == 1 && strcmp(fm_ml_items[0].title, "Canal Teste") == 0);
+    fm_view = FM_VIEW_MEDIA_LIST;
+    draw_file_manager();
+    assert(fm_parse_media_list(f_pls, "radios.pls", true));
+    assert(fm_ml_count == 1 && strcmp(fm_ml_items[0].title, "Radio Teste") == 0);
+    draw_file_manager();
+    fm_view = FM_VIEW_BROWSE;
+
+    unlink(f_txt);
+    unlink(f_m3u8);
+    unlink(f_pls);
+    unlink(f_elf);
+    rmdir(fm_tmp);
+  }
   fm_open();
   draw_file_manager();
   fm_free_buffers();
+  /* Unified single-frame changelog render */
+  mode = 14;
+  draw_changelog();
+  mode = 3;
 
   SDL_DestroyTexture(video_texture);
   video_texture = NULL;
