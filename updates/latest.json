@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "version": "2.1.6",
-  "nextVersion": "2.1.7",
+  "version": "2.1.7",
+  "nextVersion": "2.1.8",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.1.6",
-  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.6",
-  "releasedAt": "2026-11-26T20:10:01Z",
+  "releaseTag": "v2.1.7",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.7",
+  "releasedAt": "2026-11-26T22:00:00Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -22,27 +22,28 @@
     "history.txt",
     "favorites.txt",
     "radio-favorites.tsv",
-    "resume.cfg"
+    "resume.cfg",
+    ".system-inject-state.json",
+    "system-audio.json"
   ],
   "notes": [
-    "Mini-Player no Jogo (L3 + R3) com o Design do KPlayer:",
-    "Painel arredondado no canto superior esquerdo (libkp_overlay.so + fallback /dev/fb0) com gradiente do tema ativo, emblema de disco de vinil K (K PLAYER · MINI-PLAYER), card TOCANDO",
-    "Controles: L3 + R3 abre/oculta; ↑/↓ navega; ←/→ ajusta volume (10%–100%) ou troca faixa; B/START confirma; R2/L2 avança/volta faixa direto; A oculta.",
-    "Demonstração na Preview Web: Botão Demo Mini-Player (L3+R3) exibindo o novo Mini-Player KPlayer diretamente sobre um jogo em execução.",
-    "Fluxo Estável de Áudio em Jogos Restaurado:",
-    "Ative em SELECT → Opções → Áudio em jogos (Teste prévio) e abra seus jogos ou scripts .sh pelo Gerenciador de Arquivos (Arquivos) com música ou rádio tocando em segundo plano (./kp"
+    "Mini-Player KPlayer (L3 + R3) nativo nos ports pelo Gerenciador de Arquivos: escolha direta entre 'Executar com Mini-Player KPlayer (L3 + R3)' (padrão) ou 'Executar sem Mini-Player (padrão)' ao abrir scripts .sh e executáveis.",
+    "Nova opção 'Mini-Player no Sistema Inteiro' em SELECT → Opções: desativa a música de fundo do EmulationStation de forma limpa e reversível, injeta o Mini-Player KPlayer no console (/usr/local/lib/libkp_overlay.so, /etc/ld.so.preload e serviço systemd/rc.local) e permanece ativo mesmo após reiniciar o R36S.",
+    "Controle exclusivo pelo KPlayer: a desativação em SELECT → Opções → Mini-Player no Sistema Inteiro remove completamente os arquivos injetados e restaura a música original do EmulationStation (sem jamais alterar gamelist.xml).",
+    "Preview Web atualizada para v2.1.7 com opção de iniciar ports com/sem Mini-Player, alternador 'Mini-Player no Sistema Inteiro' e demonstração interativa no Jogo/Port e no EmulationStation.",
+    "Base estável R36S mantida: libkp_overlay.so seguro para boot, Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip ARM64."
   ],
   "r36s": {
-    "filename": "KPlayer-v2.1.6-R36S.zip",
-    "path": "updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
-    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
-    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.6/KPlayer-v2.1.6-R36S.zip",
-    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.6/KPlayer-v2.1.6-R36S.zip.sha256",
-    "sha256": "f7ff7341727299bf6c6fedae433432e8c885094022558eee529911b9b5716d41",
-    "sizeBytes": 18202665
+    "filename": "KPlayer-v2.1.7-R36S.zip",
+    "path": "updates/v2.1.7/KPlayer-v2.1.7-R36S.zip",
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.7/KPlayer-v2.1.7-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.7/KPlayer-v2.1.7-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.7/KPlayer-v2.1.7-R36S.zip.sha256",
+    "sha256": "",
+    "sizeBytes": 0
   },
   "web": {
-    "version": "2.1.6",
+    "version": "2.1.7",
     "reloadRequired": true
   }
 }

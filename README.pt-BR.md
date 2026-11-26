@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="KPlayer v2.1.6 — Central de Mídia Portátil para R36S" width="100%" />
+  <img src="docs/images/banner.svg" alt="KPlayer v2.1.7 — Central de Mídia Portátil para R36S" width="100%" />
 </p>
 
-<h1 align="center">KPlayer v2.1.6</h1>
+<h1 align="center">KPlayer v2.1.7</h1>
 
 <p align="center">
   <strong>Central de mídia portátil nativa para R36S (dArkOS / PortMaster — C + SDL2 + libVLC ARM64)</strong><br />
-  Músicas e Vídeos (.LRC) · Arquivos + PDF (PdfCraft) + Editor + .sh + 7-Zip · Áudio em Jogos &amp; Mini-Player (L3+R3) · 10 Visualizadores · 14 Temas · Rádio · IPTV + EPG · Notícias · Clima · Placar
+  Músicas e Vídeos (.LRC) · Arquivos + PDF (PdfCraft) + Editor + .sh + 7-Zip · Mini-Player Nativo nos Ports &amp; Sistema Inteiro (L3+R3) · 10 Visualizadores · 14 Temas · Rádio · IPTV + EPG · Notícias · Clima · Placar
 </p>
 
 <p align="center">
@@ -17,20 +17,24 @@
   <a href="docs/BUILD.md">Compilação</a> ·
   <a href="TERMS.md">Termos e Transparência</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.1.6</a> ·
+  <a href="releases/RELEASE_NOTES.md">Notas da Release v2.1.7</a> ·
   <a href="THIRD_PARTY.md">Licenças</a>
 </p>
 
 ---
 
-## Novidades da v2.1.6 (R36S Nativo)
+## Novidades da v2.1.7 (R36S Nativo)
 
-- **Mini-Player no Jogo (`L3 + R3`) com o Design do KPlayer:**
-  - Overlay redesenhado no visual arredondado do KPlayer (`libkp_overlay.so` + fallback `/dev/fb0`), com gradiente no tema ativo, emblema de vinil **`K`** (`K PLAYER · MINI-PLAYER`), card **`TOCANDO AGORA`** com mini-equalizador e 5 cards de ação com barra lateral de foco.
-  - Ativação dentro dos jogos por **`L3 + R3`** (clique nos dois analógicos; `F8` no teclado), imune ao `gptokeyb` (`EVIOCGKEY`/`SDL_GAMECONTROLLERCONFIG`). Use **`↑`/`↓`** para navegar, **`←`/`→`** no volume (`10%–100%`), **`B`/`START`** para confirmar, **`R2`/`L2`** para trocar faixa e **`A`** ou **`L3 + R3`** para ocultar.
-  - Demonstração interativa (**`Demo Mini-Player (L3+R3)`**) na Preview Web mostrando o novo Mini-Player KPlayer diretamente sobre um jogo em execução.
-- **Fluxo Estável de Áudio em Jogos Restaurado (`SELECT → Opções → Áudio em jogos (Teste prévio)`):**
-  - Ative em **`SELECT → Opções → Áudio em jogos (Teste prévio)`** e abra seus jogos ou scripts `.sh` pelo **Gerenciador de Arquivos (`Arquivos`)** para manter sua música ou rádio online tocando via `./kplayer --bg-audio` com mixagem automática PulseAudio/PipeWire ou ALSA `dmix`; ao fechar o jogo, o áudio encerra limpo e o KPlayer retorna automaticamente.
+- **Mini-Player KPlayer (`L3 + R3`) Nativo Sempre Disponível nos Ports (`Arquivos`):**
+  - Ao abrir qualquer script `.sh` ou executável pelo **Gerenciador de Arquivos (`Arquivos`)**, a opção padrão já é **`Executar com Mini-Player KPlayer (L3 + R3)`** (mantendo sua música ou rádio em segundo plano via `./kplayer --bg-audio` + `libkp_overlay.so`), com escolha imediata para **`Executar sem Mini-Player (padrão)`** (`KPLAYER_DISABLE_OVERLAY=1`) ou **`Abrir no Editor de Texto`** (`.sh`).
+- **Mini-Player no Sistema Inteiro — Injeção Persistente no Console (`SELECT → Opções → Mini-Player no Sistema Inteiro`):**
+  - Script seguro e 100% reversível (`ports/kplayer/system_inject.py`) controlado **somente pelas opções do KPlayer**:
+    - Desativa a música de fundo do EmulationStation de forma limpa e com backup automático (sem jamais alterar `gamelist.xml`).
+    - Instala `libkp_overlay.so` validado em `/usr/local/lib/libkp_overlay.so` + `/etc/ld.so.preload` + serviço persistente `kplayer-miniplayer.service` (com fallback `/etc/rc.local`), mantendo o Mini-Player KPlayer ativo no console inteiro mesmo após reiniciar o R36S.
+    - Pausa automaticamente quando você abre o KPlayer (`/dev/shm/kplayer-main.lock`) e sincroniza playlist/tema ao sair; desativar nas opções do KPlayer remove tudo e restaura a música original do EmulationStation.
+- **Mini-Player com o Design do KPlayer (`L3 + R3`) & Preview Web:**
+  - Painel arredondado no tema ativo com emblema de vinil **`K`** (`K PLAYER · MINI-PLAYER`), card **`TOCANDO AGORA`** com mini-equalizador e 5 cards de ação. Ative com **`L3 + R3`** (`F8` no teclado); navegue com **`↑`/`↓`**, volume **`←`/`→`** (`10%–100%`), confirme **`B`/`START`**, troque faixa com **`R2`/`L2`** e oculte com **`A`** ou **`L3 + R3`**.
+  - Demonstração interativa (**`Demo Mini-Player (L3+R3)`**) na Preview Web com alternância entre **Port / Jogo** e **EmulationStation (Sistema Injetado)**.
 - **Leitor de PDF Integrado Compatível com `PdfCraft R36S` (`github.com/kaiaum01/PdfReader-R36s`):**
   - Abra arquivos **`.pdf`** diretamente no Gerenciador de Arquivos (`Arquivos`).
   - Compatível com o motor **`pdfcraft-core.aarch64`** (protocolo nativo `serve` JSON IPC, incluindo PDFs com senha pelo teclado na tela), opção de abrir diretamente no **`PdfCraft.sh`** quando instalado em `/roms(2)/ports/`, além de fallback automático via `pdftoppm`/`mutool` e modo texto puro em Python (`L1`/`R1` páginas, `X` zoom, `Y` alternar documento/texto, `A` voltar).
@@ -63,7 +67,7 @@
 | :--- | :--- |
 | **Player de Música** | Tags ID3 locais, capa embutida/sidecar, **Letras `.LRC` sincronizadas**, painéis de Fila e Pasta, Favoritas, Velocidade, Repetição, Aleatório, Timer de sono, Equalizador libVLC e **Protetor de Tela com 10 visualizadores**. |
 | **Player de Vídeo** | Reprodução via libVLC, Formato da imagem (`Original / Preencher / Esticar`), Velocidade, Repetição e controles OSD que se ocultam automaticamente. |
-| **Gerenciador de Arquivos (`Arquivos`)** | Acesso completo à raiz (`/`) separado de Músicas e Vídeos: **Leitor de PDF** (compatível com `kaiaum01/PdfReader-R36s` / `PdfCraft R36S`), **Editor de Texto** (`.txt`, `.xml`, `.html`, `.sh`, `.cfg`), execução de scripts `.sh` de jogos e binários do EmulationStation (com **Áudio em jogos — Teste prévio** opcional), reprodução direta de vídeos, músicas, playlists `.m3u8` e rádios (`.pls`/`.xspf`/`.tsv`), criar/copiar/mover/renomear/apagar, **7-Zip (`7zzs`)** com senha e barra de progresso/velocidade/ETA. |
+| **Gerenciador de Arquivos (`Arquivos`)** | Acesso completo à raiz (`/`) separado de Músicas e Vídeos: **Leitor de PDF** (compatível com `kaiaum01/PdfReader-R36s` / `PdfCraft R36S`), **Editor de Texto** (`.txt`, `.xml`, `.html`, `.sh`, `.cfg`), execução de scripts `.sh` de jogos e binários do EmulationStation **com ou sem o Mini-Player KPlayer nativo (`L3 + R3`)**, reprodução direta de vídeos, músicas, playlists `.m3u8` e rádios (`.pls`/`.xspf`/`.tsv`), criar/copiar/mover/renomear/apagar, **7-Zip (`7zzs`)** com senha e barra de progresso/velocidade/ETA. |
 | **Rádio Online** | Diretório aberto **Radio-Browser** (Brasil, Mais ouvidas, Pop, Rock, Notícias, Favoritas) + estações pessoais em `ports/kplayer/radios_usuario/`. |
 | **IPTV + EPG ao Vivo** | Catálogo ilimitado por categorias: **Canais** (com guia EPG ao vivo), **Filmes**, **Séries** (todas as temporadas e episódios) e **IPTV do Usuário** (teclado virtual + pasta `ports/kplayer/iptv_usuario/`). |
 | **Notícias (Brasil)** | Manchetes em português (**Todas, Urgente, Mundo, Polícia, Entretenimento, Esportes**) via **NewsData.io** (`ports/kplayer/news.cfg` ou `NEWSDATA_API_KEY`) com fallback RSS ao vivo e leitor completo pelo controle. |
@@ -74,7 +78,7 @@
 
 ## Instalação no R36S (dArkOS / PortMaster)
 
-1. Baixe **`KPlayer-v2.1.6-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
+1. Baixe **`KPlayer-v2.1.7-R36S.zip`** na aba **[Releases](../../releases)**. *(Não use o ZIP de código-fonte do GitHub como instalador.)*
 2. Extraia e copie **`KPlayer.sh`** e a pasta **`kplayer/`** para `/roms/ports/` (ou `/roms2/ports/` no SD2).
 3. Coloque suas mídias nas pastas dedicadas (boot rápido — sem varrer ROMs/BIOS/saves):
 

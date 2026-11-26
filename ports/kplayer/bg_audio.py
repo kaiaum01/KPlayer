@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""In-game background audio & KPlayer Mini-Player handoff for KPlayer R36S (v2.1.6).
+"""Native in-game background audio & KPlayer Mini-Player handoff for KPlayer R36S (v2.1.7).
 
 Invoked by `ports/KPlayer.sh` when `./kplayer` exits with code 43 after writing
 `ports/kplayer/.bg-launch.json`. Keeps music/radio playback alive while a
@@ -261,12 +261,15 @@ def build_target_env(
     if overlay_shm is not None:
         env["KPLAYER_OVERLAY_SHM"] = str(overlay_shm)
     if overlay_so is not None and overlay_so.is_file():
+        env.pop("KPLAYER_DISABLE_OVERLAY", None)
         cur_preload = env.get("LD_PRELOAD", "").strip()
         so_str = str(overlay_so)
         parts = [p for p in cur_preload.split(":") if p]
         if so_str not in parts:
             parts.insert(0, so_str)
             env["LD_PRELOAD"] = ":".join(parts)
+    else:
+        env["KPLAYER_DISABLE_OVERLAY"] = "1"
     return env
 
 

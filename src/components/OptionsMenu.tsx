@@ -591,7 +591,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         : undefined;
       const updValue = updateStatus?.updateAvailable
         ? `Nova v${updateStatus.latestVersion}`
-        : `v${updateStatus?.currentVersion ?? '2.1.6'}`;
+        : `v${updateStatus?.currentVersion ?? '2.1.7'}`;
 
       return [
         {
@@ -599,12 +599,6 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           label: tr('Adaptação de tela', language),
           value: activeDisplayLabel,
           onSelect: () => goSection('displayMode', 'root'),
-        },
-        {
-          id: 'bg-audio-preview',
-          label: 'Áudio em jogos (Teste prévio)',
-          value: bgAudioPreview ? 'Ativado (Prévio)' : 'Desativado',
-          onSelect: onToggleBgAudioPreview,
         },
         {
           id: 'weather',
@@ -623,6 +617,14 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           label: 'Layout da tela inicial',
           value: homeLayoutInverted ? 'Invertido (Clima topo)' : 'Clima grande embaixo',
           onSelect: onToggleHomeLayout,
+        },
+        {
+          id: 'bg-audio-preview',
+          label: 'Mini-Player no Sistema Inteiro',
+          value: bgAudioPreview ? 'Injetado no R36S' : 'Desativado',
+          badge: bgAudioPreview ? 'SISTEMA' : undefined,
+          selected: bgAudioPreview,
+          onSelect: onToggleBgAudioPreview,
         },
         {
           id: 'screensaver',
@@ -793,8 +795,8 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
             : updateStatus?.updateAvailable
             ? `Baixar e atualizar para v${updateStatus.latestVersion}`
             : reinstallArmed
-            ? `CONFIRMAR: Reinstalar v${updateStatus?.currentVersion ?? '2.1.5'} mesmo assim`
-            : `Reinstalar mesma versão v${updateStatus?.currentVersion ?? '2.1.5'} (com aviso)`,
+            ? `CONFIRMAR: Reinstalar v${updateStatus?.currentVersion ?? '2.1.7'} mesmo assim`
+            : `Reinstalar mesma versão v${updateStatus?.currentVersion ?? '2.1.7'} (com aviso)`,
           badge: updateStatus?.updateAvailable
             ? 'PRONTO'
             : reinstallArmed
@@ -1097,12 +1099,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 <div style={{ color: theme.accent }} className="text-[12.5px] font-extrabold">
                   {updateStatus?.updateAvailable
                     ? `Nova versão disponível: v${updateStatus.latestVersion}`
-                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.1.6'} (mesma versão mais recente)`}
+                    : `Versão instalada: v${updateStatus?.currentVersion ?? '2.1.7'} (mesma versão mais recente)`}
                 </div>
                 <div style={{ color: theme.muted }} className="text-[11.5px] mt-0.5">
                   {updateStatus?.updateAvailable
                     ? 'Pronta para baixar da pasta updates/ do GitHub e reiniciar automaticamente.'
-                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.1.7'} e próximas versões na pasta updates/.`}
+                    : `Monitorando automaticamente v${updateStatus?.nextExpectedVersion ?? '2.1.8'} e próximas versões na pasta updates/.`}
                 </div>
               </div>
               <span
@@ -1133,8 +1135,8 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
                 className="px-2.5 py-2 rounded-lg text-[11px] leading-snug font-semibold"
               >
                 {reinstallArmed
-                  ? `AVISO: Você já está na v${updateStatus?.currentVersion ?? '2.1.6'}. Pressione B novamente em "CONFIRMAR" para baixar e reinstalar a mesma versão (favoritos, histórico e listas serão preservados).`
-                  : `Aviso: você já está na versão mais recente (v${updateStatus?.currentVersion ?? '2.1.6'}). Atualizar novamente irá reinstalar esta mesma versão preservando seus dados.`}
+                  ? `AVISO: Você já está na v${updateStatus?.currentVersion ?? '2.1.7'}. Pressione B novamente em "CONFIRMAR" para baixar e reinstalar a mesma versão (favoritos, histórico e listas serão preservados).`
+                  : `Aviso: você já está na versão mais recente (v${updateStatus?.currentVersion ?? '2.1.7'}). Atualizar novamente irá reinstalar esta mesma versão preservando seus dados.`}
               </div>
             )}
 

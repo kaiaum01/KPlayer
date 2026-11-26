@@ -21,8 +21,12 @@ def _load_module(name: str, rel_path: str):
     return mod
 
 
+if str(BASE / "ports" / "kplayer") not in sys.path:
+    sys.path.insert(0, str(BASE / "ports" / "kplayer"))
+
 bg_audio = _load_module("kp_bg_audio", "ports/kplayer/bg_audio.py")
 pdf_ops = _load_module("kp_pdf_ops", "ports/kplayer/pdf_ops.py")
+system_inject = _load_module("kp_system_inject", "ports/kplayer/system_inject.py")
 
 
 def _build_minimal_two_page_pdf() -> bytes:
@@ -215,6 +219,11 @@ class BgAudioPreviewTest(unittest.TestCase):
             self.assertEqual(game_env["ALSA_CONFIG_PATH"], str(dmix_conf))
             self.assertEqual(game_env["KPLAYER_OVERLAY_SHM"], str(fake_shm))
             self.assertEqual(game_env["LD_PRELOAD"], f"{fake_overlay}:/usr/lib/existing.so")
+            self.assertNotIn("KPLAYER_DISABLE_OVERLAY", game_env)
+
+            # Launching without Mini-Player sets KPLAYER_DISABLE_OVERLAY=1 even if system preload exists
+            plain_env = bg_audio.build_target_env(base_env, None, overlay_so=None, overlay_shm=None)
+            self.assertEqual(plain_env.get("KPLAYER_DISABLE_OVERLAY"), "1")
 
             # Audio daemon env keeps KPLAYER_BG_AOUT, ALSA_CONFIG_PATH, KPLAYER_OVERLAY_SHM and drops LD_PRELOAD
             audio_env = bg_audio.build_audio_env(
@@ -224,6 +233,103 @@ class BgAudioPreviewTest(unittest.TestCase):
             self.assertEqual(audio_env["ALSA_CONFIG_PATH"], str(dmix_conf))
             self.assertEqual(audio_env["KPLAYER_OVERLAY_SHM"], str(fake_shm))
             self.assertNotIn("LD_PRELOAD", audio_env)
+
+
+class SystemInjectTest(unittest.TestCase):
+    def test_system_inject_install_and_full_reversible_uninstall(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            fake_root = tmp_dir / "rootfs"
+            gamedir = tmp_dir / "ports" / "kplayer"
+            music_dir = tmp_dir / "bgmusic"
+            gamedir.mkdir(parents=True)
+            music_dir.mkdir(parents=True)
+
+            # Valid ELF header for libkp_overlay.so
+            overlay_src = gamedir / "libkp_overlay.so"
+            overlay_src.write_bytes(b"\x7fELF" + b"\x02\x01\x01\x00" + b"\x00" * 64)
+
+            # Sample track & EmulationStation files
+            song = music_dir / "theme.mp3"
+            song.write_bytes(b"ID3" + b"\x00" * 32)
+
+            es_cfg = fake_root / "home" / "ark" / ".emulationstation" / "es_settings.cfg"
+            es_cfg.parent.mkdir(parents=True)
+            orig_es_cfg = (
+                '<?xml version="1.0"?>\n'
+                '<bool name="BackgroundMusic" value="true" />\n'
+                '<bool name="audio.bgmusic" value="true" />\n'
+            )
+            es_cfg.write_text(orig_es_cfg, encoding="utf-8")
+
+            gamelist = fake_root / "roms" / "ports" / "gamelist.xml"
+            gamelist.parent.mkdir(parents=True)
+            orig_gamelist = "<gameList><game><name>KPlayer</name></game></gameList>\n"
+            gamelist.write_text(orig_gamelist, encoding="utf-8")
+
+            # Existing preload entry should be preserved alongside our lib
+            preload_file = fake_root / "etc" / "ld.so.preload"
+            preload_file.parent.mkdir(parents=True)
+            preload_file.write_text("/usr/lib/other_existing.so\n", encoding="utf-8")
+
+            # Install system-wide Mini-Player in isolated root
+            inst = system_inject.install_system_miniplayer(
+                gamedir,
+                root=fake_root,
+                music_dirs=[music_dir],
+                run_system_cmds=False,
+            )
+            self.assertTrue(inst["ok"])
+            self.assertTrue(inst["installed"])
+            self.assertEqual(inst["tracks_count"], 1)
+
+            # Verify installed artifacts
+            self.assertTrue((fake_root / "usr/local/lib/libkp_overlay.so").is_file())
+            self.assertTrue((fake_root / "usr/local/bin/kplayer-system-daemon.sh").is_file())
+            self.assertTrue((fake_root / "etc/systemd/system/kplayer-miniplayer.service").is_file())
+            self.assertTrue((fake_root / "etc/profile.d/kplayer-miniplayer.sh").is_file())
+
+            preload_lines = preload_file.read_text(encoding="utf-8").splitlines()
+            self.assertIn("/usr/lib/other_existing.so", preload_lines)
+            self.assertIn("/usr/local/lib/libkp_overlay.so", preload_lines)
+
+            # EmulationStation BGM disabled cleanly; gamelist.xml untouched
+            es_after = es_cfg.read_text(encoding="utf-8")
+            self.assertIn('name="BackgroundMusic" value="false"', es_after)
+            self.assertIn('name="audio.bgmusic" value="false"', es_after)
+            self.assertEqual(gamelist.read_text(encoding="utf-8"), orig_gamelist)
+
+            st_on = system_inject.get_status(gamedir, root=fake_root, check_live_procs=False)
+            self.assertTrue(st_on["installed"])
+            self.assertTrue(st_on["preload_active"])
+            self.assertTrue(st_on["service_installed"])
+            self.assertEqual(st_on["tracks_count"], 1)
+
+            # Full reversible uninstall
+            uninst = system_inject.uninstall_system_miniplayer(
+                gamedir,
+                root=fake_root,
+                run_system_cmds=False,
+            )
+            self.assertTrue(uninst["ok"])
+            self.assertFalse(uninst["installed"])
+
+            self.assertFalse((fake_root / "usr/local/lib/libkp_overlay.so").exists())
+            self.assertFalse((fake_root / "usr/local/bin/kplayer-system-daemon.sh").exists())
+            self.assertFalse((fake_root / "etc/systemd/system/kplayer-miniplayer.service").exists())
+            self.assertFalse((fake_root / "etc/profile.d/kplayer-miniplayer.sh").exists())
+
+            preload_after = preload_file.read_text(encoding="utf-8").splitlines()
+            self.assertIn("/usr/lib/other_existing.so", preload_after)
+            self.assertNotIn("/usr/local/lib/libkp_overlay.so", preload_after)
+
+            # Original es_settings.cfg restored identically; gamelist.xml untouched
+            self.assertEqual(es_cfg.read_text(encoding="utf-8"), orig_es_cfg)
+            self.assertEqual(gamelist.read_text(encoding="utf-8"), orig_gamelist)
+
+            st_off = system_inject.get_status(gamedir, root=fake_root, check_live_procs=False)
+            self.assertFalse(st_off["installed"])
+            self.assertFalse(st_off["preload_active"])
 
 
 class PdfOpsPdfCraftCompatTest(unittest.TestCase):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests verifying stable KPlayer.sh launcher restoration, v2.1.6 in-game handoff, and never touching gamelist.xml."""
+"""Tests verifying stable KPlayer.sh launcher restoration, v2.1.7 native port handoff + system injector, and never touching gamelist.xml."""
 from pathlib import Path
 import importlib.util
 import tempfile
@@ -13,15 +13,19 @@ SPEC.loader.exec_module(updater)
 
 
 class UpdaterLauncherTest(unittest.TestCase):
-    def test_kplayer_sh_supports_v216_bg_audio_handoff_and_helpers(self) -> None:
+    def test_kplayer_sh_supports_v217_bg_audio_handoff_and_system_inject(self) -> None:
         sh = (BASE / "ports/KPlayer.sh").read_text(encoding="utf-8")
-        self.assertIn('KPLAYER_VERSION="2.1.6"', sh)
+        self.assertIn('KPLAYER_VERSION="2.1.7"', sh)
         self.assertIn('"$result" -eq 43', sh)
         self.assertNotIn('"$result" -eq 44', sh)
         self.assertIn("bg_audio.py", sh)
         self.assertIn("pdf_ops.py", sh)
+        self.assertIn("system_inject.py", sh)
+        self.assertIn('KPLAYER_DISABLE_OVERLAY="1"', sh)
+        self.assertIn("/dev/shm/kplayer-main.lock", sh)
         self.assertTrue((BASE / "ports/kplayer/bg_audio.py").is_file())
         self.assertTrue((BASE / "ports/kplayer/pdf_ops.py").is_file())
+        self.assertTrue((BASE / "ports/kplayer/system_inject.py").is_file())
 
     def test_restores_stable_kplayer_sh_cleans_broken_v208_and_never_touches_xml(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -35,10 +39,10 @@ class UpdaterLauncherTest(unittest.TestCase):
                 '#!/bin/bash\n# KPlayer v2.0.8 - dArkOS\nKPLAYER_VERSION="2.0.8"\necho old\n',
                 encoding="utf-8",
             )
-            # Bundled fresh template from the v2.1.6 update package
+            # Bundled fresh template from the v2.1.7 update package
             tmpl = gamedir / "KPlayer.sh.tmpl"
             tmpl.write_text(
-                '#!/bin/bash\n# KPlayer v2.1.6 - dArkOS / Debian 13 ARM64 / PortMaster\nKPLAYER_VERSION="2.1.6"\nexec bash "$script_dir/KPlayer.sh"\n',
+                '#!/bin/bash\n# KPlayer v2.1.7 - dArkOS / Debian 13 ARM64 / PortMaster\nKPLAYER_VERSION="2.1.7"\nexec bash "$script_dir/KPlayer.sh"\n',
                 encoding="utf-8",
             )
 
@@ -46,7 +50,7 @@ class UpdaterLauncherTest(unittest.TestCase):
             gamelist = ports / "gamelist.xml"
             gamelist.write_text(existing_xml, encoding="utf-8")
 
-            res = updater.ensure_stable_launcher(ports, gamedir, "2.1.6")
+            res = updater.ensure_stable_launcher(ports, gamedir, "2.1.7")
             self.assertIsNotNone(res)
 
             stable_sh = ports / "KPlayer.sh"
@@ -54,8 +58,8 @@ class UpdaterLauncherTest(unittest.TestCase):
             self.assertFalse(broken_sh.exists())
 
             sh_text = stable_sh.read_text(encoding="utf-8")
-            self.assertIn('KPLAYER_VERSION="2.1.6"', sh_text)
-            self.assertIn("# KPlayer v2.1.6", sh_text)
+            self.assertIn('KPLAYER_VERSION="2.1.7"', sh_text)
+            self.assertIn("# KPlayer v2.1.7", sh_text)
             self.assertIn('exec bash "$script_dir/KPlayer.sh"', sh_text)
 
             # Confirm gamelist.xml is 100% untouched byte-for-byte
@@ -72,23 +76,23 @@ class UpdaterLauncherTest(unittest.TestCase):
             ports = Path(tmp) / "ports"
             gamedir = ports / "kplayer"
             gamedir.mkdir(parents=True)
-            (gamedir / "installed-version.txt").write_text("2.1.6\n", encoding="utf-8")
+            (gamedir / "installed-version.txt").write_text("2.1.7\n", encoding="utf-8")
             (gamedir / "favorites.txt").write_text("fav-track\n", encoding="utf-8")
             (gamedir / "news.cfg").write_text("api_key=local-test\n", encoding="utf-8")
 
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, "w") as zf:
-                zf.writestr("KPlayer.sh", '#!/bin/bash\n# KPlayer v2.1.6\nKPLAYER_VERSION="2.1.6"\n')
-                zf.writestr("kplayer/changelog.txt", "KPlayer v2.1.6 test\n")
+                zf.writestr("KPlayer.sh", '#!/bin/bash\n# KPlayer v2.1.7\nKPLAYER_VERSION="2.1.7"\n')
+                zf.writestr("kplayer/changelog.txt", "KPlayer v2.1.7 test\n")
                 zf.writestr("kplayer/favorites.txt", "SHOULD-NOT-OVERWRITE\n")
                 zf.writestr("kplayer/news.cfg", "SHOULD-NOT-OVERWRITE\n")
             zip_bytes = buf.getvalue()
             zip_sha = hashlib.sha256(zip_bytes).hexdigest()
 
             fake_info = {
-                "currentVersion": "2.1.6",
-                "latestVersion": "2.1.6",
-                "nextExpectedVersion": "2.1.7",
+                "currentVersion": "2.1.7",
+                "latestVersion": "2.1.7",
+                "nextExpectedVersion": "2.1.8",
                 "updateAvailable": False,
                 "repository": "kaiaum01/KPlayer",
                 "branch": "main",
@@ -96,9 +100,9 @@ class UpdaterLauncherTest(unittest.TestCase):
                 "error": "",
                 "notes": ["Reinstall test"],
                 "r36s": {
-                    "filename": "KPlayer-v2.1.6-R36S.zip",
-                    "path": "updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
-                    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
+                    "filename": "KPlayer-v2.1.7-R36S.zip",
+                    "path": "updates/v2.1.7/KPlayer-v2.1.7-R36S.zip",
+                    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.7/KPlayer-v2.1.7-R36S.zip",
                     "sha256": zip_sha,
                 },
             }
@@ -124,7 +128,7 @@ class UpdaterLauncherTest(unittest.TestCase):
                 with mock.patch.object(updater, "urlopen_with_retry", return_value=_FakeResp(zip_bytes)):
                     rc_force = updater.apply_update(gamedir, force=True)
                 self.assertEqual(rc_force, 42)
-                self.assertEqual((gamedir / "changelog.txt").read_text(encoding="utf-8"), "KPlayer v2.1.6 test\n")
+                self.assertEqual((gamedir / "changelog.txt").read_text(encoding="utf-8"), "KPlayer v2.1.7 test\n")
                 self.assertEqual((gamedir / "favorites.txt").read_text(encoding="utf-8"), "fav-track\n")
                 self.assertEqual((gamedir / "news.cfg").read_text(encoding="utf-8"), "api_key=local-test\n")
 

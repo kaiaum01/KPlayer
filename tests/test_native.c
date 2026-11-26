@@ -600,21 +600,8 @@ int main(void) {
   mode = 3;
   open_options();
   assert(opt_section == OPT_SEC_ROOT && option == 18);
-  /* Navigate to Audio em jogos (Teste previo) (27) and toggle + persist */
-  opt_cursor = 1;
-  opt_sync_option_id();
-  assert(option == 27);
-  bool prev_bg_audio = bg_audio_preview;
-  key(SDLK_RIGHT, false);
-  assert(bg_audio_preview != prev_bg_audio);
-  save_settings();
-  bg_audio_preview = prev_bg_audio;
-  load_settings();
-  assert(bg_audio_preview != prev_bg_audio);
-  bg_audio_preview = false;
-  save_settings();
   /* Navigate to Layout da tela inicial (24) and toggle */
-  opt_cursor = 4;
+  opt_cursor = 3;
   opt_sync_option_id();
   assert(option == 24);
   bool prev_inv = home_layout_inverted;
@@ -622,6 +609,24 @@ int main(void) {
   assert(home_layout_inverted != prev_inv);
   draw_home();
   home_layout_inverted = false;
+  /* Navigate to Mini-Player no Sistema Inteiro (27) and toggle + persist safely */
+  setenv("KPLAYER_TEST_SYS_INJECT", "ok", 1);
+  opt_cursor = 4;
+  opt_sync_option_id();
+  assert(option == 27);
+  bool prev_sys_mp = system_miniplayer_installed;
+  key(SDLK_RIGHT, false);
+  assert(system_miniplayer_installed != prev_sys_mp);
+  assert(bg_audio_preview == system_miniplayer_installed);
+  save_settings();
+  bg_audio_preview = prev_sys_mp;
+  load_settings();
+  assert(bg_audio_preview != prev_sys_mp);
+  key(SDLK_RIGHT, false);
+  assert(system_miniplayer_installed == prev_sys_mp);
+  unsetenv("KPLAYER_TEST_SYS_INJECT");
+  unlink("system-audio.json");
+  save_settings();
   /* Navigate to Protetor de tela (25) -> opens OPT_SEC_SCREENSAVER */
   opt_cursor = 5;
   opt_sync_option_id();

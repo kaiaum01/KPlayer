@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   EyeOff,
   Pause,
@@ -28,6 +28,7 @@ export interface GameTrainerHudProps {
   audio: TrainerAudioInfo;
   volumePct: number;
   selectedRow: number;
+  modeSubtitle?: string;
   onSelectRow: (row: number) => void;
   onActivateRow: (row: number) => void;
   onVolumeDelta: (delta: number) => void;
@@ -49,6 +50,7 @@ export function GameTrainerHud({
   audio,
   volumePct,
   selectedRow,
+  modeSubtitle = 'Mini-Player nativo • v2.1.7',
   onSelectRow,
   onActivateRow,
   onVolumeDelta,
@@ -156,7 +158,7 @@ export function GameTrainerHud({
               </span>
             </div>
             <div className="text-[9.5px] mt-0.5 truncate" style={{ color: theme.muted }}>
-              Áudio no jogo • v2.1.6
+              {modeSubtitle}
             </div>
           </div>
         </div>
@@ -337,7 +339,7 @@ export function GameTrainerHud({
         </div>
         <div className="flex items-center justify-between mt-1">
           <span className="text-[8.5px]" style={{ color: theme.muted }}>
-            KPlayer • L3 + R3 no jogo
+            KPlayer • L3 + R3 nativo
           </span>
           <button
             type="button"
@@ -359,6 +361,7 @@ export interface GameTrainerDemoStageProps {
   audio: TrainerAudioInfo;
   volumePct: number;
   selectedRow: number;
+  systemInjected?: boolean;
   onToggleTrainer: () => void;
   onSelectRow: (row: number) => void;
   onActivateRow: (row: number) => void;
@@ -368,7 +371,7 @@ export interface GameTrainerDemoStageProps {
 
 /**
  * Full 640x480 interactive preview demonstrating the KPlayer-styled Mini-Player (L3 + R3)
- * floating directly over a running retro game.
+ * floating directly over both a Port/Game (native always-on) and EmulationStation (system-wide injected).
  */
 export function GameTrainerDemoStage({
   theme,
@@ -376,6 +379,7 @@ export function GameTrainerDemoStage({
   audio,
   volumePct,
   selectedRow,
+  systemInjected = false,
   onToggleTrainer,
   onSelectRow,
   onActivateRow,
@@ -383,8 +387,10 @@ export function GameTrainerDemoStage({
   onExitDemo,
 }: GameTrainerDemoStageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [scene, setScene] = useState<'game' | 'es'>(systemInjected ? 'es' : 'game');
 
   useEffect(() => {
+    if (scene !== 'game') return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -563,33 +569,105 @@ export function GameTrainerDemoStage({
 
     raf = window.requestAnimationFrame(render);
     return () => window.cancelAnimationFrame(raf);
-  }, []);
+  }, [scene]);
 
   return (
     <div className="absolute inset-0 z-40 overflow-hidden bg-[#0b101b]">
-      <canvas
-        ref={canvasRef}
-        width={640}
-        height={480}
-        className="w-full h-full block object-cover"
-      />
-      <div className="absolute top-3.5 right-3.5 flex flex-col items-end gap-1 pointer-events-none select-none">
-        <div className="font-mono font-black text-[18px] leading-none tracking-wider text-emerald-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
-          $0048520
+      {scene === 'game' ? (
+        <>
+          <canvas
+            ref={canvasRef}
+            width={640}
+            height={480}
+            className="w-full h-full block object-cover"
+          />
+          <div className="absolute top-12 right-3.5 flex flex-col items-end gap-1 pointer-events-none select-none">
+            <div className="font-mono font-black text-[18px] leading-none tracking-wider text-emerald-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
+              $0048520
+            </div>
+            <div className="flex items-center gap-1 text-amber-400 text-[13px] drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
+              <span>★</span>
+              <span>★</span>
+              <span className="text-zinc-600/80">★</span>
+              <span className="text-zinc-600/80">★</span>
+              <span className="text-zinc-600/80">★</span>
+            </div>
+            <div className="w-24 h-2 bg-black/75 border border-black p-[1px]">
+              <div className="h-full w-[82%] bg-emerald-500" />
+            </div>
+            <div className="w-24 h-1.5 bg-black/75 border border-black p-[1px]">
+              <div className="h-full w-[64%] bg-sky-400" />
+            </div>
+          </div>
+        </>
+      ) : (
+        <div
+          className="w-full h-full flex flex-col justify-between p-5 select-none"
+          style={{
+            background: 'radial-gradient(circle at 75% 25%, #1d283a 0%, #0f141e 55%, #090c12 100%)',
+          }}
+        >
+          <div className="flex items-center justify-end gap-2 pt-8">
+            <div className="text-right">
+              <div className="text-[11px] font-extrabold tracking-widest uppercase text-zinc-400">
+                EmulationStation • dArkOS R36S
+              </div>
+              <div className="text-[10px] font-semibold text-emerald-400 mt-0.5">
+                Música do ES: Desativada pelo script • Injeção persistente ativa
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 my-auto pr-2">
+            {['PORTS', 'PS1', 'GBA', 'SNES'].map((sys, idx) => (
+              <div
+                key={sys}
+                className="rounded-2xl px-4 py-5 text-center transition-all"
+                style={{
+                  width: idx === 0 ? 132 : 84,
+                  backgroundColor: idx === 0 ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.04)',
+                  border: idx === 0 ? `2px solid ${theme.accent}` : '1px solid rgba(255,255,255,0.1)',
+                }}
+              >
+                <div className="text-[16px] font-black tracking-wider text-white">{sys}</div>
+                <div className="text-[9.5px] text-zinc-400 mt-1">
+                  {idx === 0 ? '18 jogos' : idx === 1 ? '42 jogos' : idx === 2 ? '64 jogos' : '95 jogos'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between text-[10px] text-zinc-400 pb-8">
+            <span>Persistente mesmo após reiniciar o console</span>
+            <span>Desativar apenas em KPlayer → Opções</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1 text-amber-400 text-[13px] drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
-          <span>★</span>
-          <span>★</span>
-          <span className="text-zinc-600/80">★</span>
-          <span className="text-zinc-600/80">★</span>
-          <span className="text-zinc-600/80">★</span>
-        </div>
-        <div className="w-24 h-2 bg-black/75 border border-black p-[1px]">
-          <div className="h-full w-[82%] bg-emerald-500" />
-        </div>
-        <div className="w-24 h-1.5 bg-black/75 border border-black p-[1px]">
-          <div className="h-full w-[64%] bg-sky-400" />
-        </div>
+      )}
+
+      {/* Scene Switcher Top-Right (Port Nativo vs EmulationStation Injetado) */}
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1 bg-black/75 p-1 rounded-xl border border-white/15">
+        <button
+          type="button"
+          onClick={() => setScene('game')}
+          className="px-2 py-1 rounded-lg text-[9.5px] font-bold cursor-pointer transition-colors"
+          style={{
+            backgroundColor: scene === 'game' ? theme.accent : 'transparent',
+            color: scene === 'game' ? '#0a0c10' : '#cbd5e1',
+          }}
+        >
+          Port / Jogo
+        </button>
+        <button
+          type="button"
+          onClick={() => setScene('es')}
+          className="px-2 py-1 rounded-lg text-[9.5px] font-bold cursor-pointer transition-colors"
+          style={{
+            backgroundColor: scene === 'es' ? theme.accent : 'transparent',
+            color: scene === 'es' ? '#0a0c10' : '#cbd5e1',
+          }}
+        >
+          EmulationStation
+        </button>
       </div>
 
       {/* Top-Left Docked KPlayer Mini-Player HUD (toggled by L3 + R3) */}
@@ -600,6 +678,11 @@ export function GameTrainerDemoStage({
             audio={audio}
             volumePct={volumePct}
             selectedRow={selectedRow}
+            modeSubtitle={
+              scene === 'es'
+                ? 'Sistema injetado (ES mudo) • v2.1.7'
+                : 'Port nativo (L3 + R3) • v2.1.7'
+            }
             onSelectRow={onSelectRow}
             onActivateRow={onActivateRow}
             onVolumeDelta={onVolumeDelta}

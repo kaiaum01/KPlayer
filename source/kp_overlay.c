@@ -116,7 +116,8 @@ typedef struct {
 
 /* ==================== SHARED MEMORY READER ==================== */
 
-static volatile int g_shm_tried = 0;
+static volatile int g_shm_disabled = -1;
+static volatile int64_t g_shm_last_try_ms = 0;
 static KpOverlayShared *g_shm = NULL;
 static uint32_t g_rgba_buf[KP_OV_CARD_W * KP_OV_CARD_H];
 static uint32_t g_rendered_seq = 0xFFFFFFFFu;
@@ -132,27 +133,62 @@ static void kp_unlock(void) {
   __atomic_clear(&g_lock, __ATOMIC_RELEASE);
 }
 
-static KpOverlayShared *kp_get_shm(void) {
-  if (__atomic_load_n(&g_shm_tried, __ATOMIC_ACQUIRE)) {
-    return g_shm;
-  }
-  kp_lock();
-  if (!g_shm_tried) {
-    const char *path = getenv("KPLAYER_OVERLAY_SHM");
-    if (path && path[0]) {
-      int fd = open(path, O_RDWR | O_CLOEXEC);
-      if (fd >= 0) {
-        void *m = mmap(NULL, sizeof(KpOverlayShared), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        close(fd);
-        if (m != MAP_FAILED) {
-          g_shm = (KpOverlayShared *)m;
-        }
+static bool kp_should_skip_process(void) {
+  int cached = __atomic_load_n(&g_shm_disabled, __ATOMIC_ACQUIRE);
+  if (cached >= 0) return cached != 0;
+
+  int skip = 0;
+  const char *dis = getenv("KPLAYER_DISABLE_OVERLAY");
+  if (dis && dis[0] == '1') {
+    skip = 1;
+  } else {
+    int fd = open("/proc/self/comm", O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) {
+      char comm[32];
+      ssize_t n = read(fd, comm, sizeof(comm) - 1);
+      close(fd);
+      if (n > 0) {
+        comm[n] = 0;
+        while (n > 0 && (comm[n - 1] == '\n' || comm[n - 1] == '\r')) comm[--n] = 0;
+        if (strcmp(comm, "kplayer") == 0) skip = 1;
       }
     }
-    __atomic_store_n(&g_shm_tried, 1, __ATOMIC_RELEASE);
   }
+  __atomic_store_n(&g_shm_disabled, skip, __ATOMIC_RELEASE);
+  return skip != 0;
+}
+
+static KpOverlayShared *kp_get_shm(void) {
+  KpOverlayShared *cur = __atomic_load_n(&g_shm, __ATOMIC_ACQUIRE);
+  if (cur) return cur;
+  if (kp_should_skip_process()) return NULL;
+
+  int64_t now = kp_ov_now_ms();
+  int64_t last = __atomic_load_n(&g_shm_last_try_ms, __ATOMIC_RELAXED);
+  if (last != 0 && (now - last) < 1000) {
+    return NULL;
+  }
+
+  kp_lock();
+  if (!g_shm) {
+    __atomic_store_n(&g_shm_last_try_ms, now ? now : 1, __ATOMIC_RELAXED);
+    const char *path = getenv("KPLAYER_OVERLAY_SHM");
+    if (!path || !path[0]) path = KP_OV_DEFAULT_SHM_PATH;
+    int fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd >= 0) {
+      struct stat st;
+      if (fstat(fd, &st) == 0 && st.st_size >= (off_t)sizeof(KpOverlayShared)) {
+        void *m = mmap(NULL, sizeof(KpOverlayShared), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (m != MAP_FAILED) {
+          __atomic_store_n(&g_shm, (KpOverlayShared *)m, __ATOMIC_RELEASE);
+        }
+      }
+      close(fd);
+    }
+  }
+  cur = g_shm;
   kp_unlock();
-  return g_shm;
+  return cur;
 }
 
 static bool kp_overlay_active(KpOverlayShared **out_shm) {

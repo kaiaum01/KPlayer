@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-CURRENT_FALLBACK = "2.1.6"
+CURRENT_FALLBACK = "2.1.7"
 UA = f"KPlayer-Updater/{CURRENT_FALLBACK}"
 ALLOWED_HOSTS = {
     "raw.githubusercontent.com",
@@ -54,6 +54,8 @@ PRESERVE_PREFIXES = (
     "kplayer/radio-favorites.tsv",
     "kplayer/resume.cfg",
     "kplayer/log.txt",
+    "kplayer/.system-inject-state.json",
+    "kplayer/system-audio.json",
 )
 
 EXECUTABLE_NAMES = {
@@ -66,6 +68,7 @@ EXECUTABLE_NAMES = {
     "news_fetch.py",
     "file_ops.py",
     "bg_audio.py",
+    "system_inject.py",
     "pdf_ops.py",
     "7zzs",
     "updater.py",

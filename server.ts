@@ -217,7 +217,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.1.6' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.1.7' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -872,7 +872,7 @@ async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<s
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-EPG/2.1.6' },
+      headers: { 'User-Agent': 'KPlayer-EPG/2.1.7' },
     });
     clearTimeout(timer);
     if (!res.ok) return '';
@@ -1651,7 +1651,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.1.6' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.1.7' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1672,7 +1672,7 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipFilename = 'KPlayer-v2.1.6-R36S.zip';
+  const r36sZipFilename = 'KPlayer-v2.1.7-R36S.zip';
   const r36sZipPath = path.join(__dirname, 'releases', r36sZipFilename);
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
@@ -1687,14 +1687,14 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.1.6',
+        version: '2.1.7',
         filename: r36sZipFilename,
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
       });
     } catch {
-      return res.status(404).json({ ready: false, version: '2.1.6', filename: r36sZipFilename });
+      return res.status(404).json({ ready: false, version: '2.1.7', filename: r36sZipFilename });
     }
   });
 
@@ -1751,7 +1751,7 @@ async function createServer() {
 
   function nextPatchVersion(ver: string): string {
     const m = ver.trim().replace(/^v/i, '').match(SEMVER_RE);
-    if (!m) return '2.1.6';
+    if (!m) return '2.1.8';
     return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
   }
 
@@ -1777,7 +1777,7 @@ async function createServer() {
     } catch {
       // Fallback below
     }
-    return '2.1.6';
+    return '2.1.7';
   }
 
   async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
@@ -2482,7 +2482,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.6' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.7' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -2593,7 +2593,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.6' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.7' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -2791,7 +2791,7 @@ async function createServer() {
     try {
       const r = await fetch('https://ipwho.is/', {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.6' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.7' },
       });
       const data = (await r.json()) as {
         success?: boolean;
@@ -2886,7 +2886,7 @@ async function createServer() {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=pt&format=json`;
       const upstream = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.6' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.7' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ results: [], error: 'geocoding_unavailable' });
@@ -2949,7 +2949,7 @@ async function createServer() {
         `&timezone=auto&forecast_days=7`;
       const upstream = await fetch(apiUrl, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.6' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.7' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ error: 'weather_unavailable' });
@@ -3216,7 +3216,7 @@ async function createServer() {
         });
         const upstream = await fetch(`https://newsdata.io/api/1/latest?${params.toString()}`, {
           signal: controller.signal,
-          headers: { 'User-Agent': 'KPlayer-R36S/2.1.6', Accept: 'application/json' },
+          headers: { 'User-Agent': 'KPlayer-R36S/2.1.7', Accept: 'application/json' },
         });
         clearTimeout(timer);
         if (upstream.ok) {
@@ -3493,19 +3493,19 @@ async function createServer() {
 
       await writeIfMissing(
         'roms/ports/kplayer/settings.cfg',
-        'theme=0\nvisualizer=0\nkey_sfx=1\nbg_audio=0\nversion=2.1.6\n'
+        'theme=0\nvisualizer=0\nkey_sfx=1\nbg_audio=0\nversion=2.1.7\n'
       );
       await writeIfMissing(
         'roms/ports/kplayer/changelog.txt',
-        'KPlayer v2.1.6 (R36S)\n- Novo Mini-Player no jogo (L3 + R3) redesenhado com o visual arredondado do KPlayer\n- Fluxo estavel de audio em jogos (SELECT -> Opcoes -> Audio em jogos) com retorno automatico ao KPlayer\n- Leitor de PDF (PdfCraft R36S), Editor de texto nativo e 7-Zip oficial preservados\n'
+        'KPlayer v2.1.7 (R36S)\n- Mini-Player nativo nos ports (L3 + R3) com escolha no Gerenciador de Arquivos (com ou sem Mini-Player)\n- Nova opcao Mini-Player no Sistema Inteiro: script desativa musica do EmulationStation e injeta o Mini-Player persistentemente no console\n- Leitor de PDF (PdfCraft R36S), Editor de texto nativo e 7-Zip oficial preservados\n'
       );
       await writeIfMissing(
         'roms/ports/kplayer/guia.html',
-        '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8" />\n  <title>Guia R36S — KPlayer v2.1.6</title>\n</head>\n<body>\n  <h1>KPlayer R36S v2.1.6</h1>\n  <p>Edite arquivos HTML, XML, TXT e scripts .sh, abra PDFs (PdfCraft R36S) e use L3 + R3 para abrir o Mini-Player KPlayer no jogo.</p>\n</body>\n</html>\n'
+        '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8" />\n  <title>Guia R36S — KPlayer v2.1.7</title>\n</head>\n<body>\n  <h1>KPlayer R36S v2.1.7</h1>\n  <p>Mini-Player nativo nos ports (L3 + R3) e injeção persistente no sistema inteiro (desativando música do EmulationStation) configurável em Opções.</p>\n</body>\n</html>\n'
       );
       await writeIfMissing(
         'roms/ports/gamelist.xml',
-        '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n  <game>\n    <path>./KPlayer.sh</path>\n    <name>KPlayer</name>\n    <desc>Player de mídia, rádio, IPTV, notícias, placar e gerenciador de arquivos para R36S.</desc>\n  </game>\n  <game>\n    <path>./IniciarJogo.sh</path>\n    <name>Demo PortMaster R36S</name>\n    <desc>Script .sh de exemplo para testar abertura e edição no KPlayer v2.1.6.</desc>\n  </game>\n</gameList>\n'
+        '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n  <game>\n    <path>./KPlayer.sh</path>\n    <name>KPlayer</name>\n    <desc>Player de mídia, rádio, IPTV, notícias, placar e gerenciador de arquivos para R36S.</desc>\n  </game>\n  <game>\n    <path>./IniciarJogo.sh</path>\n    <name>Demo PortMaster R36S</name>\n    <desc>Script .sh de exemplo para testar abertura com ou sem Mini-Player KPlayer v2.1.7.</desc>\n  </game>\n</gameList>\n'
       );
       await writeIfMissing(
         'roms/ports/IniciarJogo.sh',
@@ -3533,7 +3533,7 @@ async function createServer() {
       );
       await writeIfMissing(
         'home/ark/Downloads/LEIA-ME-SENHA.txt',
-        'Arquivos de teste do Gerenciador de Arquivos KPlayer v2.1.6:\n' +
+        'Arquivos de teste do Gerenciador de Arquivos KPlayer v2.1.7:\n' +
           '- Manual-KPlayer-R36S.pdf (Documento PDF multi-pagina compativel com PdfCraft R36S)\n' +
           '- pacote-temas-r36s.zip (ZIP padrão, sem senha)\n' +
           '- backup-protegido.zip (ZIP protegido por senha -> senha: r36s)\n'
@@ -3561,12 +3561,12 @@ async function createServer() {
           ];
           return ops.join('\n') + '\n';
         };
-        const p1 = makePageStream('KPlayer v2.1.6 - Manual R36S (Pagina 1/2)', [
+        const p1 = makePageStream('KPlayer v2.1.7 - Manual R36S (Pagina 1/2)', [
           'Leitor de PDF compativel com PdfCraft R36S (kaiaum01/PdfReader-R36s).',
           ' ',
-          'Novidades da versao 2.1.6:',
-          '1. Novo Mini-Player no jogo (L3 + R3) com o visual arredondado do KPlayer.',
-          '2. Fluxo estavel de audio em jogos com retorno automatico ao KPlayer.',
+          'Novidades da versao 2.1.7:',
+          '1. Mini-Player nativo nos ports (L3 + R3) com opcao com/sem no Gerenciador.',
+          '2. Opcao Mini-Player no Sistema Inteiro: silencia BGM do ES e injeta no console.',
           '3. Leitor PDF integrado com paginas (L1/R1), zoom (X) e modo texto (Y).',
           '4. Deteccao automatica do motor pdfcraft-core.aarch64 e PdfCraft.sh no R36S.',
         ]);
@@ -3587,7 +3587,7 @@ async function createServer() {
           '5 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>\nendobj\n',
           `6 0 obj\n<< /Length ${Buffer.byteLength(p2, 'latin1')} >>\nstream\n${p2}endstream\nendobj\n`,
           '7 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
-          '8 0 obj\n<< /Title (Manual KPlayer R36S v2.1.6) /Author (KPlayer R36S) >>\nendobj\n',
+          '8 0 obj\n<< /Title (Manual KPlayer R36S v2.1.7) /Author (KPlayer R36S) >>\nendobj\n',
         ];
         let body = '%PDF-1.4\n';
         const offsets: number[] = [0];
@@ -4233,7 +4233,10 @@ async function createServer() {
       if (!isExec) {
         return res.status(400).json({ ok: false, error: 'Arquivo não é um script .sh nem executável do EmulationStation' });
       }
-      const bgAudioPreview = Boolean(req.body?.bgAudioPreview);
+      const withMiniPlayer =
+        typeof req.body?.withMiniPlayer === 'boolean'
+          ? req.body.withMiniPlayer
+          : req.body?.bgAudioPreview !== false;
       const activeMediaTitle =
         typeof req.body?.activeMediaTitle === 'string' ? req.body.activeMediaTitle.trim().slice(0, 120) : '';
       const activeMediaKind =
@@ -4264,8 +4267,8 @@ async function createServer() {
             execLine = s;
           }
         }
-        if (bgAudioPreview) {
-          lines.push(`[R36S • Teste prévio] Liberando SDL2/gptokeyb via código 43 e isolando LD_LIBRARY_PATH para o jogo...`);
+        if (withMiniPlayer) {
+          lines.push(`[R36S • Mini-Player Nativo] Liberando SDL2/gptokeyb via código 43 e injetando libkp_overlay.so no port...`);
           if (activeMediaKind && activeMediaTitle) {
             lines.push(
               `[Áudio em fundo] ./kplayer --bg-audio (libVLC nativo + ALSA dmix/Pulse): ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" (55% vol)`
@@ -4281,25 +4284,25 @@ async function createServer() {
           }
           lines.push(`[R36S • 2º plano] Ao sair do jogo, o daemon --bg-audio encerra com segurança e o KPlayer retorna automaticamente.`);
         } else {
-          lines.push(`[R36S] Encerrando SDL2/libVLC do KPlayer para liberar tela e áudio ALSA...`);
+          lines.push(`[R36S • Sem Mini-Player] Definindo KPLAYER_DISABLE_OVERLAY=1 e encerrando SDL2/libVLC...`);
           lines.push(`[R36S] Diretório de trabalho: ${gameDir || targetDir}`);
           lines.push(`[R36S] Interpretador: ${interpreter}`);
           lines.push(`[R36S] Comando de handoff nativo: execv("${interpreter.split(/\s+/)[0]}", ["${resolved.virtualPath}"])`);
           if (execLine) {
             lines.push(`[Script] Alvo principal detectado: ${execLine}`);
           }
-          lines.push(`[Simulador Web] Script validado com segurança (no console R36S real, o jogo/EmulationStation assume a tela imediatamente).`);
+          lines.push(`[Simulador Web] Port iniciado no modo limpo (sem Mini-Player).`);
         }
       } else {
         lines.push(`[R36S] Binário ELF detectado (${st.size} bytes).`);
-        if (bgAudioPreview) {
+        if (withMiniPlayer) {
           lines.push(
             activeMediaKind && activeMediaTitle
-              ? `[R36S • 2º plano] ./kplayer --bg-audio mantendo ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" com Mini-Player KPlayer (L3 + R3).`
-              : `[R36S • 2º plano] ./kplayer --bg-audio pronto — pressione L3 + R3 para abrir o Mini-Player KPlayer.`
+              ? `[R36S • Mini-Player Nativo] ./kplayer --bg-audio mantendo ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" com Mini-Player KPlayer (L3 + R3).`
+              : `[R36S • Mini-Player Nativo] ./kplayer --bg-audio pronto — pressione L3 + R3 para abrir o Mini-Player KPlayer.`
           );
         } else {
-          lines.push(`[R36S] Encerrando SDL2/libVLC do KPlayer para liberar framebuffer DRM/KMS...`);
+          lines.push(`[R36S • Sem Mini-Player] KPLAYER_DISABLE_OVERLAY=1 • Encerrando SDL2/libVLC para liberar framebuffer DRM/KMS...`);
         }
         lines.push(`[R36S] Comando de handoff nativo: execv("${resolved.virtualPath}", ["${resolved.virtualPath}"])`);
         lines.push(`[Simulador Web] Executável pronto para iniciar diretamente no hardware R36S.`);
@@ -4312,13 +4315,60 @@ async function createServer() {
         kind: isScript ? 'script' : 'executable',
         interpreter,
         targetDir: gameDir || targetDir,
-        bgAudioActive: Boolean(bgAudioPreview && activeMediaKind && activeMediaTitle),
-        bgAudioPreview,
+        withMiniPlayer,
+        bgAudioActive: withMiniPlayer,
         logLines: lines,
       });
     } catch {
       return res.status(500).json({ ok: false, error: 'Falha ao preparar execução do arquivo' });
     }
+  });
+
+  // v2.1.7 System-Wide Console Mini-Player Injector Preview State (safe in-memory simulation; real R36S runs ports/kplayer/system_inject.py)
+  let systemMiniPlayerState = {
+    installed: false,
+    esBgmDisabled: false,
+    persistentBoot: false,
+    updatedAt: null as string | null,
+    steps: [] as string[],
+  };
+
+  app.get('/api/system-miniplayer', (_req, res) => {
+    return res.json({ ok: true, ...systemMiniPlayerState });
+  });
+
+  app.post('/api/system-miniplayer', (req, res) => {
+    const action = String(req.body?.action ?? '').trim().toLowerCase();
+    if (action === 'install') {
+      systemMiniPlayerState = {
+        installed: true,
+        esBgmDisabled: true,
+        persistentBoot: true,
+        updatedAt: new Date().toISOString(),
+        steps: [
+          'Música de fundo do EmulationStation desativada (es_settings.cfg + serviços BGM)',
+          'libkp_overlay.so copiada para /usr/local/lib/ e registrada em /etc/ld.so.preload',
+          'Serviço persistente kplayer-miniplayer.service habilitado no boot do console',
+          'Mini-Player KPlayer (L3 + R3) injetado no sistema inteiro — desativação exclusiva pelo KPlayer',
+        ],
+      };
+      return res.json({ ok: true, ...systemMiniPlayerState });
+    }
+    if (action === 'uninstall') {
+      systemMiniPlayerState = {
+        installed: false,
+        esBgmDisabled: false,
+        persistentBoot: false,
+        updatedAt: new Date().toISOString(),
+        steps: [
+          'Serviço kplayer-miniplayer.service parado e removido do boot',
+          'Entrada /usr/local/lib/libkp_overlay.so removida de /etc/ld.so.preload',
+          'Configuração original de música de fundo do EmulationStation restaurada',
+        ],
+      };
+      return res.json({ ok: true, ...systemMiniPlayerState });
+    }
+    return res.status(400).json({ ok: false, error: 'Ação inválida (use install ou uninstall)' });
   });
 
   app.post('/api/fm/mkdir', async (req, res) => {
@@ -4670,7 +4720,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.6',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.7',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -4766,7 +4816,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.1.6 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.1.7 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

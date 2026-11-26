@@ -1801,7 +1801,7 @@ static void fm_launch_pdfcraft_external(void) {
   snprintf(fm_exec_target_path, sizeof(fm_exec_target_path), "%s", fm_pdf_pdfcraft_sh);
   fm_exec_is_script = true;
   fm_exec_use_handoff = true;
-  fm_exec_keep_bg_audio = bg_audio_preview && active && (playing_audio || playing_radio);
+  fm_exec_keep_bg_audio = true;
   fm_modal = FM_MODAL_NONE;
   running = 0;
 }
@@ -2121,7 +2121,7 @@ static void fm_key(SDL_Keycode k, bool repeat) {
     return;
   }
   if (fm_modal == FM_MODAL_EXEC) {
-    int opts = fm_exec_modal_is_script ? 3 : 2;
+    int opts = fm_exec_modal_is_script ? 4 : 3;
     if (k == SDLK_UP)
       fm_exec_modal_cursor = (fm_exec_modal_cursor + opts - 1) % opts;
     else if (k == SDLK_DOWN)
@@ -2130,13 +2130,22 @@ static void fm_key(SDL_Keycode k, bool repeat) {
       fm_modal = FM_MODAL_NONE;
     else if (k == SDLK_RETURN && !repeat) {
       if (fm_exec_modal_cursor == 0) {
+        /* Option 0 (Default): Launch WITH native KPlayer Mini-Player (L3 + R3) */
         snprintf(fm_exec_target_path, sizeof(fm_exec_target_path), "%s", fm_exec_modal_path);
         fm_exec_is_script = fm_exec_modal_is_script;
-        fm_exec_use_handoff = bg_audio_preview;
-        fm_exec_keep_bg_audio = bg_audio_preview && active && (playing_audio || playing_radio);
+        fm_exec_use_handoff = true;
+        fm_exec_keep_bg_audio = true;
         fm_modal = FM_MODAL_NONE;
         running = 0;
-      } else if (fm_exec_modal_is_script && fm_exec_modal_cursor == 1) {
+      } else if (fm_exec_modal_cursor == 1) {
+        /* Option 1: Launch WITHOUT Mini-Player (clean standard launch) */
+        snprintf(fm_exec_target_path, sizeof(fm_exec_target_path), "%s", fm_exec_modal_path);
+        fm_exec_is_script = fm_exec_modal_is_script;
+        fm_exec_use_handoff = false;
+        fm_exec_keep_bg_audio = false;
+        fm_modal = FM_MODAL_NONE;
+        running = 0;
+      } else if (fm_exec_modal_is_script && fm_exec_modal_cursor == 2) {
         fm_modal = FM_MODAL_NONE;
         fm_ed_open(fm_exec_modal_path, fm_exec_modal_name);
       } else {
@@ -2769,43 +2778,38 @@ static void draw_file_manager(void) {
   } else if (fm_modal == FM_MODAL_EXEC) {
     SDL_Color scrim = {0, 0, 0, 185};
     rect(0, 0, W, H, scrim);
-    int opts = fm_exec_modal_is_script ? 3 : 2;
+    int opts = fm_exec_modal_is_script ? 4 : 3;
     int mh = 118 + opts * 38;
     int my = (H - mh) / 2;
-    rounded_gradient(86, my, 468, mh, 14, elevated, panel);
-    rounded_outline(86, my, 468, mh, 14, accent);
-    label(fm_exec_modal_is_script ? "Script de Jogo / R36S (.sh)" : "Executável / EmulationStation",
-          106, my + 16, 16, accent, 428);
+    rounded_gradient(78, my, 484, mh, 14, elevated, panel);
+    rounded_outline(78, my, 484, mh, 14, accent);
+    label(fm_exec_modal_is_script ? "Abrir Port / Script (.sh)" : "Abrir Executável / Programa",
+          98, my + 16, 16, accent, 444);
     char ename[140];
     snprintf(ename, sizeof(ename), "%.96s", fm_exec_modal_name);
-    label(ename, 106, my + 42, 13, textc, 428);
-    bool will_bg = bg_audio_preview && active && (playing_audio || playing_radio);
-    label(will_bg
-              ? "2º plano ativo: aperte L3 + R3 no jogo para abrir o Mini-Player KPlayer."
-              : (bg_audio_preview
-                     ? "2º plano ativo: aperte L3 + R3 para abrir o Mini-Player KPlayer."
-                     : "Fecha o KPlayer com segurança para liberar tela e áudio no R36S."),
-          106, my + 64, 11, will_bg ? (SDL_Color){74, 222, 128, 255} : muted, 428);
-    const char *sh_labels[3] = {
-        will_bg ? "Executar (.sh) com Mini-Player L3 + R3"
-                : "Executar script (.sh) no console",
+    label(ename, 98, my + 42, 13, textc, 444);
+    label("Mini-Player KPlayer nativo (L3 + R3) pronto para ports — escolha abaixo:",
+          98, my + 64, 11, (SDL_Color){74, 222, 128, 255}, 444);
+    const char *sh_labels[4] = {
+        "Executar com Mini-Player KPlayer (L3 + R3)",
+        "Executar sem Mini-Player (padrão)",
         "Abrir no Editor de Texto",
         "Cancelar"
     };
-    const char *bin_labels[2] = {
-        will_bg ? "Executar com Mini-Player L3 + R3"
-                : "Executar programa / EmulationStation",
+    const char *bin_labels[3] = {
+        "Executar com Mini-Player KPlayer (L3 + R3)",
+        "Executar sem Mini-Player (padrão)",
         "Cancelar"
     };
     for (int i = 0; i < opts; i++) {
       bool foc = (i == fm_exec_modal_cursor);
       int iy = my + 94 + i * 38;
       if (foc) {
-        rounded_gradient(104, iy, 432, 32, 8, mix(elevated, accent, 0.28f), panel);
-        rounded_outline(104, iy, 432, 32, 8, accent);
+        rounded_gradient(96, iy, 448, 32, 8, mix(elevated, accent, 0.28f), panel);
+        rounded_outline(96, iy, 448, 32, 8, accent);
       }
       label(fm_exec_modal_is_script ? sh_labels[i] : bin_labels[i],
-            118, iy + 8, 13, foc ? textc : muted, 404);
+            110, iy + 8, 13, foc ? textc : muted, 420);
     }
   } else if (fm_modal == FM_MODAL_EDITOR_MENU) {
     SDL_Color scrim = {0, 0, 0, 175};

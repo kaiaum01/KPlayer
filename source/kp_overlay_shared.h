@@ -3,7 +3,7 @@
 
 /*
  * Shared memory contract + KPlayer-styled 5x7 RGBA Mini-Player renderer for
- * KPlayer R36S In-Game & EmulationStation Overlay (v2.1.5).
+ * KPlayer R36S Native Port & System-Wide Overlay (v2.1.7).
  *
  * Used by:
  *   1) source/bg_miniplayer.h (headless `./kplayer --bg-audio` writer + /dev/fb0 fallback)
@@ -21,7 +21,8 @@
 #define KP_OV_CARD_W 296
 #define KP_OV_CARD_H 240
 #define KP_OV_ROW_COUNT 5
-#define KP_OV_DEFAULT_SHM_PATH "/tmp/kplayer_overlay.shm"
+#define KP_OV_DEFAULT_SHM_PATH "/dev/shm/kplayer-overlay.shm"
+#define KP_OV_MAIN_LOCK_PATH "/dev/shm/kplayer-main.lock"
 
 typedef struct {
   uint32_t magic;

@@ -1,6 +1,6 @@
 #!/bin/bash
-# KPlayer v2.1.6 - dArkOS / Debian 13 ARM64 / PortMaster
-KPLAYER_VERSION="2.1.6"
+# KPlayer v2.1.7 - dArkOS / Debian 13 ARM64 / PortMaster
+KPLAYER_VERSION="2.1.7"
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)" || exit 1
 GAMEDIR="$script_dir/kplayer"
 cd "$GAMEDIR" || exit 1
@@ -34,10 +34,14 @@ if [ -z "${GPTOKEYB:-}" ]; then printf 'GPTOKEYB nao foi definido pelo PortMaste
 unset PYTHON_VLC_LIB_PATH
 export KPLAYER_GAMEDIR="$GAMEDIR"
 export KPLAYER_ORIG_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+export KPLAYER_DISABLE_OVERLAY="1"
 export LD_LIBRARY_PATH="$GAMEDIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export VLC_PLUGIN_PATH="/usr/lib/aarch64-linux-gnu/vlc/plugins"
 export VLC_DATA_PATH="/usr/share/vlc"
+MAIN_LOCK="/dev/shm/kplayer-main.lock"
+printf '%s\n' "$$" > "$MAIN_LOCK" 2>/dev/null || true
 cleanup() {
+    rm -f "$MAIN_LOCK" 2>/dev/null || true
     if [ -n "${mapper_pid:-}" ]; then kill "$mapper_pid" 2>/dev/null || true; wait "$mapper_pid" 2>/dev/null || true; fi
     if command -v systemctl >/dev/null 2>&1; then $ESUDO systemctl restart oga_events 2>/dev/null || true; fi
     if [ -w /dev/tty0 ]; then printf '\033c' > /dev/tty0; fi
@@ -45,12 +49,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./pdf_ops.py ./7zzs 2>/dev/null || true
+chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./system_inject.py ./pdf_ops.py ./7zzs 2>/dev/null || true
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
 while true; do
-    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./pdf_ops.py ./7zzs 2>/dev/null || true
+    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./system_inject.py ./pdf_ops.py ./7zzs 2>/dev/null || true
+    printf '%s\n' "$$" > "$MAIN_LOCK" 2>/dev/null || true
     ./kplayer
     result=$?
     if [ "$result" -eq 42 ]; then
@@ -68,7 +73,7 @@ while true; do
         continue
     fi
     if [ "$result" -eq 43 ] && [ -f "$GAMEDIR/.bg-launch.json" ]; then
-        printf 'K PLAYER iniciando alvo externo com retorno automatico...\n'
+        printf 'K PLAYER iniciando port com Mini-Player nativo e retorno automatico...\n'
         if [ -n "${mapper_pid:-}" ]; then kill "$mapper_pid" 2>/dev/null || true; wait "$mapper_pid" 2>/dev/null || true; mapper_pid=""; fi
         python3 "$GAMEDIR/bg_audio.py" run "$GAMEDIR/.bg-launch.json" || true
         rm -f "$GAMEDIR/.bg-launch.json" 2>/dev/null || true

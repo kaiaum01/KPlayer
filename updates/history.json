@@ -1,7 +1,19 @@
 {
   "schemaVersion": 2,
-  "latest": "2.1.6",
+  "latest": "2.1.7",
   "releases": [
+    {
+      "version": "2.1.7",
+      "releaseTag": "v2.1.7",
+      "releasedAt": "2026-11-26T22:00:00Z",
+      "r36s": "updates/v2.1.7/KPlayer-v2.1.7-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Mini-Player KPlayer (L3 + R3) nativo sempre disponível nos ports pelo Gerenciador de Arquivos, com escolha direta entre 'Executar com Mini-Player KPlayer (L3 + R3)' (padrão) e 'Executar sem Mini-Player (padrão)'.",
+        "Nova opção 'Mini-Player no Sistema Inteiro' em SELECT → Opções: desativa a música do EmulationStation de forma reversível, injeta o Mini-Player KPlayer no console com persistência após reinício e só pode ser desativada pelo próprio KPlayer.",
+        "Preview Web atualizada com alternância de cena Port / Jogo e EmulationStation (Sistema Injetado) e controle direto do injetor."
+      ]
+    },
     {
       "version": "2.1.6",
       "releaseTag": "v2.1.6",

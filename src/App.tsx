@@ -70,12 +70,12 @@ import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_179539140
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.1.6';
+const APP_VERSION = '2.1.7';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Mini-Player no jogo (L3 + R3) redesenhado com o visual do KPlayer: cantos arredondados, emblema de disco de vinil K, card Tocando Agora e foco no tema ativo.',
-  'Fluxo estável de áudio em jogos (SELECT → Opções → Áudio em jogos) rodando diretamente via ./kplayer --bg-audio com retorno automático ao KPlayer ao sair do jogo.',
-  'Navegação completa no Mini-Player: ↑/↓ escolhe ação, B confirma, ←/→ ajusta volume (10%–100%), L2/R2 troca faixa instantâneo e A ou L3+R3 oculta.',
-  'Demonstração interativa do novo Mini-Player KPlayer na preview + base estável preservando Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip.',
+  'Mini-Player nativo nos ports (L3 + R3): sempre pronto ao abrir jogos no Gerenciador de Arquivos, com escolha entre iniciar com ou sem Mini-Player.',
+  'Nova opção "Mini-Player no Sistema Inteiro" (SELECT → Opções): script dedicado desativa a música do EmulationStation e injeta o Mini-Player no console.',
+  'Injeção persistente no sistema: continua ativo mesmo após reiniciar o R36S e só pode ser desativado dentro das Opções do KPlayer (restaurando a música do ES).',
+  'Base estável preservada com Leitor de PDF (PdfCraft R36S), Editor de Texto nativo, 7-Zip oficial, Rádio Online, IPTV + EPG, Notícias e Clima.',
 ];
 
 const TRAINER_DEMO_FALLBACK_TRACKS = [
@@ -1178,10 +1178,11 @@ export default function App() {
 
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume =
-        gameAudioDucked && bgAudioPreview ? Math.max(0.1, Math.min(1, bgAudioVolume / 100)) : 1.0;
+      audioRef.current.volume = gameAudioDucked
+        ? Math.max(0.1, Math.min(1, bgAudioVolume / 100))
+        : 1.0;
     }
-  }, [gameAudioDucked, bgAudioPreview, bgAudioVolume]);
+  }, [gameAudioDucked, bgAudioVolume]);
 
   // Fetch Radio stations when category changes or Radio opens (instant when preloaded at boot)
   const loadRadioCategory = useCallback(
@@ -2479,7 +2480,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.1.6 • R36S
+                      v2.1.7 • R36S
                     </div>
                   </div>
 
@@ -4611,15 +4612,18 @@ export default function App() {
                   });
                 }}
                 onToggleBgAudioPreview={() => {
-                  setBgAudioPreview((prev) => {
-                    const next = !prev;
-                    notify(
-                      next
-                        ? 'Áudio em jogos ativo: aperte L3 + R3 no jogo para abrir o Mini-Player KPlayer'
-                        : 'Áudio em jogos (Teste prévio) desativado'
-                    );
-                    return next;
-                  });
+                  const next = !bgAudioPreview;
+                  setBgAudioPreview(next);
+                  void fetch('/api/system-miniplayer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: next ? 'install' : 'uninstall' }),
+                  }).catch(() => {});
+                  notify(
+                    next
+                      ? 'Mini-Player injetado no sistema inteiro! Música do EmulationStation desativada e ativa mesmo após reiniciar (L3 + R3)'
+                      : 'Mini-Player removido do sistema e música do EmulationStation restaurada'
+                  );
                 }}
                 onCycleScreensaverTimeout={() => {
                   setScreensaverTimeoutSec((cur) => {
@@ -4741,7 +4745,7 @@ export default function App() {
               />
             )}
 
-            {/* ==================== DEMO INTERATIVA: MINI-PLAYER ESTILO GTA TRAINER (L3 + R3) ==================== */}
+            {/* ==================== DEMO INTERATIVA: MINI-PLAYER KPLAYER (L3 + R3) ==================== */}
             {trainerDemoActive && (
               <GameTrainerDemoStage
                 theme={theme}
@@ -4749,6 +4753,7 @@ export default function App() {
                 audio={trainerDemoAudio}
                 volumePct={bgAudioVolume}
                 selectedRow={trainerDemoRow}
+                systemInjected={bgAudioPreview}
                 onToggleTrainer={() => setTrainerDemoOpen((o) => !o)}
                 onSelectRow={setTrainerDemoRow}
                 onActivateRow={trainerDemoActivateRow}
@@ -4911,7 +4916,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.1.6 — Edição R36S
+                  KPlayer v2.1.7 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4927,7 +4932,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.1.6 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.1.7 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4936,13 +4941,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.1.6-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.1.7-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer.sh (v2.1.6 estável)
+                    KPlayer.sh (v2.1.7 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -5006,7 +5011,7 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.6-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.7-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
@@ -5019,22 +5024,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.1.6 + libkp_overlay.so com o novo Mini-Player L3 + R3 no design do KPlayer durante os jogos, Leitor de PDF (PdfCraft R36S), Editor de Texto, M3U8/rádios e 7-Zip.
+                Inclui binário ARM64 nativo v2.1.7 + libkp_overlay.so + script system_inject.py (Mini-Player nativo nos ports com escolha no Gerenciador + injeção persistente no sistema inteiro silenciando a música do EmulationStation), Leitor de PDF (PdfCraft R36S), Editor de Texto, M3U8/rádios e 7-Zip.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.1.6-R36S.zip"
+                download="KPlayer-v2.1.7-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.1.6-R36S.zip
+                ⬇ Baixar KPlayer-v2.1.7-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.1.6-R36S.zip.sha256"
+                download="KPlayer-v2.1.7-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

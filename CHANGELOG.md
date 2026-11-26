@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.1.7 — Mini-Player Nativo nos Ports & Injeção no Sistema Inteiro do R36S (`L3 + R3`)
+
+- **Mini-Player KPlayer Nativo Sempre Disponível nos Ports (`source/file_manager.h`, `source/kplayer.c`, `ports/kplayer/bg_audio.py`):**
+  - Ao abrir qualquer script `.sh` ou executável pelo **Gerenciador de Arquivos (`Arquivos`)**, escolha diretamente entre **`Executar com Mini-Player KPlayer (L3 + R3)`** (opção padrão, sempre pronta) ou **`Executar sem Mini-Player (padrão)`** (define `KPLAYER_DISABLE_OVERLAY=1` e executa limpo sem o Mini-Player), mantendo **`Abrir no Editor de Texto`** para scripts `.sh`.
+- **Injeção Persistente no Sistema Inteiro (`SELECT → Opções → Mini-Player no Sistema Inteiro`, `ports/kplayer/system_inject.py`, `source/kp_overlay.c`, `source/bg_miniplayer.h`):**
+  - Novo script seguro e 100% reversível **`system_inject.py`** controlado exclusivamente pelas opções do KPlayer:
+    - Desativa a música de fundo do EmulationStation com backup prévio (`es_settings.cfg`, serviços BGM e silenciamento de áudio do ES), sem jamais alterar `gamelist.xml`.
+    - Instala `libkp_overlay.so` (validado ELF e seguro para boot/preload) em `/usr/local/lib/libkp_overlay.so` + `/etc/ld.so.preload` + `/etc/profile.d/kplayer-miniplayer.sh` e serviço persistente `kplayer-miniplayer.service` (com fallback em `/etc/rc.local`), mantendo o Mini-Player KPlayer nativo no console inteiro mesmo após reiniciar o R36S.
+    - Coordena automaticamente com a interface principal do KPlayer via `/dev/shm/kplayer-main.lock` e sincroniza a playlist/tema ao sair.
+    - Só pode ser desativado dentro do próprio **KPlayer → `SELECT → Opções → Mini-Player no Sistema Inteiro`**, removendo completamente a injeção e restaurando a música original do EmulationStation.
+- **Preview Web Atualizada para v2.1.7 (`src/App.tsx`, `src/components/FileManagerScreen.tsx`, `src/components/OptionsMenu.tsx`, `src/components/GameTrainerOverlay.tsx`, `server.ts`):**
+  - Escolha direta com/sem Mini-Player no Gerenciador de Arquivos, opção **`Mini-Player no Sistema Inteiro`** integrada a `/api/system-miniplayer` e demonstração interativa alternando entre **Port / Jogo** e **EmulationStation (Sistema Injetado)**.
+
 ## v2.1.6 — Mini-Player Visual KPlayer no Jogo (`L3 + R3`) & Fluxo Estável de Áudio em Jogos
 
 - **Mini-Player no Jogo (`L3 + R3`) Redesenhado com a Identidade Visual do KPlayer (`source/kp_overlay_shared.h`):**

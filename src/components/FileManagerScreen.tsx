@@ -502,10 +502,10 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       };
     }, [onSetGameAudioDucking]);
 
-    // v2.1.5 Teste prévio: duck active music/radio smoothly while a game launch preview console is open
+    // v2.1.7: duck active music/radio smoothly whenever a port is launched with native Mini-Player active
     useEffect(() => {
       const shouldDuck = Boolean(
-        modal?.kind === 'exec_console' && bgAudioPreview && activeBackgroundAudio
+        modal?.kind === 'exec_console' && modal.preview.bgAudioActive && activeBackgroundAudio
       );
       onSetGameAudioDucking?.(shouldDuck);
       if (modal?.kind !== 'exec_console') {
@@ -513,11 +513,11 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         setL3Armed(false);
         setTrainerRow(0);
       }
-    }, [activeBackgroundAudio, bgAudioPreview, modal, onSetGameAudioDucking]);
+    }, [activeBackgroundAudio, modal, onSetGameAudioDucking]);
 
     const toggleInGameMiniPlayer = useCallback(() => {
-      if (!bgAudioPreview) {
-        notify('Ative "Áudio em jogos (Teste prévio)" em Opções primeiro');
+      if (modal?.kind === 'exec_console' && !modal.preview.bgAudioActive) {
+        notify('Este port foi iniciado sem Mini-Player');
         return;
       }
       setInGameMiniPlayerOpen((open) => {
@@ -527,7 +527,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         }
         return next;
       });
-    }, [activeBackgroundAudio, bgAudioPreview, notify, onBgTogglePause]);
+    }, [activeBackgroundAudio, modal, notify, onBgTogglePause]);
 
     const activateTrainerRow = useCallback(
       (row: number) => {
@@ -944,9 +944,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       [notify]
     );
 
-    // ==================== v2.1.3 / v2.1.4 .SH & EMULATIONSTATION LAUNCHER ====================
+    // ==================== v2.1.7 NATIVE MINI-PLAYER PORT LAUNCHER ====================
     const launchR36sTarget = useCallback(
-      async (filePath: string) => {
+      async (filePath: string, withMiniPlayer = true) => {
         setLoading(true);
         try {
           const res = await fetch('/api/fm/launch', {
@@ -954,7 +954,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               path: filePath,
-              bgAudioPreview,
+              withMiniPlayer,
+              bgAudioPreview: withMiniPlayer,
               activeMediaTitle: activeBackgroundAudio?.title || '',
               activeMediaKind: activeBackgroundAudio?.kind || null,
             }),
@@ -967,6 +968,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             interpreter?: string;
             targetDir?: string;
             logLines?: string[];
+            withMiniPlayer?: boolean;
             bgAudioActive?: boolean;
             error?: string;
           };
@@ -974,9 +976,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             notify(data.error || 'Não foi possível executar este arquivo');
             return;
           }
-          const bgActive = Boolean(
-            (data.bgAudioActive ?? (bgAudioPreview && Boolean(activeBackgroundAudio))) && bgAudioPreview
-          );
+          const miniPlayerActive = Boolean(data.withMiniPlayer ?? withMiniPlayer);
           setModal({
             kind: 'exec_console',
             preview: {
@@ -986,10 +986,11 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
               interpreter: data.interpreter || '/bin/bash',
               targetDir: data.targetDir || '/',
               logLines: Array.isArray(data.logLines) ? data.logLines : [],
-              bgAudioActive: bgActive,
-              bgAudioLabel: activeBackgroundAudio
-                ? `${activeBackgroundAudio.kind === 'radio' ? 'Rádio' : 'Música'}: ${activeBackgroundAudio.title}`
-                : undefined,
+              bgAudioActive: miniPlayerActive,
+              bgAudioLabel:
+                miniPlayerActive && activeBackgroundAudio
+                  ? `${activeBackgroundAudio.kind === 'radio' ? 'Rádio' : 'Música'}: ${activeBackgroundAudio.title}`
+                  : undefined,
             },
           });
         } catch {
@@ -998,7 +999,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           setLoading(false);
         }
       },
-      [activeBackgroundAudio, bgAudioPreview, notify]
+      [activeBackgroundAudio, notify]
     );
 
     const playDirectMediaEntry = useCallback(
@@ -1145,19 +1146,21 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     const execChoiceOptions = useMemo(() => {
       if (modal?.kind !== 'exec_choice') return [];
       const target = modal.target;
-      const runDesc = bgAudioPreview
-        ? activeBackgroundAudio
-          ? `Áudio em jogos ATIVO: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • Aperte L3 + R3 no jogo para abrir o Mini-Player`
-          : 'Áudio em jogos ATIVO: aperte L3 + R3 no jogo para abrir o Mini-Player KPlayer'
-        : 'Encerra SDL2/libVLC e entrega controle direto ao script/executável (ative Áudio em jogos em Opções para ouvir durante o jogo)';
+      const withMpDesc = activeBackgroundAudio
+        ? `Nativo: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • Aperte L3 + R3 no jogo`
+        : 'Nativo nos ports: abre com fila de músicas/rádios pronta no L3 + R3';
       const opts: Array<{ id: string; label: string; desc: string; run: () => void }> = [
         {
-          id: 'run',
-          label: isEntryScript(target)
-            ? 'Executar script .sh no console (R36S)'
-            : 'Executar binário / EmulationStation',
-          desc: runDesc,
-          run: () => void launchR36sTarget(target.path),
+          id: 'run-with-mp',
+          label: 'Executar com Mini-Player KPlayer (L3 + R3)',
+          desc: withMpDesc,
+          run: () => void launchR36sTarget(target.path, true),
+        },
+        {
+          id: 'run-without-mp',
+          label: 'Executar sem Mini-Player (padrão)',
+          desc: 'Inicia limpo sem overlay nem áudio em segundo plano (KPLAYER_DISABLE_OVERLAY=1)',
+          run: () => void launchR36sTarget(target.path, false),
         },
       ];
       if (isEntryScript(target) || isEntryText(target)) {
@@ -1175,7 +1178,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         run: () => setModal(null),
       });
       return opts;
-    }, [activeBackgroundAudio, bgAudioPreview, launchR36sTarget, modal, openTextEditor]);
+    }, [activeBackgroundAudio, launchR36sTarget, modal, openTextEditor]);
 
     const actionMenuItems = useMemo(() => {
       if (modal?.kind !== 'actions') return [];
@@ -1219,14 +1222,20 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
           });
         }
         if (isEntryScript(target) || isEntryExecutable(target)) {
-          list.push({
-            id: 'launch-sh',
-            label: isEntryScript(target) ? 'Executar script .sh (R36S)' : 'Executar binário / EmulationStation',
-            desc: bgAudioPreview
-              ? 'Iniciar jogo mantendo áudio em segundo plano (Teste prévio)'
-              : 'Iniciar jogo ou executável no console',
-            run: () => void launchR36sTarget(target.path),
-          });
+          list.push(
+            {
+              id: 'launch-sh-mp',
+              label: 'Executar com Mini-Player KPlayer (L3 + R3)',
+              desc: 'Modo nativo v2.1.7 com overlay L3 + R3 e fila de áudio pronta',
+              run: () => void launchR36sTarget(target.path, true),
+            },
+            {
+              id: 'launch-sh-clean',
+              label: 'Executar sem Mini-Player (padrão)',
+              desc: 'Iniciar jogo ou executável sem overlay nem áudio em segundo plano',
+              run: () => void launchR36sTarget(target.path, false),
+            }
+          );
         }
         if (
           isEntryText(target) ||
@@ -1439,13 +1448,14 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         // Modals
         if (modal) {
           if (modal.kind === 'exec_console') {
+            const miniPlayerEnabled = Boolean(modal.preview.bgAudioActive);
             if (btn === 'L3_R3') {
               setL3Armed(false);
-              toggleInGameMiniPlayer();
+              if (miniPlayerEnabled) toggleInGameMiniPlayer();
               return;
             }
             if (btn === 'L3') {
-              if (bgAudioPreview) {
+              if (miniPlayerEnabled) {
                 setL3Armed(true);
                 if (l3ArmTimerRef.current !== null) {
                   window.clearTimeout(l3ArmTimerRef.current);
@@ -1458,10 +1468,10 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
               return;
             }
             if (btn === 'R3') {
-              if (l3Armed) {
+              if (l3Armed && miniPlayerEnabled) {
                 setL3Armed(false);
                 toggleInGameMiniPlayer();
-              } else if (bgAudioPreview) {
+              } else if (miniPlayerEnabled) {
                 setL3Armed(true);
                 if (l3ArmTimerRef.current !== null) {
                   window.clearTimeout(l3ArmTimerRef.current);
@@ -2790,7 +2800,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                     </button>
                   </div>
 
-                  {bgAudioPreview && !inGameMiniPlayerOpen && (
+                  {modal.preview.bgAudioActive && !inGameMiniPlayerOpen && (
                     <div
                       className="rounded-lg px-2.5 py-1.5 text-[10.5px] flex items-center justify-between gap-2"
                       style={{
