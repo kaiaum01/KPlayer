@@ -6,7 +6,7 @@
   "platform": "r36s",
   "releaseTag": "v2.1.6",
   "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.6",
-  "releasedAt": "2026-11-26T20:00:00Z",
+  "releasedAt": "2026-11-26T20:10:01Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -25,11 +25,12 @@
     "resume.cfg"
   ],
   "notes": [
-    "Mini-Player no Jogo (L3 + R3) redesenhado com o visual autêntico do KPlayer: cantos arredondados, emblema de disco de vinil K, card Tocando Agora e 5 cards com foco na cor do tema ativo.",
-    "Fluxo estável de Áudio em jogos (Teste prévio) restaurado: ative em SELECT → Opções → Áudio em jogos (Teste prévio) e abra seus jogos pelo Gerenciador de Arquivos (Arquivos) com retorno automático ao KPlayer ao sair do jogo.",
-    "Controles do Mini-Player (L3 + R3 / F8) imunes ao gptokeyb via EVIOCGKEY e SDL_GAMECONTROLLERCONFIG: D-pad navega, ←/→ ajusta volume (10%–100%), B/START confirma, R2/L2 troca faixa e A oculta.",
-    "Demonstração interativa na Preview Web exibindo o novo Mini-Player KPlayer diretamente sobre o jogo (botão Demo Mini-Player L3+R3).",
-    "Base estável R36S mantida: libkp_overlay.so, Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip ARM64."
+    "Mini-Player no Jogo (L3 + R3) com o Design do KPlayer:",
+    "Painel arredondado no canto superior esquerdo (libkp_overlay.so + fallback /dev/fb0) com gradiente do tema ativo, emblema de disco de vinil K (K PLAYER · MINI-PLAYER), card TOCANDO",
+    "Controles: L3 + R3 abre/oculta; ↑/↓ navega; ←/→ ajusta volume (10%–100%) ou troca faixa; B/START confirma; R2/L2 avança/volta faixa direto; A oculta.",
+    "Demonstração na Preview Web: Botão Demo Mini-Player (L3+R3) exibindo o novo Mini-Player KPlayer diretamente sobre um jogo em execução.",
+    "Fluxo Estável de Áudio em Jogos Restaurado:",
+    "Ative em SELECT → Opções → Áudio em jogos (Teste prévio) e abra seus jogos ou scripts .sh pelo Gerenciador de Arquivos (Arquivos) com música ou rádio tocando em segundo plano (./kp"
   ],
   "r36s": {
     "filename": "KPlayer-v2.1.6-R36S.zip",
@@ -37,8 +38,8 @@
     "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
     "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.6/KPlayer-v2.1.6-R36S.zip",
     "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.6/KPlayer-v2.1.6-R36S.zip.sha256",
-    "sha256": "",
-    "sizeBytes": 0
+    "sha256": "f7ff7341727299bf6c6fedae433432e8c885094022558eee529911b9b5716d41",
+    "sizeBytes": 18202665
   },
   "web": {
     "version": "2.1.6",

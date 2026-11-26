@@ -5,13 +5,16 @@
     {
       "version": "2.1.6",
       "releaseTag": "v2.1.6",
-      "releasedAt": "2026-11-26T20:00:00Z",
+      "releasedAt": "2026-11-26T20:10:01Z",
       "r36s": "updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
-      "sha256": "",
+      "sha256": "f7ff7341727299bf6c6fedae433432e8c885094022558eee529911b9b5716d41",
       "notes": [
-        "Mini-Player no Jogo (L3 + R3) redesenhado no visual arredondado do KPlayer (emblema vinil K, card Tocando Agora e 5 cards com foco no tema ativo).",
-        "Fluxo estável de Áudio em jogos (Teste prévio) restaurado: abra jogos pelo Gerenciador de Arquivos com música ou rádio tocando em segundo plano e retorno limpo ao KPlayer.",
-        "Demonstração interativa na Preview Web exibindo o novo Mini-Player KPlayer diretamente sobre um jogo."
+        "Mini-Player no Jogo (L3 + R3) com o Design do KPlayer:",
+        "Painel arredondado no canto superior esquerdo (libkp_overlay.so + fallback /dev/fb0) com gradiente do tema ativo, emblema de disco de vinil K (K PLAYER · MINI-PLAYER), card TOCANDO",
+        "Controles: L3 + R3 abre/oculta; ↑/↓ navega; ←/→ ajusta volume (10%–100%) ou troca faixa; B/START confirma; R2/L2 avança/volta faixa direto; A oculta.",
+        "Demonstração na Preview Web: Botão Demo Mini-Player (L3+R3) exibindo o novo Mini-Player KPlayer diretamente sobre um jogo em execução.",
+        "Fluxo Estável de Áudio em Jogos Restaurado:",
+        "Ative em SELECT → Opções → Áudio em jogos (Teste prévio) e abra seus jogos ou scripts .sh pelo Gerenciador de Arquivos (Arquivos) com música ou rádio tocando em segundo plano (./kp"
       ]
     },
     {
