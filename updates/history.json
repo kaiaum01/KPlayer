@@ -5,9 +5,9 @@
     {
       "version": "2.1.4",
       "releaseTag": "v2.1.4",
-      "releasedAt": "2026-11-25T17:14:43Z",
+      "releasedAt": "2026-11-26T17:39:58Z",
       "r36s": "updates/v2.1.4/KPlayer-v2.1.4-R36S.zip",
-      "sha256": "ec77a774d6ea651371410c0eee0512ae1ea75d7ccd7882eb870ecbac6996c997",
+      "sha256": "d0b85f9bf4a2ce4c36afe6f9d199bd6d26af6a2e4bca2facfe7c17821734a7aa",
       "notes": [
         "Música e Rádio em Segundo Plano + Mini-Player no Jogo (SELECT + R2) (Teste prévio):",
         "Nova opção Áudio em jogos (Teste prévio) em SELECT → Opções, permitindo ativar ou desativar a qualquer momento (salva em settings.cfg, desativada por padrão).",
