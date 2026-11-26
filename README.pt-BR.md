@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Central de mídia portátil nativa para R36S (dArkOS / PortMaster — C + SDL2 + libVLC ARM64)</strong><br />
-  Músicas e Vídeos (.LRC) · Arquivos + PDF (PdfCraft) + Editor + .sh + 7-Zip · Áudio em 2º Plano (ES/Jogos) · 10 Visualizadores · 14 Temas · Rádio · IPTV + EPG · Notícias · Clima · Placar
+  Músicas e Vídeos (.LRC) · Arquivos + PDF (PdfCraft) + Editor + .sh + 7-Zip · Áudio em Jogos &amp; Mini-Player (L3+R3) · 10 Visualizadores · 14 Temas · Rádio · IPTV + EPG · Notícias · Clima · Placar
 </p>
 
 <p align="center">
@@ -25,13 +25,12 @@
 
 ## Novidades da v2.1.6 (R36S Nativo)
 
-- **Áudio em 2º Plano Fora do KPlayer (EmulationStation & Jogos) — Controle Exclusivo no KPlayer:**
-  - Ative ou desative exclusivamente dentro do app KPlayer em **`SELECT → Opções → Áudio em 2º plano (ES/Jogos)`**; ao sair do KPlayer com a opção ligada, o serviço nativo (`./kplayer --bg-audio`) continua tocando sua música ou rádio no **EmulationStation** e durante seus jogos.
-  - **Silenciador Automático e Reversível da BGM do EmulationStation:** Evita que a música do EmulationStation toque junto, silenciando temporariamente `audio.bgmusic`/`BackgroundMusic` em `es_settings.cfg`, parando players externos (`ogg123`/`mpg123`/`bgm.py`) e mutando fluxos PulseAudio/PipeWire do ES (sem nunca alterar `gamelist.xml`). Desativar a opção no KPlayer restaura tudo automaticamente.
-- **Mini-Player Flutuante (`L3 + R3`) com o Design do KPlayer:**
+- **Mini-Player no Jogo (`L3 + R3`) com o Design do KPlayer:**
   - Overlay redesenhado no visual arredondado do KPlayer (`libkp_overlay.so` + fallback `/dev/fb0`), com gradiente no tema ativo, emblema de vinil **`K`** (`K PLAYER · MINI-PLAYER`), card **`TOCANDO AGORA`** com mini-equalizador e 5 cards de ação com barra lateral de foco.
-  - Ativação por **`L3 + R3`** (clique nos dois analógicos; `F8` no teclado), imune ao `gptokeyb` (`EVIOCGKEY`/`SDL_GAMECONTROLLERCONFIG`). Use **`↑`/`↓`** para navegar, **`←`/`→`** no volume (`10%–100%`), **`B`/`START`** para confirmar, **`R2`/`L2`** para trocar faixa e **`A`** ou **`L3 + R3`** para ocultar.
-  - Demonstração interativa (**`Demo Mini-Player (L3+R3)`**) na Preview Web mostrando os cenários **EmulationStation** e **Jogo em execução**.
+  - Ativação dentro dos jogos por **`L3 + R3`** (clique nos dois analógicos; `F8` no teclado), imune ao `gptokeyb` (`EVIOCGKEY`/`SDL_GAMECONTROLLERCONFIG`). Use **`↑`/`↓`** para navegar, **`←`/`→`** no volume (`10%–100%`), **`B`/`START`** para confirmar, **`R2`/`L2`** para trocar faixa e **`A`** ou **`L3 + R3`** para ocultar.
+  - Demonstração interativa (**`Demo Mini-Player (L3+R3)`**) na Preview Web mostrando o novo Mini-Player KPlayer diretamente sobre um jogo em execução.
+- **Fluxo Estável de Áudio em Jogos Restaurado (`SELECT → Opções → Áudio em jogos (Teste prévio)`):**
+  - Ative em **`SELECT → Opções → Áudio em jogos (Teste prévio)`** e abra seus jogos ou scripts `.sh` pelo **Gerenciador de Arquivos (`Arquivos`)** para manter sua música ou rádio online tocando via `./kplayer --bg-audio` com mixagem automática PulseAudio/PipeWire ou ALSA `dmix`; ao fechar o jogo, o áudio encerra limpo e o KPlayer retorna automaticamente.
 - **Leitor de PDF Integrado Compatível com `PdfCraft R36S` (`github.com/kaiaum01/PdfReader-R36s`):**
   - Abra arquivos **`.pdf`** diretamente no Gerenciador de Arquivos (`Arquivos`).
   - Compatível com o motor **`pdfcraft-core.aarch64`** (protocolo nativo `serve` JSON IPC, incluindo PDFs com senha pelo teclado na tela), opção de abrir diretamente no **`PdfCraft.sh`** quando instalado em `/roms(2)/ports/`, além de fallback automático via `pdftoppm`/`mutool` e modo texto puro em Python (`L1`/`R1` páginas, `X` zoom, `Y` alternar documento/texto, `A` voltar).

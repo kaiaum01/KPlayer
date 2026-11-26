@@ -602,8 +602,8 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         },
         {
           id: 'bg-audio-preview',
-          label: 'Áudio em 2º plano (ES/Jogos)',
-          value: bgAudioPreview ? 'Ativado (ES/Jogos)' : 'Desativado',
+          label: 'Áudio em jogos (Teste prévio)',
+          value: bgAudioPreview ? 'Ativado (Prévio)' : 'Desativado',
           onSelect: onToggleBgAudioPreview,
         },
         {

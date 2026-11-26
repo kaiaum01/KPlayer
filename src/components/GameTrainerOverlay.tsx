@@ -1,14 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   EyeOff,
-  Gamepad2,
-  Monitor,
   Pause,
   Play,
   SkipBack,
   SkipForward,
   Volume2,
-  VolumeX,
   X,
 } from 'lucide-react';
 import type { KpTheme } from '../themes';
@@ -159,7 +156,7 @@ export function GameTrainerHud({
               </span>
             </div>
             <div className="text-[9.5px] mt-0.5 truncate" style={{ color: theme.muted }}>
-              2º plano • v2.1.6
+              Áudio no jogo • v2.1.6
             </div>
           </div>
         </div>
@@ -340,7 +337,7 @@ export function GameTrainerHud({
         </div>
         <div className="flex items-center justify-between mt-1">
           <span className="text-[8.5px]" style={{ color: theme.muted }}>
-            Ativar/desativar só no KPlayer
+            KPlayer • L3 + R3 no jogo
           </span>
           <button
             type="button"
@@ -369,17 +366,9 @@ export interface GameTrainerDemoStageProps {
   onExitDemo: () => void;
 }
 
-const ES_SYSTEMS = [
-  { name: 'PORTMASTER', count: '14 JOGOS', color: '#38bdf8' },
-  { name: 'PLAYSTATION', count: '42 JOGOS', color: '#818cf8' },
-  { name: 'SUPER NINTENDO', count: '118 JOGOS', color: '#a855f7' },
-  { name: 'GAME BOY ADVANCE', count: '96 JOGOS', color: '#34d399' },
-];
-
 /**
- * Full 640x480 interactive preview demonstrating the KPlayer Mini-Player (L3 + R3)
- * working OUTSIDE the app in EmulationStation (with ES BGM automatically silenced)
- * as well as inside a running retro game.
+ * Full 640x480 interactive preview demonstrating the KPlayer-styled Mini-Player (L3 + R3)
+ * floating directly over a running retro game.
  */
 export function GameTrainerDemoStage({
   theme,
@@ -393,11 +382,9 @@ export function GameTrainerDemoStage({
   onVolumeDelta,
   onExitDemo,
 }: GameTrainerDemoStageProps) {
-  const [scene, setScene] = useState<'es' | 'game'>('es');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    if (scene !== 'game') return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -576,92 +563,34 @@ export function GameTrainerDemoStage({
 
     raf = window.requestAnimationFrame(render);
     return () => window.cancelAnimationFrame(raf);
-  }, [scene]);
+  }, []);
 
   return (
     <div className="absolute inset-0 z-40 overflow-hidden bg-[#0b101b]">
-      {scene === 'es' ? (
-        /* Authentic R36S EmulationStation Home Carousel Backdrop */
-        <div
-          className="absolute inset-0 flex flex-col justify-between p-5 select-none"
-          style={{
-            background:
-              'radial-gradient(circle at 72% 32%, rgba(56, 189, 248, 0.22) 0%, rgba(15, 23, 42, 0.96) 58%, #070b14 100%)',
-          }}
-        >
-          {/* ES Top Status Bar */}
-          <div className="flex items-center justify-end gap-2.5 text-[10.5px] font-semibold text-slate-300">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/45 border border-white/10 text-emerald-300">
-              <VolumeX className="w-3.5 h-3.5" />
-              BGM do EmulationStation: Silenciada
-            </span>
-            <span className="px-2 py-1 rounded-lg bg-black/45 border border-white/10 text-slate-300">
-              dArkOS · ES
-            </span>
-          </div>
-
-          {/* ES System Carousel Center Band */}
-          <div className="my-auto flex flex-col items-end pr-2">
-            <div className="text-[10px] uppercase tracking-[0.22em] text-sky-300/80 font-bold mb-1">
-              EmulationStation · Fora do KPlayer
-            </div>
-            <div className="text-[32px] font-black tracking-tight text-white leading-none drop-shadow">
-              PORTMASTER
-            </div>
-            <div className="text-[12px] text-slate-300 mt-1.5">
-              14 jogos disponíveis · KPlayer tocando em 2º plano
-            </div>
-
-            <div className="mt-5 flex items-center gap-2.5">
-              {ES_SYSTEMS.map((sys, idx) => (
-                <div
-                  key={sys.name}
-                  className="px-3 py-2 rounded-xl border text-right"
-                  style={{
-                    backgroundColor: idx === 0 ? 'rgba(56, 189, 248, 0.16)' : 'rgba(15, 23, 42, 0.65)',
-                    borderColor: idx === 0 ? 'rgba(56, 189, 248, 0.7)' : 'rgba(255,255,255,0.08)',
-                  }}
-                >
-                  <div className="text-[10px] font-extrabold tracking-wide text-white">{sys.name}</div>
-                  <div className="text-[8.5px] text-slate-400 mt-0.5">{sys.count}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ES Bottom Hint Strip */}
-          <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-white/10 pt-2">
-            <span>A SELECIONAR · START MENU ES · L3+R3 MINI-PLAYER KPLAYER</span>
-          </div>
+      <canvas
+        ref={canvasRef}
+        width={640}
+        height={480}
+        className="w-full h-full block object-cover"
+      />
+      <div className="absolute top-3.5 right-3.5 flex flex-col items-end gap-1 pointer-events-none select-none">
+        <div className="font-mono font-black text-[18px] leading-none tracking-wider text-emerald-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
+          $0048520
         </div>
-      ) : (
-        <>
-          <canvas
-            ref={canvasRef}
-            width={640}
-            height={480}
-            className="w-full h-full block object-cover"
-          />
-          <div className="absolute top-3.5 right-3.5 flex flex-col items-end gap-1 pointer-events-none select-none">
-            <div className="font-mono font-black text-[18px] leading-none tracking-wider text-emerald-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
-              $0048520
-            </div>
-            <div className="flex items-center gap-1 text-amber-400 text-[13px] drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
-              <span>★</span>
-              <span>★</span>
-              <span className="text-zinc-600/80">★</span>
-              <span className="text-zinc-600/80">★</span>
-              <span className="text-zinc-600/80">★</span>
-            </div>
-            <div className="w-24 h-2 bg-black/75 border border-black p-[1px]">
-              <div className="h-full w-[82%] bg-emerald-500" />
-            </div>
-            <div className="w-24 h-1.5 bg-black/75 border border-black p-[1px]">
-              <div className="h-full w-[64%] bg-sky-400" />
-            </div>
-          </div>
-        </>
-      )}
+        <div className="flex items-center gap-1 text-amber-400 text-[13px] drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
+          <span>★</span>
+          <span>★</span>
+          <span className="text-zinc-600/80">★</span>
+          <span className="text-zinc-600/80">★</span>
+          <span className="text-zinc-600/80">★</span>
+        </div>
+        <div className="w-24 h-2 bg-black/75 border border-black p-[1px]">
+          <div className="h-full w-[82%] bg-emerald-500" />
+        </div>
+        <div className="w-24 h-1.5 bg-black/75 border border-black p-[1px]">
+          <div className="h-full w-[64%] bg-sky-400" />
+        </div>
+      </div>
 
       {/* Top-Left Docked KPlayer Mini-Player HUD (toggled by L3 + R3) */}
       {trainerOpen && (
@@ -681,15 +610,6 @@ export function GameTrainerDemoStage({
 
       {/* Demo Controls Bar at Bottom-Right */}
       <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => setScene((s) => (s === 'es' ? 'game' : 'es'))}
-          className="px-2.5 py-1.5 rounded-lg bg-black/80 hover:bg-zinc-900 border border-white/15 text-[10px] font-bold text-slate-200 flex items-center gap-1.5 cursor-pointer shadow-lg"
-          title="Alternar cena entre EmulationStation e Jogo"
-        >
-          {scene === 'es' ? <Gamepad2 className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
-          {scene === 'es' ? 'Ver no Jogo' : 'Ver no ES'}
-        </button>
         {!trainerOpen && (
           <div className="px-2.5 py-1.5 rounded-lg bg-black/80 border border-white/15 text-[10px] text-zinc-200 flex items-center gap-1.5 shadow-lg">
             <Volume2 className="w-3.5 h-3.5" style={{ color: theme.accent }} />

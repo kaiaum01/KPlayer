@@ -3497,11 +3497,11 @@ async function createServer() {
       );
       await writeIfMissing(
         'roms/ports/kplayer/changelog.txt',
-        'KPlayer v2.1.6 (R36S)\n- Audio em 2o plano no EmulationStation e jogos (ativacao e desativacao exclusivas no app KPlayer)\n- Silenciamento automatico e reversivel da BGM do EmulationStation (sem alterar gamelist.xml)\n- Mini-Player flutuante (L3 + R3) redesenhado com o visual nativo arredondado do KPlayer\n- Leitor de PDF (PdfCraft R36S), Editor de texto nativo e 7-Zip oficial preservados\n'
+        'KPlayer v2.1.6 (R36S)\n- Novo Mini-Player no jogo (L3 + R3) redesenhado com o visual arredondado do KPlayer\n- Fluxo estavel de audio em jogos (SELECT -> Opcoes -> Audio em jogos) com retorno automatico ao KPlayer\n- Leitor de PDF (PdfCraft R36S), Editor de texto nativo e 7-Zip oficial preservados\n'
       );
       await writeIfMissing(
         'roms/ports/kplayer/guia.html',
-        '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8" />\n  <title>Guia R36S — KPlayer v2.1.6</title>\n</head>\n<body>\n  <h1>KPlayer R36S v2.1.6</h1>\n  <p>Edite arquivos HTML, XML, TXT e scripts .sh, abra PDFs (PdfCraft R36S) e use L3 + R3 para abrir o Mini-Player KPlayer no EmulationStation e nos jogos.</p>\n</body>\n</html>\n'
+        '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8" />\n  <title>Guia R36S — KPlayer v2.1.6</title>\n</head>\n<body>\n  <h1>KPlayer R36S v2.1.6</h1>\n  <p>Edite arquivos HTML, XML, TXT e scripts .sh, abra PDFs (PdfCraft R36S) e use L3 + R3 para abrir o Mini-Player KPlayer no jogo.</p>\n</body>\n</html>\n'
       );
       await writeIfMissing(
         'roms/ports/gamelist.xml',
@@ -3565,8 +3565,8 @@ async function createServer() {
           'Leitor de PDF compativel com PdfCraft R36S (kaiaum01/PdfReader-R36s).',
           ' ',
           'Novidades da versao 2.1.6:',
-          '1. Audio em 2o plano no EmulationStation e nos jogos (controlado so no KPlayer).',
-          '2. Silenciamento automatico da BGM do EmulationStation + Mini-Player L3 + R3.',
+          '1. Novo Mini-Player no jogo (L3 + R3) com o visual arredondado do KPlayer.',
+          '2. Fluxo estavel de audio em jogos com retorno automatico ao KPlayer.',
           '3. Leitor PDF integrado com paginas (L1/R1), zoom (X) e modo texto (Y).',
           '4. Deteccao automatica do motor pdfcraft-core.aarch64 e PdfCraft.sh no R36S.',
         ]);

@@ -72,10 +72,10 @@ import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_179539140
 
 const APP_VERSION = '2.1.6';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Áudio em 2º plano agora funciona fora do KPlayer (no EmulationStation e nos jogos) — ativação e desativação exclusivas dentro do app KPlayer (SELECT → Opções).',
-  'Silenciamento automático e reversível da música de fundo do EmulationStation enquanto o KPlayer estiver ativo em 2º plano (sem alterar nenhum gamelist.xml).',
-  'Mini-Player flutuante (L3 + R3) redesenhado com a identidade visual do KPlayer: cantos arredondados, emblema de vinil K, card Tocando Agora e foco no tema ativo.',
-  'Demonstração interativa na preview mostrando o Mini-Player sobre o EmulationStation e sobre um jogo, preservando Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip.',
+  'Mini-Player no jogo (L3 + R3) redesenhado com o visual do KPlayer: cantos arredondados, emblema de disco de vinil K, card Tocando Agora e foco no tema ativo.',
+  'Fluxo estável de áudio em jogos (SELECT → Opções → Áudio em jogos) rodando diretamente via ./kplayer --bg-audio com retorno automático ao KPlayer ao sair do jogo.',
+  'Navegação completa no Mini-Player: ↑/↓ escolhe ação, B confirma, ←/→ ajusta volume (10%–100%), L2/R2 troca faixa instantâneo e A ou L3+R3 oculta.',
+  'Demonstração interativa do novo Mini-Player KPlayer na preview + base estável preservando Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip.',
 ];
 
 const TRAINER_DEMO_FALLBACK_TRACKS = [
@@ -2204,7 +2204,7 @@ export default function App() {
                   }
             }
             className="px-2.5 py-1 rounded-md text-xs font-extrabold hover:brightness-110 transition-all cursor-pointer whitespace-nowrap"
-            title="Demonstração interativa do Mini-Player KPlayer no EmulationStation e no jogo (L3 + R3 / F8)"
+            title="Demonstração interativa do novo Mini-Player KPlayer no jogo (L3 + R3 / F8)"
           >
             {trainerDemoActive ? '✕ Fechar Demo' : 'Demo Mini-Player (L3+R3)'}
           </button>
@@ -4615,8 +4615,8 @@ export default function App() {
                     const next = !prev;
                     notify(
                       next
-                        ? 'Áudio em 2º plano (ES/Jogos) ativo: música do EmulationStation silenciada • L3 + R3 abre o Mini-Player'
-                        : 'Áudio em 2º plano desativado • Música do EmulationStation restaurada'
+                        ? 'Áudio em jogos ativo: aperte L3 + R3 no jogo para abrir o Mini-Player KPlayer'
+                        : 'Áudio em jogos (Teste prévio) desativado'
                     );
                     return next;
                   });
@@ -5019,7 +5019,7 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.1.6 + libkp_overlay.so com Áudio em 2º plano no EmulationStation e jogos (silenciando a BGM do ES automaticamente), Mini-Player L3 + R3 no design do KPlayer, Leitor de PDF (PdfCraft R36S), Editor de Texto, M3U8/rádios e 7-Zip.
+                Inclui binário ARM64 nativo v2.1.6 + libkp_overlay.so com o novo Mini-Player L3 + R3 no design do KPlayer durante os jogos, Leitor de PDF (PdfCraft R36S), Editor de Texto, M3U8/rádios e 7-Zip.
               </p>
             </div>
 

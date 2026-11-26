@@ -1147,9 +1147,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       const target = modal.target;
       const runDesc = bgAudioPreview
         ? activeBackgroundAudio
-          ? `Áudio em 2º plano ATIVO: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • Aperte L3 + R3 no jogo para abrir o Mini-Player`
-          : 'Áudio em 2º plano ATIVO: aperte L3 + R3 no jogo para abrir o Mini-Player KPlayer'
-        : 'Encerra SDL2/libVLC e entrega controle direto ao script/executável (ative Áudio em 2º plano em Opções para ouvir fora do app)';
+          ? `Áudio em jogos ATIVO: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • Aperte L3 + R3 no jogo para abrir o Mini-Player`
+          : 'Áudio em jogos ATIVO: aperte L3 + R3 no jogo para abrir o Mini-Player KPlayer'
+        : 'Encerra SDL2/libVLC e entrega controle direto ao script/executável (ative Áudio em jogos em Opções para ouvir durante o jogo)';
       const opts: Array<{ id: string; label: string; desc: string; run: () => void }> = [
         {
           id: 'run',

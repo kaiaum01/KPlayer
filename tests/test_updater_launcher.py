@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests verifying stable KPlayer.sh launcher restoration, v2.1.6 ES daemon handoff, and never touching gamelist.xml."""
+"""Tests verifying stable KPlayer.sh launcher restoration, v2.1.6 in-game handoff, and never touching gamelist.xml."""
 from pathlib import Path
 import importlib.util
 import tempfile
@@ -13,13 +13,11 @@ SPEC.loader.exec_module(updater)
 
 
 class UpdaterLauncherTest(unittest.TestCase):
-    def test_kplayer_sh_supports_v216_bg_audio_handoff_daemon_and_helpers(self) -> None:
+    def test_kplayer_sh_supports_v216_bg_audio_handoff_and_helpers(self) -> None:
         sh = (BASE / "ports/KPlayer.sh").read_text(encoding="utf-8")
         self.assertIn('KPLAYER_VERSION="2.1.6"', sh)
         self.assertIn('"$result" -eq 43', sh)
-        self.assertIn('"$result" -eq 44', sh)
-        self.assertIn("start-daemon", sh)
-        self.assertIn("stop-daemon", sh)
+        self.assertNotIn('"$result" -eq 44', sh)
         self.assertIn("bg_audio.py", sh)
         self.assertIn("pdf_ops.py", sh)
         self.assertTrue((BASE / "ports/kplayer/bg_audio.py").is_file())

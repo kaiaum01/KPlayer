@@ -2,14 +2,9 @@
 #define KPLAYER_BG_MINIPLAYER_H
 
 /*
- * KPlayer R36S Headless Background Audio + Floating KPlayer Mini-Player (v2.1.6)
+ * KPlayer R36S Headless Background Audio + In-Game KPlayer Mini-Player (v2.1.6)
  *
  * Runs as `./kplayer --bg-audio <handoff.json> [game_pid]` without SDL2.
- * Supports both:
- *   - In-game mode (`game_pid > 1`): stays alive while the launched game runs
- *   - EmulationStation / detached daemon mode (`game_pid == 0`): stays alive
- *     after KPlayer exits back to EmulationStation until disabled inside KPlayer
- *
  * Uses KPlayer's bundled libvlc.so.5 directly over PulseAudio/PipeWire or
  * ALSA dmix, polls Linux evdev hardware state via EVIOCGKEY/EVIOCGABS
  * (immune to gptokeyb's EVIOCGRAB) using exact SDL_GAMECONTROLLERCONFIG
@@ -599,7 +594,7 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
     return res;
   }
 
-  /* While Trainer is closed, ignore all normal gameplay controls */
+  /* While Mini-Player is closed, ignore all normal gameplay controls */
   if (!st->overlay_open) {
     return BG_RES_NONE;
   }
@@ -1430,9 +1425,6 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
   bool fb_fallback_pending = false;
   int64_t fb_open_start_ms = 0;
   int64_t fb_open_prev_draw_ms = 0;
-  int64_t fb_last_blit_ms = 0;
-  int64_t es_mute_next_ms = (game_pid == 0) ? (kp_ov_now_ms() + 1200) : 0;
-  int es_mute_passes = (game_pid == 0) ? 3 : 0;
   int vol_sync_ticks = 0;
 
   if (st.auto_play && st.track_count > 0) {
@@ -1451,23 +1443,6 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
   while (bg_mp_running) {
     if (!bg_mp_game_alive(game_pid)) break;
 
-    int64_t loop_now = kp_ov_now_ms();
-
-    /* In EmulationStation daemon mode, re-silence ES BGM right after ES wakes up */
-    if (es_mute_passes > 0 && loop_now >= es_mute_next_ms) {
-      es_mute_passes--;
-      es_mute_next_ms = loop_now + 2200;
-      const char *gd = getenv("KPLAYER_GAMEDIR");
-      if (gd && gd[0]) {
-        char helper[PATH_MAX + 64];
-        snprintf(helper, sizeof(helper),
-                 "python3 '%s/bg_audio.py' es-bgm-mute >/dev/null 2>&1 &", gd);
-        if (system(helper) != 0) {
-          /* best-effort silence */
-        }
-      }
-    }
-
     if (vol_sync_ticks > 0) {
       vol_sync_ticks--;
       if (vol_sync_ticks == 0 || vol_sync_ticks == 10) {
@@ -1480,7 +1455,7 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
       if (shm && shm->last_draw_ms > fb_open_prev_draw_ms) {
         fb_fallback_pending = false;
         fprintf(stderr, "bg_miniplayer: overlay GLES/SDL ativo\n");
-      } else if (loop_now - fb_open_start_ms >= 260) {
+      } else if (kp_ov_now_ms() - fb_open_start_ms >= 260) {
         fb_fallback_pending = false;
         if (game_pid > 1 && !game_stopped) {
           bg_mp_signal_game(game_pid, SIGSTOP);
@@ -1488,16 +1463,9 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
         }
         if (bg_fb_open(&fb)) {
           bg_fb_render(&fb, &st);
-          fb_last_blit_ms = loop_now;
           fprintf(stderr, "bg_miniplayer: overlay fallback /dev/fb0 ativo\n");
         }
       }
-    }
-
-    /* Keep /dev/fb0 card crisp while open in EmulationStation daemon mode */
-    if (st.overlay_open && fb.map && game_pid == 0 && loop_now - fb_last_blit_ms >= 120) {
-      bg_fb_render(&fb, &st);
-      fb_last_blit_ms = loop_now;
     }
 
     /* Auto-advance when a local track finishes */
@@ -1508,10 +1476,7 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
         bg_mp_play_current(inst, mp, &st, 0);
         vol_sync_ticks = 16;
         if (shm) bg_mp_fill_shared(shm, &st);
-        if (st.overlay_open && fb.map) {
-          bg_fb_render(&fb, &st);
-          fb_last_blit_ms = loop_now;
-        }
+        if (st.overlay_open && fb.map) bg_fb_render(&fb, &st);
       }
     }
 
@@ -1523,7 +1488,7 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
           fprintf(stderr, "bg_miniplayer: abrindo Mini-Player KPlayer (L3+R3)\n");
           bg_evdev_set_grab(&ev, true);
           fb_fallback_pending = true;
-          fb_open_start_ms = loop_now;
+          fb_open_start_ms = kp_ov_now_ms();
           fb_open_prev_draw_ms = shm ? shm->last_draw_ms : 0;
           if (!shm) {
             /* No SHM available -> open /dev/fb0 immediately */
@@ -1534,7 +1499,6 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
             }
             if (bg_fb_open(&fb)) {
               bg_fb_render(&fb, &st);
-              fb_last_blit_ms = loop_now;
             }
           }
         }
@@ -1553,7 +1517,6 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
         }
         if ((flags & BG_RES_REDRAW) && st.overlay_open && fb.map) {
           bg_fb_render(&fb, &st);
-          fb_last_blit_ms = loop_now;
         }
         if (flags & BG_RES_CLOSE_OVERLAY) {
           fprintf(stderr, "bg_miniplayer: ocultando Mini-Player KPlayer\n");

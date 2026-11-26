@@ -46,8 +46,6 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./pdf_ops.py ./7zzs 2>/dev/null || true
-# Se o audio em 2o plano estiver rodando no EmulationStation, encerra suavemente para o KPlayer assumir o controle
-python3 "$GAMEDIR/bg_audio.py" stop-daemon --keep-es-mute >/dev/null 2>&1 || true
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
@@ -78,16 +76,6 @@ while true; do
         mapper_pid=$!
         continue
     fi
-    if [ "$result" -eq 44 ] && [ -f "$GAMEDIR/.bg-daemon.json" ]; then
-        printf 'K PLAYER mantendo audio em 2o plano no EmulationStation (L3 + R3)...\n'
-        if [ -n "${mapper_pid:-}" ]; then kill "$mapper_pid" 2>/dev/null || true; wait "$mapper_pid" 2>/dev/null || true; mapper_pid=""; fi
-        python3 "$GAMEDIR/bg_audio.py" start-daemon "$GAMEDIR/.bg-daemon.json" || true
-        rm -f "$GAMEDIR/.bg-daemon.json" 2>/dev/null || true
-        result=0
-        break
-    fi
-    # Saida normal com 2o plano desativado: garante que a musica do EmulationStation seja restaurada
-    python3 "$GAMEDIR/bg_audio.py" stop-daemon >/dev/null 2>&1 || true
     break
 done
 printf 'K PLAYER finalizado: codigo %s\n' "$result"

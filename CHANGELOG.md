@@ -1,17 +1,13 @@
 # Changelog
 
-## v2.1.6 — Áudio em 2º Plano no EmulationStation, Silenciador Automático de BGM & Mini-Player Visual KPlayer (`L3 + R3`)
+## v2.1.6 — Mini-Player Visual KPlayer no Jogo (`L3 + R3`) & Fluxo Estável de Áudio em Jogos
 
-- **Áudio em 2º Plano Fora do KPlayer (EmulationStation & Jogos) — Controle Exclusivo no App KPlayer:**
-  - Ative ou desative exclusivamente dentro do KPlayer em **`SELECT → Opções → Áudio em 2º plano (ES/Jogos)`** (não existe botão externo para ligar/desligar no menu flutuante).
-  - Ao sair do KPlayer com a opção ativada, o lançador **`KPlayer.sh`** inicia um serviço nativo em segundo plano (`./kplayer --bg-audio <json> 0` via código de saída `44`), mantendo sua música ou rádio online tocando enquanto você navega no **EmulationStation** e entra em jogos.
-  - Ao abrir o KPlayer novamente, o serviço em segundo plano encerra limpo devolvendo o controle ao app; desativar a opção dentro do KPlayer desliga o serviço e restaura a configuração original do EmulationStation.
-- **Silenciamento Automático e Reversível da BGM do EmulationStation (`ports/kplayer/bg_audio.py`, `source/bg_miniplayer.h`):**
-  - Evita conflito de duas músicas tocando juntas: silencia automaticamente `audio.bgmusic` / `BackgroundMusic` em `es_settings.cfg` (salvando backup reversível em `.es-bgm-state.json`), interrompe tocadores externos de BGM (`ogg123`/`mpg123`/`bgm.py`) e muta fluxos de áudio do `emulationstation` no PulseAudio/PipeWire via `pactl`, **sem jamais tocar em `gamelist.xml`**.
-  - Ao desativar o áudio em 2º plano dentro do KPlayer, todas as configurações originais de BGM do EmulationStation são restauradas automaticamente.
-- **Mini-Player Flutuante (`L3 + R3`) Redesenhado com a Identidade Visual do KPlayer (`source/kp_overlay_shared.h`):**
+- **Mini-Player no Jogo (`L3 + R3`) Redesenhado com a Identidade Visual do KPlayer (`source/kp_overlay_shared.h`):**
   - Visual fiel ao KPlayer: painel arredondado com gradiente escuro tingido pelo tema ativo, linha superior de destaque, emblema de disco de vinil **`K`**, cabeçalho **`K PLAYER · MINI-PLAYER`**, card arredondado **`TOCANDO AGORA`** com mini-equalizador animado e 5 cards de ação com borda e barra lateral de foco na cor do tema (`TOCAR / PAUSAR`, `PRÓXIMA MÚSICA/RÁDIO`, `VOLTAR MÚSICA/RÁDIO`, `VOLUME DO ÁUDIO`, `OCULTAR MENU`).
-  - **Demonstração Interativa na Preview Web (`Demo Mini-Player (L3+R3)`):** Alterna ao vivo entre os cenários **EmulationStation** (com indicador `BGM do EmulationStation: Silenciada`) e **Jogo em execução**.
+- **Fluxo Estável de Áudio em Jogos Restaurado (`source/kplayer.c`, `ports/KPlayer.sh`, `ports/kplayer/bg_audio.py`, `source/bg_miniplayer.h`):**
+  - Ative em **`SELECT → Opções → Áudio em jogos (Teste prévio)`** e abra seus jogos ou scripts `.sh` diretamente pelo **Gerenciador de Arquivos (`Arquivos`)** com sua música ou rádio online tocando em segundo plano (`./kplayer --bg-audio` + `libkp_overlay.so` via código de saída `43`).
+  - Ao fechar o jogo, o áudio em segundo plano encerra limpo e o KPlayer retorna automaticamente.
+  - **Demonstração Interativa na Preview Web (`Demo Mini-Player (L3+R3)`):** Exibe o novo Mini-Player visual KPlayer diretamente sobre o jogo em execução com botões virtuais `L3`/`R3`.
 
 ## v2.1.5 — Mini-Player Flutuante (`L3 + R3`) & Preview Interativo
 

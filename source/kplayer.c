@@ -1325,11 +1325,11 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Novo Mini-Player com visual do KPlayer (L3 + R3): card arredondado com disco K, barra de foco do tema e controle completo de faixas e volume.",
-        "Funciona tambem fora do app no EmulationStation e jogos: ative ou desative exclusivamente em SELECT -> Opcoes -> Audio em 2o plano (ES/Jogos).",
-        "Silenciamento automatico e reversivel da musica de fundo (BGM) do EmulationStation enquanto o KPlayer toca em segundo plano.",
+        "Novo Mini-Player no jogo com o design do KPlayer (L3 + R3): painel arredondado com disco K, card Tocando Agora e foco na cor do tema ativo.",
+        "Fluxo estavel de audio em jogos (SELECT -> Opcoes -> Audio em jogos) com retorno automatico ao KPlayer ao fechar o jogo.",
+        "Navegacao completa no Mini-Player: cima/baixo escolhe acao, B confirma, esquerda/direita ajusta volume (10%-100%), L2/R2 troca faixa e A ou L3+R3 oculta.",
         "Overlay GLES2/EGL/SDL2 (libkp_overlay.so) + fallback /dev/fb0 com leitura direta do controle R36S imune ao gptokeyb.",
-        "Base v2.1.5 mantida com Leitor de PDF (PdfCraft R36S), Editor de Texto nativo, 7-Zip oficial, Radio Online, IPTV + EPG, Noticias e Clima.",
+        "Base estavel mantida com Leitor de PDF (PdfCraft R36S), Editor de Texto nativo, 7-Zip oficial, Radio Online, IPTV + EPG, Noticias e Clima.",
     };
     int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
     for (int i = 0; i < n && changelog_count < 6; i++)
@@ -1475,7 +1475,7 @@ static const char *opt_label_for(int id) {
   case 24: return "Layout da tela inicial";
   case 25: return "Protetor de tela";
   case 26: return "Sons das teclas";
-  case 27: return "Áudio em 2º plano (ES/Jogos)";
+  case 27: return "Áudio em jogos (Teste prévio)";
   case 30: return "Abrir aplicativo de Clima";
   case 31: return "Usar localização do meu IP";
   case 32: return "Pesquisar cidade manualmente";
@@ -1610,7 +1610,7 @@ static void opt_value_for(int id, char *value, size_t cap) {
     snprintf(value, cap, "%s", tr(ui_sfx_enabled ? "Ativada" : "Desativada"));
     break;
   case 27:
-    snprintf(value, cap, "%s", bg_audio_preview ? "Ativado (ES/Jogos)" : "Desativado");
+    snprintf(value, cap, "%s", bg_audio_preview ? "Ativado (Prévio)" : "Desativado");
     break;
   case 30:
     snprintf(value, cap, "Open-Meteo ›");
@@ -2007,17 +2007,8 @@ static void change_option(int dir) {
   case 27:
     bg_audio_preview = !bg_audio_preview;
     save_settings();
-    if (bg_audio_preview) {
-      if (system("python3 ./bg_audio.py es-bgm-mute >/dev/null 2>&1 &") != 0) {
-        /* best-effort ES BGM mute */
-      }
-      notify("2º plano ativo (ES/Jogos): L3 + R3 abre Mini-Player • BGM do ES silenciada");
-    } else {
-      if (system("python3 ./bg_audio.py stop-daemon >/dev/null 2>&1 &") != 0) {
-        /* best-effort stop & restore ES BGM */
-      }
-      notify("Áudio em 2º plano desativado • Música do EmulationStation restaurada");
-    }
+    notify(bg_audio_preview ? "Áudio em jogos ativo: aperte L3 + R3 no jogo para abrir o Mini-Player"
+                            : "Áudio em jogos (Teste prévio) desativado");
     break;
   case 30:
     weather_open(2);
@@ -2982,10 +2973,7 @@ int main(int argc, char **argv) {
   save_settings();
   save_resume();
   bool handoff_ready = false;
-  bool daemon_ready = false;
-  bool want_launch = (fm_exec_target_path[0] && fm_exec_use_handoff);
-  bool want_daemon = (!fm_exec_target_path[0] && !kp_upd_exit_code && bg_audio_preview);
-  if (want_launch || want_daemon) {
+  if (fm_exec_target_path[0] && fm_exec_use_handoff) {
     const char *mtype = "none";
     const char *muri = "";
     const char *mtitle = "";
@@ -3179,17 +3167,10 @@ int main(int argc, char **argv) {
     char accent_hex[16];
     SDL_Color ac = themes[theme_index].highlight;
     snprintf(accent_hex, sizeof(accent_hex), "#%02x%02x%02x", ac.r, ac.g, ac.b);
-    if (want_launch) {
-      handoff_ready = fm_write_bg_launch_json_ext(".bg-launch.json", fm_exec_target_path,
-                                                  fm_exec_is_script, keep_bg, auto_play,
-                                                  mtype, muri, mpos, 55, mtitle, accent_hex,
-                                                  bg_tracks, bg_track_count, bg_track_index);
-    } else if (want_daemon && keep_bg && bg_track_count > 0) {
-      daemon_ready = fm_write_bg_launch_json_ext(".bg-daemon.json", "", false,
-                                                 true, auto_play,
-                                                 mtype, muri, mpos, 55, mtitle, accent_hex,
-                                                 bg_tracks, bg_track_count, bg_track_index);
-    }
+    handoff_ready = fm_write_bg_launch_json_ext(".bg-launch.json", fm_exec_target_path,
+                                                fm_exec_is_script, keep_bg, auto_play,
+                                                mtype, muri, mpos, 55, mtitle, accent_hex,
+                                                bg_tracks, bg_track_count, bg_track_index);
     for (int i = 0; i < bg_owned_count; i++) free(bg_owned_uris[i]);
   }
   stop_media();
@@ -3221,9 +3202,6 @@ int main(int argc, char **argv) {
   SDL_Quit();
   if (handoff_ready) {
     return 43;
-  }
-  if (daemon_ready) {
-    return 44;
   }
   if (fm_exec_target_path[0]) {
     char exec_dir[PATH_MAX];

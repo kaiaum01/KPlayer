@@ -125,7 +125,7 @@ export function R36SControls({
         <button
           type="button"
           onClick={() => onPress('L3_R3')}
-          title="L3 + R3 (Abrir/Fechar Mini-Player KPlayer no ES/Jogo / F8)"
+          title="L3 + R3 (Abrir/Fechar Mini-Player KPlayer no Jogo / F8)"
           className={`${btnCls} px-3 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-[10px] font-mono tracking-wider text-emerald-300 border border-emerald-400/40`}
         >
           L3 + R3 · MINI-PLAYER (F8)
