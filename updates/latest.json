@@ -6,7 +6,7 @@
   "platform": "r36s",
   "releaseTag": "v2.1.7",
   "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.7",
-  "releasedAt": "2026-11-26T22:00:00Z",
+  "releasedAt": "2026-11-26T22:05:32Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -22,16 +22,15 @@
     "history.txt",
     "favorites.txt",
     "radio-favorites.tsv",
-    "resume.cfg",
-    ".system-inject-state.json",
-    "system-audio.json"
+    "resume.cfg"
   ],
   "notes": [
-    "Mini-Player KPlayer (L3 + R3) nativo nos ports pelo Gerenciador de Arquivos: escolha direta entre 'Executar com Mini-Player KPlayer (L3 + R3)' (padrão) ou 'Executar sem Mini-Player (padrão)' ao abrir scripts .sh e executáveis.",
-    "Nova opção 'Mini-Player no Sistema Inteiro' em SELECT → Opções: desativa a música de fundo do EmulationStation de forma limpa e reversível, injeta o Mini-Player KPlayer no console (/usr/local/lib/libkp_overlay.so, /etc/ld.so.preload e serviço systemd/rc.local) e permanece ativo mesmo após reiniciar o R36S.",
-    "Controle exclusivo pelo KPlayer: a desativação em SELECT → Opções → Mini-Player no Sistema Inteiro remove completamente os arquivos injetados e restaura a música original do EmulationStation (sem jamais alterar gamelist.xml).",
-    "Preview Web atualizada para v2.1.7 com opção de iniciar ports com/sem Mini-Player, alternador 'Mini-Player no Sistema Inteiro' e demonstração interativa no Jogo/Port e no EmulationStation.",
-    "Base estável R36S mantida: libkp_overlay.so seguro para boot, Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip ARM64."
+    "Mini-Player KPlayer (L3 + R3) Nativo Sempre Disponível nos Ports:",
+    "Ao abrir qualquer jogo .sh ou executável pelo Gerenciador de Arquivos (Arquivos), você escolhe direto na hora:",
+    "Executar com Mini-Player KPlayer (L3 + R3) *(padrão)* — inicia o port com sua música ou rádio em segundo plano e o Mini-Player pronto ao apertar L3 + R3.",
+    "Executar sem Mini-Player (padrão) — inicia o jogo de forma convencional, desativando o overlay (KPLAYER_DISABLE_OVERLAY=1).",
+    "Abrir no Editor de Texto *(para arquivos .sh)*.",
+    "Mini-Player no Sistema Inteiro (Injeção Persistente no Console):"
   ],
   "r36s": {
     "filename": "KPlayer-v2.1.7-R36S.zip",
@@ -39,8 +38,8 @@
     "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.7/KPlayer-v2.1.7-R36S.zip",
     "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.7/KPlayer-v2.1.7-R36S.zip",
     "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.7/KPlayer-v2.1.7-R36S.zip.sha256",
-    "sha256": "",
-    "sizeBytes": 0
+    "sha256": "45e94318309ad803a8c25d7b36b7be5537e074cb575f7b8249b0bec7ebea6e94",
+    "sizeBytes": 18214252
   },
   "web": {
     "version": "2.1.7",

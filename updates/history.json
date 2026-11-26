@@ -5,13 +5,16 @@
     {
       "version": "2.1.7",
       "releaseTag": "v2.1.7",
-      "releasedAt": "2026-11-26T22:00:00Z",
+      "releasedAt": "2026-11-26T22:05:32Z",
       "r36s": "updates/v2.1.7/KPlayer-v2.1.7-R36S.zip",
-      "sha256": "",
+      "sha256": "45e94318309ad803a8c25d7b36b7be5537e074cb575f7b8249b0bec7ebea6e94",
       "notes": [
-        "Mini-Player KPlayer (L3 + R3) nativo sempre disponível nos ports pelo Gerenciador de Arquivos, com escolha direta entre 'Executar com Mini-Player KPlayer (L3 + R3)' (padrão) e 'Executar sem Mini-Player (padrão)'.",
-        "Nova opção 'Mini-Player no Sistema Inteiro' em SELECT → Opções: desativa a música do EmulationStation de forma reversível, injeta o Mini-Player KPlayer no console com persistência após reinício e só pode ser desativada pelo próprio KPlayer.",
-        "Preview Web atualizada com alternância de cena Port / Jogo e EmulationStation (Sistema Injetado) e controle direto do injetor."
+        "Mini-Player KPlayer (L3 + R3) Nativo Sempre Disponível nos Ports:",
+        "Ao abrir qualquer jogo .sh ou executável pelo Gerenciador de Arquivos (Arquivos), você escolhe direto na hora:",
+        "Executar com Mini-Player KPlayer (L3 + R3) *(padrão)* — inicia o port com sua música ou rádio em segundo plano e o Mini-Player pronto ao apertar L3 + R3.",
+        "Executar sem Mini-Player (padrão) — inicia o jogo de forma convencional, desativando o overlay (KPLAYER_DISABLE_OVERLAY=1).",
+        "Abrir no Editor de Texto *(para arquivos .sh)*.",
+        "Mini-Player no Sistema Inteiro (Injeção Persistente no Console):"
       ]
     },
     {
