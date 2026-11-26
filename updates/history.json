@@ -5,14 +5,16 @@
     {
       "version": "2.1.6",
       "releaseTag": "v2.1.6",
-      "releasedAt": "2026-11-26T20:00:00Z",
+      "releasedAt": "2026-11-26T19:42:49Z",
       "r36s": "updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
-      "sha256": "",
+      "sha256": "685b5e5a3dfd12f0b58bfe0d6f25facf9e659702c4b814f18a16c125b848ccaa",
       "notes": [
-        "Áudio em 2º plano fora do KPlayer (EmulationStation e jogos), com ativação e desativação exclusivas dentro do app KPlayer.",
-        "Silenciamento automático e reversível da música de fundo do EmulationStation sem alterar gamelist.xml.",
-        "Mini-Player flutuante (L3 + R3) redesenhado no visual arredondado do KPlayer (emblema vinil K, card Tocando Agora e foco no tema ativo).",
-        "Demonstração interativa na Preview Web com alternância entre EmulationStation e Jogo em execução."
+        "Áudio em 2º Plano Fora do KPlayer (EmulationStation & Jogos):",
+        "Ativação e desativação exclusivas dentro do app KPlayer: ligue ou desligue em SELECT → Opções → Áudio em 2º plano (ES/Jogos).",
+        "Ao sair do KPlayer com a opção ativada, o lançador KPlayer.sh inicia o serviço nativo em segundo plano (./kplayer --bg-audio), mantendo sua música ou rádio online tocando enquanto ",
+        "Ao reabrir o KPlayer, o serviço em segundo plano para de forma limpa; ao desativar a opção no KPlayer, tudo volta ao padrão do console.",
+        "Silenciamento Automático da Música de Fundo do EmulationStation:",
+        "Para impedir que a BGM do EmulationStation toque junto com o KPlayer, o bg_audio.py desativa temporariamente audio.bgmusic/BackgroundMusic em es_settings.cfg (com backup reversível"
       ]
     },
     {

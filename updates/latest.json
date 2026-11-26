@@ -6,7 +6,7 @@
   "platform": "r36s",
   "releaseTag": "v2.1.6",
   "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.6",
-  "releasedAt": "2026-11-26T20:00:00Z",
+  "releasedAt": "2026-11-26T19:42:49Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -25,11 +25,12 @@
     "resume.cfg"
   ],
   "notes": [
-    "Áudio em 2º plano fora do KPlayer (EmulationStation e jogos): ativação e desativação exclusivas dentro do app KPlayer em SELECT → Opções → Áudio em 2º plano (ES/Jogos).",
-    "Silenciamento automático e reversível da música de fundo do EmulationStation (es_settings.cfg, players ogg123/mpg123/bgm e streams PulseAudio/PipeWire) sem jamais alterar gamelist.xml.",
-    "Mini-Player flutuante (L3 + R3) redesenhado com o visual autêntico do KPlayer: cantos arredondados, emblema de disco de vinil K, card Tocando Agora e 5 cards com foco no tema ativo.",
-    "Demonstração interativa na Preview Web exibindo o Mini-Player sobre o EmulationStation e sobre um jogo (botão Demo Mini-Player L3+R3).",
-    "Base estável R36S mantida: libkp_overlay.so, leitura de controle imune ao gptokeyb, Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip ARM64."
+    "Áudio em 2º Plano Fora do KPlayer (EmulationStation & Jogos):",
+    "Ativação e desativação exclusivas dentro do app KPlayer: ligue ou desligue em SELECT → Opções → Áudio em 2º plano (ES/Jogos).",
+    "Ao sair do KPlayer com a opção ativada, o lançador KPlayer.sh inicia o serviço nativo em segundo plano (./kplayer --bg-audio), mantendo sua música ou rádio online tocando enquanto ",
+    "Ao reabrir o KPlayer, o serviço em segundo plano para de forma limpa; ao desativar a opção no KPlayer, tudo volta ao padrão do console.",
+    "Silenciamento Automático da Música de Fundo do EmulationStation:",
+    "Para impedir que a BGM do EmulationStation toque junto com o KPlayer, o bg_audio.py desativa temporariamente audio.bgmusic/BackgroundMusic em es_settings.cfg (com backup reversível"
   ],
   "r36s": {
     "filename": "KPlayer-v2.1.6-R36S.zip",
@@ -37,8 +38,8 @@
     "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
     "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.6/KPlayer-v2.1.6-R36S.zip",
     "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.6/KPlayer-v2.1.6-R36S.zip.sha256",
-    "sha256": "",
-    "sizeBytes": 0
+    "sha256": "685b5e5a3dfd12f0b58bfe0d6f25facf9e659702c4b814f18a16c125b848ccaa",
+    "sizeBytes": 18207049
   },
   "web": {
     "version": "2.1.6",
