@@ -42,4 +42,6 @@ cp -L work/stage/usr/lib/aarch64-linux-gnu/libvlc.so.5 output/lib/
 cp -L work/stage/usr/lib/aarch64-linux-gnu/libvlccore.so.9 output/lib/
 "$py" -m ziglang cc -target aarch64-linux-gnu.2.17 -O2 -std=gnu11 -Wall -Wextra -Werror -s \
     -I source/include source/kplayer.c -o output/kplayer -ldl -lpthread -lm
-printf '\nPronto: output/kplayer e output/lib/. Copie para a pasta kplayer do port.\n'
+"$py" -m ziglang cc -target aarch64-linux-gnu.2.17 -O2 -std=gnu11 -shared -fPIC -Wall -Wextra -Werror -s \
+    source/kp_overlay.c -o output/libkp_overlay.so -ldl
+printf '\nPronto: output/kplayer, output/libkp_overlay.so e output/lib/. Copie para a pasta kplayer do port.\n'

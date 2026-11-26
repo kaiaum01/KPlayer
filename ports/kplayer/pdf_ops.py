@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PDF inspector, renderer, and text extractor for KPlayer R36S (v2.1.4).
+"""PDF inspector, renderer, and text extractor for KPlayer R36S (v2.1.5).
 
 Full protocol compatibility with PdfReader-R36s / PdfCraft R36S
 (https://github.com/kaiaum01/PdfReader-R36s):

@@ -50,6 +50,7 @@ import {
   rgbToRgba,
   themeHairline,
 } from './R36SIcons';
+import { GameTrainerHud, TRAINER_ROW_COUNT } from './GameTrainerOverlay';
 
 export interface FileManagerScreenHandle {
   handleButton: (btn: R36SButton) => void;
@@ -429,10 +430,11 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
     const [modalFocusIdx, setModalFocusIdx] = useState(0);
     const [textInput, setTextInput] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    // In-Game Mini-Player: strictly hidden until SELECT + R2 is triggered
+    // In-Game GTA Trainer Mini-Player: strictly hidden until L3 + R3 is triggered
     const [inGameMiniPlayerOpen, setInGameMiniPlayerOpen] = useState(false);
-    const [selectArmed, setSelectArmed] = useState(false);
-    const selectArmTimerRef = useRef<number | null>(null);
+    const [trainerRow, setTrainerRow] = useState(0);
+    const [l3Armed, setL3Armed] = useState(false);
+    const l3ArmTimerRef = useRef<number | null>(null);
 
     // Live job progress state
     const [activeJob, setActiveJob] = useState<FmJobProgress | null>(null);
@@ -493,14 +495,14 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         if (pollTimerRef.current !== null) {
           window.clearInterval(pollTimerRef.current);
         }
-        if (selectArmTimerRef.current !== null) {
-          window.clearTimeout(selectArmTimerRef.current);
+        if (l3ArmTimerRef.current !== null) {
+          window.clearTimeout(l3ArmTimerRef.current);
         }
         onSetGameAudioDucking?.(false);
       };
     }, [onSetGameAudioDucking]);
 
-    // v2.1.4 Teste prévio: duck active music/radio smoothly while a game launch preview console is open
+    // v2.1.5 Teste prévio: duck active music/radio smoothly while a game launch preview console is open
     useEffect(() => {
       const shouldDuck = Boolean(
         modal?.kind === 'exec_console' && bgAudioPreview && activeBackgroundAudio
@@ -508,7 +510,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       onSetGameAudioDucking?.(shouldDuck);
       if (modal?.kind !== 'exec_console') {
         setInGameMiniPlayerOpen(false);
-        setSelectArmed(false);
+        setL3Armed(false);
+        setTrainerRow(0);
       }
     }, [activeBackgroundAudio, bgAudioPreview, modal, onSetGameAudioDucking]);
 
@@ -525,6 +528,23 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         return next;
       });
     }, [activeBackgroundAudio, bgAudioPreview, notify, onBgTogglePause]);
+
+    const activateTrainerRow = useCallback(
+      (row: number) => {
+        if (row === 0) {
+          onBgTogglePause?.();
+        } else if (row === 1) {
+          onBgNextTrack?.();
+        } else if (row === 2) {
+          onBgPrevTrack?.();
+        } else if (row === 3) {
+          onChangeBgAudioVolume?.(bgAudioVolume >= 100 ? -80 : 10);
+        } else if (row === 4) {
+          setInGameMiniPlayerOpen(false);
+        }
+      },
+      [bgAudioVolume, onBgNextTrack, onBgPrevTrack, onBgTogglePause, onChangeBgAudioVolume]
+    );
 
     // Keep focused row scrolled into view
     useEffect(() => {
@@ -1127,8 +1147,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       const target = modal.target;
       const runDesc = bgAudioPreview
         ? activeBackgroundAudio
-          ? `Teste prévio ATIVO: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • SELECT+R2 abre Mini-Player (L2 volta • R2 pula)`
-          : 'Teste prévio ATIVO: SELECT+R2 abre Mini-Player no jogo (L2 volta • R2 pula)'
+          ? `Teste prévio ATIVO: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • Aperte L3 + R3 no jogo para abrir o Trainer`
+          : 'Teste prévio ATIVO: aperte L3 + R3 no jogo para abrir o Trainer de Música'
         : 'Encerra SDL2/libVLC e entrega controle direto ao script/executável (ative Teste prévio em Opções para áudio em jogos)';
       const opts: Array<{ id: string; label: string; desc: string; run: () => void }> = [
         {
@@ -1419,44 +1439,61 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         // Modals
         if (modal) {
           if (modal.kind === 'exec_console') {
-            if (btn === 'SELECT') {
+            if (btn === 'L3_R3') {
+              setL3Armed(false);
+              toggleInGameMiniPlayer();
+              return;
+            }
+            if (btn === 'L3') {
               if (bgAudioPreview) {
-                setSelectArmed(true);
-                if (selectArmTimerRef.current !== null) {
-                  window.clearTimeout(selectArmTimerRef.current);
+                setL3Armed(true);
+                if (l3ArmTimerRef.current !== null) {
+                  window.clearTimeout(l3ArmTimerRef.current);
                 }
-                selectArmTimerRef.current = window.setTimeout(() => {
-                  setSelectArmed(false);
-                }, 2500);
-                notify('SELECT ativo — pressione R2 para abrir/fechar Mini-Player (ou L2 para voltar faixa)');
+                l3ArmTimerRef.current = window.setTimeout(() => {
+                  setL3Armed(false);
+                }, 2200);
+                notify('L3 pressionado — aperte R3 agora para abrir/fechar o Trainer');
               }
               return;
             }
-            if (btn === 'R2') {
-              if (selectArmed) {
-                setSelectArmed(false);
+            if (btn === 'R3') {
+              if (l3Armed) {
+                setL3Armed(false);
                 toggleInGameMiniPlayer();
-              } else if (inGameMiniPlayerOpen) {
-                onBgNextTrack?.();
-              }
-              return;
-            }
-            if (btn === 'L2') {
-              if (selectArmed) {
-                setSelectArmed(false);
-                onBgPrevTrack?.();
-              } else if (inGameMiniPlayerOpen) {
-                onBgPrevTrack?.();
+              } else if (bgAudioPreview) {
+                setL3Armed(true);
+                if (l3ArmTimerRef.current !== null) {
+                  window.clearTimeout(l3ArmTimerRef.current);
+                }
+                l3ArmTimerRef.current = window.setTimeout(() => {
+                  setL3Armed(false);
+                }, 2200);
+                notify('R3 pressionado — aperte L3 agora para abrir/fechar o Trainer');
               }
               return;
             }
             if (inGameMiniPlayerOpen) {
-              if (btn === 'B' || btn === 'START') {
-                onBgTogglePause?.();
-              } else if (btn === 'UP') {
-                onChangeBgAudioVolume?.(10);
+              if (btn === 'UP') {
+                setTrainerRow((r) => (r + TRAINER_ROW_COUNT - 1) % TRAINER_ROW_COUNT);
               } else if (btn === 'DOWN') {
-                onChangeBgAudioVolume?.(-10);
+                setTrainerRow((r) => (r + 1) % TRAINER_ROW_COUNT);
+              } else if (btn === 'LEFT') {
+                if (trainerRow === 3) onChangeBgAudioVolume?.(-10);
+                else if (trainerRow === 1 || trainerRow === 2) onBgPrevTrack?.();
+                else if (trainerRow === 0) onBgTogglePause?.();
+              } else if (btn === 'RIGHT') {
+                if (trainerRow === 3) onChangeBgAudioVolume?.(10);
+                else if (trainerRow === 1 || trainerRow === 2) onBgNextTrack?.();
+                else if (trainerRow === 0) onBgTogglePause?.();
+              } else if (btn === 'B' || btn === 'START') {
+                activateTrainerRow(trainerRow);
+              } else if (btn === 'R2') {
+                setTrainerRow(1);
+                onBgNextTrack?.();
+              } else if (btn === 'L2') {
+                setTrainerRow(2);
+                onBgPrevTrack?.();
               } else if (btn === 'A') {
                 setInGameMiniPlayerOpen(false);
               }
@@ -1464,7 +1501,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
             }
             if (btn === 'A' || btn === 'B') {
               setInGameMiniPlayerOpen(false);
-              setSelectArmed(false);
+              setL3Armed(false);
               setModal(null);
             }
             return;
@@ -1707,6 +1744,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         }
       },
       [
+        activateTrainerRow,
         actionMenuItems,
         activeJob,
         archiveView,
@@ -1723,6 +1761,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         handlePasswordSubmit,
         handleRenameSubmit,
         inGameMiniPlayerOpen,
+        l3Armed,
         loadDirectory,
         mediaListView,
         modal,
@@ -1742,11 +1781,11 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
         requestCloseEditor,
         requestExtract,
         saveEditorFile,
-        selectArmed,
         selectedPaths.size,
         startJob,
         toggleInGameMiniPlayer,
         toggleSelectPath,
+        trainerRow,
       ]
     );
 
@@ -2741,7 +2780,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                       type="button"
                       onClick={() => {
                         setInGameMiniPlayerOpen(false);
-                        setSelectArmed(false);
+                        setL3Armed(false);
                         setModal(null);
                       }}
                       className="p-1 rounded-lg cursor-pointer"
@@ -2755,15 +2794,15 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                     <div
                       className="rounded-lg px-2.5 py-1.5 text-[10.5px] flex items-center justify-between gap-2"
                       style={{
-                        backgroundColor: rgbToRgba(theme.accent, selectArmed ? 0.24 : 0.12),
-                        border: `1px solid ${rgbToRgba(theme.accent, selectArmed ? 0.75 : 0.4)}`,
+                        backgroundColor: rgbToRgba(theme.accent, l3Armed ? 0.24 : 0.12),
+                        border: `1px solid ${rgbToRgba(theme.accent, l3Armed ? 0.75 : 0.4)}`,
                         color: theme.text,
                       }}
                     >
                       <span className="truncate font-semibold">
-                        {selectArmed
-                          ? 'SELECT pronto — aperte R2 para abrir o Mini-Player'
-                          : 'Mini-Player oculto no jogo • Aperte SELECT + R2 para abrir'}
+                        {l3Armed
+                          ? 'Combine L3 + R3 agora para abrir o Trainer de Música'
+                          : 'Trainer oculto no jogo • Aperte L3 + R3 (ou F8) para abrir'}
                       </span>
                       <button
                         type="button"
@@ -2771,7 +2810,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                         className="px-2 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 cursor-pointer"
                         style={{ backgroundColor: theme.accent, color: theme.bg }}
                       >
-                        SELECT+R2
+                        L3 + R3
                       </button>
                     </div>
                   )}
@@ -2795,111 +2834,23 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                   )}
 
                   {inGameMiniPlayerOpen && (
-                    <div
-                      className="rounded-xl overflow-hidden"
-                      style={{
-                        backgroundColor: mixRgb(theme.bg, '#000000', 0.55),
-                        border: `1.5px solid ${theme.accent}`,
-                      }}
-                    >
-                      <div className="h-1 w-full" style={{ backgroundColor: theme.accent }} />
-                      <div className="p-3 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            {activeBackgroundAudio?.kind === 'radio' ? (
-                              <Radio className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
-                            ) : (
-                              <Music className="w-3.5 h-3.5 shrink-0" style={{ color: theme.accent }} />
-                            )}
-                            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.accent }}>
-                              K PLAYER MINI • {activeBackgroundAudio?.isPlaying ? 'TOCANDO' : 'PAUSADO'}
-                            </span>
-                          </div>
-                          <span className="text-[10px] font-mono tabular-nums" style={{ color: theme.muted }}>
-                            {activeBackgroundAudio
-                              ? `${activeBackgroundAudio.kind === 'radio' ? 'RÁDIO' : 'FAIXA'} ${activeBackgroundAudio.index + 1}/${activeBackgroundAudio.total}`
-                              : 'SEM FILA'}
-                          </span>
-                        </div>
-
-                        <div className="text-[13px] font-bold truncate" style={{ color: theme.text }}>
-                          {activeBackgroundAudio?.title || 'Nenhuma música ou rádio na fila'}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Volume2 className="w-3.5 h-3.5 shrink-0" style={{ color: theme.muted }} />
-                          <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.elevated }}>
-                            <div
-                              className="h-full transition-all"
-                              style={{ width: `${bgAudioVolume}%`, backgroundColor: theme.accent }}
-                            />
-                          </div>
-                          <span className="text-[10.5px] font-mono tabular-nums w-9 text-right" style={{ color: theme.text }}>
-                            {bgAudioVolume}%
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-5 gap-1.5 pt-0.5">
-                          <button
-                            type="button"
-                            onClick={() => onBgPrevTrack?.()}
-                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
-                            style={{ backgroundColor: theme.elevated, color: theme.text }}
-                            title="L2: Voltar música"
-                          >
-                            <SkipBack className="w-3 h-3" /> L2
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onBgTogglePause?.()}
-                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
-                            style={{ backgroundColor: theme.accent, color: theme.bg }}
-                            title="B / START: Pausar ou retomar"
-                          >
-                            {activeBackgroundAudio?.isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                            B
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onBgNextTrack?.()}
-                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
-                            style={{ backgroundColor: theme.elevated, color: theme.text }}
-                            title="R2: Pular música"
-                          >
-                            R2 <SkipForward className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onChangeBgAudioVolume?.(-10)}
-                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer"
-                            style={{ backgroundColor: theme.elevated, color: theme.text }}
-                            title="↓ Diminuir volume"
-                          >
-                            Vol-
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onChangeBgAudioVolume?.(10)}
-                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer"
-                            style={{ backgroundColor: theme.elevated, color: theme.text }}
-                            title="↑ Aumentar volume"
-                          >
-                            Vol+
-                          </button>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[9.5px] font-mono pt-1" style={{ color: theme.muted, borderTop: `1px solid ${themeHairline(theme)}` }}>
-                          <span>L2 Voltar • R2 Próxima • B Pausa • ↑↓ Vol</span>
-                          <button
-                            type="button"
-                            onClick={() => setInGameMiniPlayerOpen(false)}
-                            className="font-bold cursor-pointer"
-                            style={{ color: theme.accent }}
-                          >
-                            A / SELECT+R2 Fechar
-                          </button>
-                        </div>
-                      </div>
+                    <div className="flex justify-start">
+                      <GameTrainerHud
+                        theme={theme}
+                        audio={{
+                          kind: activeBackgroundAudio?.kind ?? 'music',
+                          title: activeBackgroundAudio?.title ?? 'Nenhuma música ou rádio na fila',
+                          index: activeBackgroundAudio?.index ?? 0,
+                          total: activeBackgroundAudio?.total ?? 0,
+                          isPlaying: Boolean(activeBackgroundAudio?.isPlaying),
+                        }}
+                        volumePct={bgAudioVolume}
+                        selectedRow={trainerRow}
+                        onSelectRow={setTrainerRow}
+                        onActivateRow={activateTrainerRow}
+                        onVolumeDelta={(d) => onChangeBgAudioVolume?.(d)}
+                        onClose={() => setInGameMiniPlayerOpen(false)}
+                      />
                     </div>
                   )}
 
@@ -2920,7 +2871,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                         if (inGameMiniPlayerOpen) {
                           setInGameMiniPlayerOpen(false);
                         } else {
-                          setSelectArmed(false);
+                          setL3Armed(false);
                           setModal(null);
                         }
                       }}

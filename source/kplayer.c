@@ -1325,11 +1325,11 @@ static void changelog_ensure_loaded(void) {
   }
   if (changelog_count == 0) {
     static const char *const builtin[] = {
-        "Teste previo em Opcoes: Audio em jogos com libVLC nativo + ALSA dmix/Pulse para tocar musica ou radio junto com jogos .sh.",
-        "Mini-Player no Jogo: abre somente com SELECT+R2 (R2 pula musica, L2 volta musica, B pausa, cima/baixo volume, A fecha).",
-        "Leitor de PDF no Gerenciador de Arquivos com compatibilidade total com PdfCraft R36S (kaiaum01/PdfReader-R36s), zoom e paginas.",
-        "Retorno automatico ao KPlayer ao fechar jogos .sh ou o PdfCraft R36S quando o modo Teste previo esta ativo.",
-        "Editor de texto, 7-Zip oficial, playlists M3U8, radios e Gerenciador de Musicas e Videos totalmente preservados.",
+        "Novo Mini-Player estilo GTA Trainer no jogo: abre e fecha apertando L3 + R3 (clique dos dois analogicos) no topo esquerdo da tela.",
+        "Navegacao tipo menu de cheats no Trainer: cima/baixo escolhe opcao, B ativa, esquerda/direita volume, L2/R2 troca faixa instantaneo e A fecha.",
+        "Overlay GLES2/EGL/SDL2 (libkp_overlay.so) + fallback /dev/fb0 e leitura direta de hardware R36S imune ao gptokeyb.",
+        "Leitor de PDF compativel com PdfCraft R36S, Editor de Texto nativo, 7-Zip oficial e Teste previo de audio em jogos .sh.",
+        "Codigo-fonte limpo mantendo apenas a base estavel mais recente com retorno automatico ao KPlayer ao fechar o jogo.",
     };
     int n = (int)(sizeof(builtin) / sizeof(builtin[0]));
     for (int i = 0; i < n && changelog_count < 6; i++)
@@ -2008,7 +2008,7 @@ static void change_option(int dir) {
     bg_audio_preview = !bg_audio_preview;
     save_settings();
     notify(bg_audio_preview
-               ? "Teste prévio ativo: SELECT+R2 abre Mini-Player (L2/R2 troca faixa)"
+               ? "Teste prévio ativo: L3 + R3 abre o Trainer de Música no jogo"
                : "Áudio em jogos (Teste prévio) desativado");
     break;
   case 30:
@@ -2983,6 +2983,8 @@ int main(int argc, char **argv) {
     bool keep_bg = false;
     FmBgTrack bg_tracks[BG_MP_MAX_TRACKS];
     char bg_title_buf[BG_MP_MAX_TRACKS][128];
+    char *bg_owned_uris[BG_MP_MAX_TRACKS];
+    int bg_owned_count = 0;
     int bg_track_count = 0;
     int bg_track_index = 0;
 
@@ -3046,8 +3048,81 @@ int main(int argc, char **argv) {
         bg_tracks[bg_track_count].is_radio = false;
         bg_track_count++;
       }
+      /* If opened as a single song, scan sibling audio files in the same folder */
+      if (bg_track_count <= 1 && current_path[0] == '/') {
+        char dir_buf[1024];
+        snprintf(dir_buf, sizeof(dir_buf), "%.1023s", current_path);
+        char *slash = strrchr(dir_buf, '/');
+        if (slash && slash > dir_buf) {
+          *slash = 0;
+          DIR *d = opendir(dir_buf);
+          if (d) {
+            char *sibs[BG_MP_MAX_TRACKS];
+            int sib_n = 0;
+            struct dirent *de;
+            while ((de = readdir(d)) != NULL && sib_n < BG_MP_MAX_TRACKS) {
+              if (de->d_name[0] == '.' || !audio_file(de->d_name)) continue;
+              char full[1024];
+              snprintf(full, sizeof(full), "%.700s/%.300s", dir_buf, de->d_name);
+              sibs[sib_n++] = strdup(full);
+            }
+            closedir(d);
+            /* Simple alphabetical insertion sort */
+            for (int a = 1; a < sib_n; a++) {
+              char *key_s = sibs[a];
+              int b = a - 1;
+              while (b >= 0 && strcasecmp(sibs[b], key_s) > 0) {
+                sibs[b + 1] = sibs[b];
+                b--;
+              }
+              sibs[b + 1] = key_s;
+            }
+            if (sib_n > 1) {
+              bg_track_count = 0;
+              bg_track_index = 0;
+              for (int a = 0; a < sib_n && bg_track_count < BG_MP_MAX_TRACKS; a++) {
+                if (!sibs[a]) continue;
+                bg_owned_uris[bg_owned_count++] = sibs[a];
+                if (!strcmp(sibs[a], current_path)) {
+                  bg_track_index = bg_track_count;
+                  snprintf(bg_title_buf[bg_track_count], sizeof(bg_title_buf[0]), "%.127s", mtitle);
+                } else {
+                  const char *bn = strrchr(sibs[a], '/');
+                  snprintf(bg_title_buf[bg_track_count], sizeof(bg_title_buf[0]), "%.127s",
+                           (bn && bn[1]) ? bn + 1 : sibs[a]);
+                }
+                bg_tracks[bg_track_count].uri = sibs[a];
+                bg_tracks[bg_track_count].title = bg_title_buf[bg_track_count];
+                bg_tracks[bg_track_count].is_radio = false;
+                bg_track_count++;
+              }
+            } else {
+              for (int a = 0; a < sib_n; a++) free(sibs[a]);
+            }
+          }
+        }
+      }
+      /* Still only 1 track? Append deduplicated audio files from cached media library */
+      if (bg_track_count <= 1) {
+        pthread_mutex_lock(&media_cache_mutex);
+        for (int i = 0; i < cached_media_total && bg_track_count < BG_MP_MAX_TRACKS; i++) {
+          if (!cached_media[i].path || !audio_file(cached_media[i].path)) continue;
+          bool dup = false;
+          for (int k = 0; k < bg_track_count; k++) {
+            if (!strcmp(bg_tracks[k].uri, cached_media[i].path)) { dup = true; break; }
+          }
+          if (dup) continue;
+          snprintf(bg_title_buf[bg_track_count], sizeof(bg_title_buf[0]), "%.127s",
+                   cached_media[i].name ? cached_media[i].name : cached_media[i].path);
+          bg_tracks[bg_track_count].uri = cached_media[i].path;
+          bg_tracks[bg_track_count].title = bg_title_buf[bg_track_count];
+          bg_tracks[bg_track_count].is_radio = false;
+          bg_track_count++;
+        }
+        pthread_mutex_unlock(&media_cache_mutex);
+      }
     } else if (bg_audio_preview) {
-      /* Even when paused/idle, export queue or cached audio so SELECT+R2 works in-game */
+      /* Even when paused/idle, export queue or cached audio so L3+R3 Trainer works in-game */
       for (int i = 0; i < queue_count && bg_track_count < BG_MP_MAX_TRACKS; i++) {
         if (!queue_paths[i] || !queue_paths[i][0]) continue;
         const char *bn = strrchr(queue_paths[i], '/');
@@ -3097,6 +3172,7 @@ int main(int argc, char **argv) {
                                                 fm_exec_is_script, keep_bg, auto_play,
                                                 mtype, muri, mpos, 55, mtitle, accent_hex,
                                                 bg_tracks, bg_track_count, bg_track_index);
+    for (int i = 0; i < bg_owned_count; i++) free(bg_owned_uris[i]);
   }
   stop_media();
   libvlc_media_player_release(player);

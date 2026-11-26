@@ -1,21 +1,19 @@
-# KPlayer v2.1.4 — Edição R36S (Áudio em Jogos — Teste Prévio & Leitor de PDF Compatível com PdfCraft R36S)
+# KPlayer v2.1.5 — Edição R36S (Mini-Player Estilo GTA Trainer `L3 + R3` & Áudio em Jogos)
 
 Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita em **C + SDL2 + libVLC ARM64**, adaptativa à resolução do dispositivo.
 
 ---
 
-## Novidades da v2.1.4 (R36S Nativo)
+## Novidades da v2.1.5 (R36S Nativo)
 
-- **Música e Rádio em Segundo Plano + Mini-Player no Jogo (`SELECT + R2`) (`Teste prévio`):**
-  - Nova opção **`Áudio em jogos (Teste prévio)`** em **`SELECT → Opções`**, permitindo **ativar ou desativar** a qualquer momento (salva em `settings.cfg`, desativada por padrão).
-  - Roda diretamente pelo próprio **`./kplayer --bg-audio`** usando a `libvlc.so.5` embarcada (sem depender de `cvlc`/`mpv`/`ffplay`), com mixagem compartilhada automática via **PulseAudio/PipeWire ou ALSA `dmix`** e isolamento de `LD_LIBRARY_PATH` para jogos `.sh` e EmulationStation.
-  - **Mini-Player no Jogo sob demanda:** fica oculto durante a jogatina e **só abre ao pressionar `SELECT + R2`**. Com ele aberto: **`R2`** pula para a próxima música/estação, **`L2`** volta para a anterior, **`B`/`START`** pausa/retoma, **`↑`/`↓`** ajusta o volume (`10%–100%`) e **`A`** (ou **`SELECT + R2`**) fecha voltando imediatamente ao jogo. Ao fechar o jogo, o KPlayer retorna automaticamente.
-- **Leitor de PDF Integrado Compatível com `PdfCraft R36S` (`github.com/kaiaum01/PdfReader-R36s`):**
-  - Abra arquivos **`.pdf`** diretamente no Gerenciador de Arquivos (`Arquivos`).
-  - Compatibilidade nativa com o motor **`pdfcraft-core.aarch64`** do projeto **`kaiaum01/PdfReader-R36s`** (via protocolo JSON IPC `serve`), opção de abrir no app externo **`PdfCraft.sh`** quando instalado em `/roms(2)/ports/`, suporte a PDFs com senha pelo teclado virtual e fallback automático via `pdftoppm`/`mutool` e extrator de texto Python integrado.
-  - Controles no leitor PDF: **`L1`/`R1`** trocar página, **`X`** alternar zoom, **`Y`** alternar visualização de documento/texto, **`D-Pad`** rolar e **`A`** voltar.
-- **Tudo da v2.1.3 & v2.1.2 Preservado:**
-  - Editor de texto integrado (`.txt`, `.xml`, `.html`, `.sh`, `.cfg`, `.json`, `.m3u8`, `.pls`), execução de scripts `.sh`/EmulationStation, reprodução direta de vídeos/músicas/playlists/rádios, changelog em quadro único, 7-Zip oficial ARM64 (`7zzs`) com senha e barra de progresso/velocidade/ETA.
+- **Mini-Player no Jogo Estilo GTA Trainer (`L3 + R3`) (`Teste prévio`):**
+  - **Visual de Mod Menu / Cheat Trainer no Canto Superior Esquerdo:** Painel vertical translúcido (`libkp_overlay.so` sobre KMS/DRM, OpenGL ES 2.0 e SDL2, com fallback `/dev/fb0`) com banner colorido do tema (`KPLAYER TRAINER`), contador de opções (`1/5`), subcabeçalho preto com a faixa/estação atual e barra branca de seleção de alto contraste.
+  - **Ativação por `L3 + R3` (clique nos dois analógicos):** Fica 100% invisível durante a jogatina sem atrapalhar nenhum botão do jogo; aperte **`L3 + R3`** juntos para abrir ou fechar instantaneamente.
+  - **Controles do Menu Trainer:** **`↑`/`↓`** navega pelas 5 ações (`Tocar / Pausar`, `Próxima Música/Rádio`, `Voltar Música/Rádio`, `Volume do Áudio`, `Fechar Trainer`), **`←`/`→`** ajusta o volume (`10%–100%`) ou troca a faixa, **`B`/`START`** confirma a linha destacada, **`R2`/`L2`** avança/volta faixa direto de qualquer linha e **`A`** ou **`L3 + R3`** fecha voltando ao jogo.
+  - **Demonstração na Preview Web:** Botão **`Demo Trainer (L3+R3)`** na barra superior e botões **`L3`/`R3`** no controle virtual para testar o menu sobre um jogo retrô estilo GTA ao vivo.
+- **Áudio em Jogos + Leitor de PDF (`PdfCraft R36S`) Preservados:**
+  - Opção **`Áudio em jogos (Teste prévio)`** em **`SELECT → Opções`** rodando diretamente via `./kplayer --bg-audio` com `libvlc.so.5` embarcada, fila completa da pasta e leitura de controle imune ao `gptokeyb` (`EVIOCGKEY`/`SDL_GAMECONTROLLERCONFIG`).
+  - Leitor nativo de **`.pdf`** no Gerenciador de Arquivos compatível com **`pdfcraft-core.aarch64`** (`kaiaum01/PdfReader-R36s`), Editor de Texto, 7-Zip ARM64 (`7zzs`) com senha, 10 Visualizadores, 14 Temas, Rádio Online, IPTV + EPG, Notícias, Placar da Bola e Clima Open-Meteo.
 
 ---
 
@@ -27,6 +25,6 @@ Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita e
 3. O KPlayer baixa o pacote da pasta `updates/` (ou GitHub Releases), valida o checksum SHA-256, mantém o lançador fixo **`KPlayer.sh`** atualizado internamente sem mexer em nenhum `gamelist.xml`, preserva favoritos, histórico, listas IPTV/Rádio, clima, tema e idioma, e reinicia automaticamente.
 
 ### Instalação Manual — R36S (dArkOS / PortMaster)
-1. Baixe **`KPlayer-v2.1.4-R36S.zip`** nos anexos desta release.
+1. Baixe **`KPlayer-v2.1.5-R36S.zip`** nos anexos desta release.
 2. Extraia e copie **`KPlayer.sh`** e a pasta **`kplayer/`** para `/roms/ports/` (ou `/roms2/ports/` no SD2).
 3. Abra **Ports → KPlayer** no R36S. As artes em alta resolução do disco K ficam em `kplayer/scraper/`.

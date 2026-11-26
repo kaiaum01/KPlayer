@@ -60,6 +60,7 @@ import { Newspaper } from 'lucide-react';
 import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/PlacarDaBolaScreen';
 import { NewsScreen, type NewsScreenHandle } from './components/NewsScreen';
 import { FileManagerScreen, type FileManagerScreenHandle } from './components/FileManagerScreen';
+import { GameTrainerDemoStage, TRAINER_ROW_COUNT } from './components/GameTrainerOverlay';
 import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
 import { AndroidPlayerApp } from './components/AndroidPlayerApp';
@@ -69,12 +70,19 @@ import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_179539140
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.1.4';
+const APP_VERSION = '2.1.5';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Áudio em jogos (Teste prévio) com motor libVLC nativo (--bg-audio) + mixagem ALSA dmix/PulseAudio para tocar música ou rádio junto com jogos .sh.',
-  'Mini-Player no Jogo sob demanda: oculto durante o jogo, abre somente com SELECT + R2 (R2 pula faixa, L2 volta faixa, B pausa, ↑/↓ volume, A fecha).',
-  'Leitor de PDF no Gerenciador de Arquivos (Arquivos) compatível com PdfCraft R36S (kaiaum01/PdfReader-R36s), zoom, páginas, senha e modo texto.',
-  'Retorno automático ao KPlayer após fechar jogos .sh ou o PdfCraft R36S quando o modo Teste prévio está ativado.',
+  'Novo Mini-Player estilo GTA Trainer no jogo: menu vertical no topo esquerdo da tela que abre e fecha apertando L3 + R3 (clique dos dois analógicos).',
+  'Navegação completa no Trainer: ↑/↓ escolhe opção, B ativa, ←/→ ajusta volume, L2/R2 troca de faixa instantâneo e A ou L3+R3 fecha sem atrapalhar o jogo.',
+  'Overlay nativo GLES2/EGL/SDL2 (libkp_overlay.so) + fallback /dev/fb0 com leitura direta de hardware imune ao gptokeyb no R36S.',
+  'Demonstração interativa do Mini-Player Trainer direto na preview + base limpa preservando Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip.',
+];
+
+const TRAINER_DEMO_FALLBACK_TRACKS = [
+  'Vice Boulevard — Synthwave FM',
+  'Los Santos Night Drive (R36S Mix)',
+  'San Fierro Lo-Fi Beats',
+  'Rádio Ilha 104.5 FM (Ao Vivo)',
 ];
 
 const RADIO_CATEGORIES = [
@@ -211,6 +219,14 @@ export default function App() {
   );
   const [gameAudioDucked, setGameAudioDucked] = useState<boolean>(false);
   const [bgAudioVolume, setBgAudioVolume] = useState<number>(55);
+  // Interactive GTA Cheat Trainer Preview Demo state (L3 + R3)
+  const [trainerDemoActive, setTrainerDemoActive] = useState<boolean>(false);
+  const [trainerDemoOpen, setTrainerDemoOpen] = useState<boolean>(true);
+  const [trainerDemoRow, setTrainerDemoRow] = useState<number>(0);
+  const [trainerDemoFallbackIdx, setTrainerDemoFallbackIdx] = useState<number>(0);
+  const [trainerDemoFallbackPlaying, setTrainerDemoFallbackPlaying] = useState<boolean>(true);
+  const [trainerDemoL3Armed, setTrainerDemoL3Armed] = useState<boolean>(false);
+  const trainerDemoL3TimerRef = useRef<number | null>(null);
   useEffect(() => {
     try {
       localStorage.setItem('kp_bg_audio_preview', JSON.stringify(bgAudioPreview));
@@ -1485,12 +1501,177 @@ export default function App() {
     updateApplying,
   ]);
 
+  const hasRealBgAudio = Boolean(
+    activeRadio || (activeTrack && activeTrack.kind === 'audio') || audioTracks.length > 0
+  );
+
+  const trainerDemoAudio = useMemo(() => {
+    if (activeRadio) {
+      return {
+        kind: 'radio' as const,
+        title: activeRadio.name,
+        index: Math.max(0, radioStations.findIndex((s) => s.url === activeRadio.url)),
+        total: Math.max(1, radioStations.length),
+        isPlaying,
+      };
+    }
+    if (activeTrack && activeTrack.kind === 'audio') {
+      return {
+        kind: 'music' as const,
+        title: activeTrack.title || activeTrack.name,
+        index: Math.max(0, audioTracks.findIndex((t) => t.id === activeTrack.id)),
+        total: Math.max(1, audioTracks.length),
+        isPlaying,
+      };
+    }
+    if (audioTracks.length > 0) {
+      return {
+        kind: 'music' as const,
+        title: audioTracks[0].title || audioTracks[0].name,
+        index: 0,
+        total: audioTracks.length,
+        isPlaying: false,
+      };
+    }
+    const isRadioDemo = trainerDemoFallbackIdx === TRAINER_DEMO_FALLBACK_TRACKS.length - 1;
+    return {
+      kind: isRadioDemo ? ('radio' as const) : ('music' as const),
+      title: TRAINER_DEMO_FALLBACK_TRACKS[trainerDemoFallbackIdx] ?? TRAINER_DEMO_FALLBACK_TRACKS[0],
+      index: trainerDemoFallbackIdx,
+      total: TRAINER_DEMO_FALLBACK_TRACKS.length,
+      isPlaying: trainerDemoFallbackPlaying,
+    };
+  }, [
+    activeRadio,
+    activeTrack,
+    audioTracks,
+    isPlaying,
+    radioStations,
+    trainerDemoFallbackIdx,
+    trainerDemoFallbackPlaying,
+  ]);
+
+  const trainerDemoTogglePlay = useCallback(() => {
+    if (hasRealBgAudio) {
+      togglePlayPause();
+    } else {
+      setTrainerDemoFallbackPlaying((p) => !p);
+    }
+  }, [hasRealBgAudio, togglePlayPause]);
+
+  const trainerDemoStepTrack = useCallback(
+    (delta: 1 | -1) => {
+      if (hasRealBgAudio) {
+        stepTrack(delta);
+      } else {
+        setTrainerDemoFallbackIdx(
+          (i) =>
+            (i + delta + TRAINER_DEMO_FALLBACK_TRACKS.length) %
+            TRAINER_DEMO_FALLBACK_TRACKS.length
+        );
+        setTrainerDemoFallbackPlaying(true);
+      }
+    },
+    [hasRealBgAudio, stepTrack]
+  );
+
+  const trainerDemoActivateRow = useCallback(
+    (row: number) => {
+      if (row === 0) {
+        trainerDemoTogglePlay();
+      } else if (row === 1) {
+        trainerDemoStepTrack(1);
+      } else if (row === 2) {
+        trainerDemoStepTrack(-1);
+      } else if (row === 3) {
+        setBgAudioVolume((v) => (v >= 100 ? 20 : Math.min(100, v + 10)));
+      } else if (row === 4) {
+        setTrainerDemoOpen(false);
+      }
+    },
+    [trainerDemoStepTrack, trainerDemoTogglePlay]
+  );
+
   // Unified R36S physical / keyboard / on-screen button handler
   const handleButton = useCallback(
     (btn: R36SButton) => {
       lastActivityRef.current = Date.now();
-      if (screen === 'boot') return;
       playSfxForButton(btn);
+
+      if (trainerDemoActive) {
+        if (btn === 'L3_R3') {
+          setTrainerDemoL3Armed(false);
+          setTrainerDemoOpen((o) => !o);
+          return;
+        }
+        if (btn === 'L3' || btn === 'R3') {
+          if (trainerDemoL3Armed) {
+            setTrainerDemoL3Armed(false);
+            setTrainerDemoOpen((o) => !o);
+          } else {
+            setTrainerDemoL3Armed(true);
+            if (trainerDemoL3TimerRef.current !== null) {
+              window.clearTimeout(trainerDemoL3TimerRef.current);
+            }
+            trainerDemoL3TimerRef.current = window.setTimeout(() => {
+              setTrainerDemoL3Armed(false);
+            }, 2200);
+          }
+          return;
+        }
+        if (trainerDemoOpen) {
+          if (btn === 'UP') {
+            setTrainerDemoRow((r) => (r + TRAINER_ROW_COUNT - 1) % TRAINER_ROW_COUNT);
+          } else if (btn === 'DOWN') {
+            setTrainerDemoRow((r) => (r + 1) % TRAINER_ROW_COUNT);
+          } else if (btn === 'LEFT') {
+            if (trainerDemoRow === 3) {
+              setBgAudioVolume((v) => Math.max(10, v - 10));
+            } else if (trainerDemoRow === 1 || trainerDemoRow === 2) {
+              trainerDemoStepTrack(-1);
+            } else if (trainerDemoRow === 0) {
+              trainerDemoTogglePlay();
+            }
+          } else if (btn === 'RIGHT') {
+            if (trainerDemoRow === 3) {
+              setBgAudioVolume((v) => Math.min(100, v + 10));
+            } else if (trainerDemoRow === 1 || trainerDemoRow === 2) {
+              trainerDemoStepTrack(1);
+            } else if (trainerDemoRow === 0) {
+              trainerDemoTogglePlay();
+            }
+          } else if (btn === 'B' || btn === 'START') {
+            trainerDemoActivateRow(trainerDemoRow);
+          } else if (btn === 'R2') {
+            setTrainerDemoRow(1);
+            trainerDemoStepTrack(1);
+          } else if (btn === 'L2') {
+            setTrainerDemoRow(2);
+            trainerDemoStepTrack(-1);
+          } else if (btn === 'A') {
+            setTrainerDemoOpen(false);
+          }
+        }
+        return;
+      }
+
+      if (btn === 'L3_R3') {
+        if (screen === 'filemanager' && fileManagerRef.current?.isInGameLaunch()) {
+          fileManagerRef.current.handleButton('L3_R3');
+          return;
+        }
+        setTrainerDemoActive(true);
+        setTrainerDemoOpen(true);
+        setTrainerDemoRow(0);
+        return;
+      }
+
+      if ((btn === 'L3' || btn === 'R3') && screen === 'filemanager' && fileManagerRef.current?.isInGameLaunch()) {
+        fileManagerRef.current.handleButton(btn);
+        return;
+      }
+
+      if (screen === 'boot') return;
 
       if (screensaverActive) {
         if (btn === 'L1') {
@@ -1835,6 +2016,13 @@ export default function App() {
       tutorialDone,
       tutorialFromOptions,
       lastSeenVersion,
+      trainerDemoActive,
+      trainerDemoOpen,
+      trainerDemoRow,
+      trainerDemoL3Armed,
+      trainerDemoActivateRow,
+      trainerDemoStepTrack,
+      trainerDemoTogglePlay,
     ]
   );
 
@@ -1842,6 +2030,11 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Escape' && trainerDemoActive && !trainerDemoOpen) {
+        e.preventDefault();
+        setTrainerDemoActive(false);
+        return;
+      }
       const map: Record<string, R36SButton> = {
         ArrowUp: 'UP',
         w: 'UP',
@@ -1869,6 +2062,7 @@ export default function App() {
         e: 'R1',
         PageUp: 'L2',
         PageDown: 'R2',
+        F8: 'L3_R3',
       };
       const mapped = map[e.key];
       if (mapped) {
@@ -1878,7 +2072,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleButton]);
+  }, [handleButton, trainerDemoActive, trainerDemoOpen]);
 
   // Current synced lyric index
   const activeLyricIndex = useMemo(() => {
@@ -1984,6 +2178,36 @@ export default function App() {
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => {
+              if (trainerDemoActive) {
+                setTrainerDemoActive(false);
+              } else {
+                setEditionView('r36s');
+                setTrainerDemoActive(true);
+                setTrainerDemoOpen(true);
+                setTrainerDemoRow(0);
+              }
+            }}
+            style={
+              trainerDemoActive
+                ? {
+                    backgroundColor: theme.accent,
+                    color: theme.bg,
+                    boxShadow: `0 0 12px ${rgbToRgba(theme.accent, 0.4)}`,
+                  }
+                : {
+                    backgroundColor: rgbToRgba(theme.accent, 0.14),
+                    border: `1px solid ${rgbToRgba(theme.accent, 0.55)}`,
+                    color: theme.accent,
+                  }
+            }
+            className="px-2.5 py-1 rounded-md text-xs font-extrabold hover:brightness-110 transition-all cursor-pointer whitespace-nowrap"
+            title="Demonstração interativa do Mini-Player estilo GTA Trainer no jogo (L3 + R3 / F8)"
+          >
+            {trainerDemoActive ? '✕ Fechar Demo Trainer' : 'Demo Trainer (L3+R3)'}
+          </button>
           <button
             type="button"
             onClick={() => setShowR36sModal(true)}
@@ -2255,7 +2479,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.1.4 • R36S
+                      v2.1.5 • R36S
                     </div>
                   </div>
 
@@ -4391,7 +4615,7 @@ export default function App() {
                     const next = !prev;
                     notify(
                       next
-                        ? 'Teste prévio ativo: SELECT+R2 abre Mini-Player no jogo (L2/R2 troca faixa)'
+                        ? 'Teste prévio ativo: L3 + R3 abre o Trainer de Música no jogo'
                         : 'Áudio em jogos (Teste prévio) desativado'
                     );
                     return next;
@@ -4514,6 +4738,22 @@ export default function App() {
                   lastActivityRef.current = Date.now();
                   setScreensaverActive(false);
                 }}
+              />
+            )}
+
+            {/* ==================== DEMO INTERATIVA: MINI-PLAYER ESTILO GTA TRAINER (L3 + R3) ==================== */}
+            {trainerDemoActive && (
+              <GameTrainerDemoStage
+                theme={theme}
+                trainerOpen={trainerDemoOpen}
+                audio={trainerDemoAudio}
+                volumePct={bgAudioVolume}
+                selectedRow={trainerDemoRow}
+                onToggleTrainer={() => setTrainerDemoOpen((o) => !o)}
+                onSelectRow={setTrainerDemoRow}
+                onActivateRow={trainerDemoActivateRow}
+                onVolumeDelta={(d) => setBgAudioVolume((v) => Math.max(10, Math.min(100, v + d)))}
+                onExitDemo={() => setTrainerDemoActive(false)}
               />
             )}
                 </div>
@@ -4671,7 +4911,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.1.4 — Edição R36S
+                  KPlayer v2.1.5 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4687,7 +4927,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.1.4 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.1.5 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4696,13 +4936,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.1.4-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.1.5-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer.sh (v2.1.4 estável)
+                    KPlayer.sh (v2.1.5 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -4766,7 +5006,7 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.4-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.5-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
@@ -4779,22 +5019,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.1.4, Teste prévio de Música e Rádio em segundo plano ao abrir jogos .sh, Leitor de PDF compatível com PdfCraft R36S (kaiaum01/PdfReader-R36s), Editor de Texto, reprodução direta de vídeos/músicas/M3U8/rádios e 7-Zip com senha.
+                Inclui binário ARM64 nativo v2.1.5 + libkp_overlay.so com o novo Mini-Player estilo GTA Trainer acionado por L3 + R3 no meio do jogo, Leitor de PDF compatível com PdfCraft R36S, Editor de Texto, M3U8/rádios e 7-Zip com senha.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.1.4-R36S.zip"
+                download="KPlayer-v2.1.5-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.1.4-R36S.zip
+                ⬇ Baixar KPlayer-v2.1.5-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.1.4-R36S.zip.sha256"
+                download="KPlayer-v2.1.5-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

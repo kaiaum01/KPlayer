@@ -880,7 +880,7 @@ int main(void) {
     fm_pdf_clear_render();
     fm_view = FM_VIEW_BROWSE;
 
-    /* v2.1.4 Native --bg-audio JSON queue + SELECT+R2 In-Game Mini-Player state machine */
+    /* v2.1.5 Native --bg-audio JSON queue + L3+R3 GTA Trainer In-Game Mini-Player state machine */
     FmBgTrack mp_tracks[3] = {
         {"/roms/bgmusic/track1.mp3", "Faixa Um", false},
         {"/roms/bgmusic/track2.mp3", "Faixa Dois", false},
@@ -893,36 +893,95 @@ int main(void) {
     assert(bg_mp_load_json_file(f_bg, &mp_st));
     assert(mp_st.track_count == 3 && mp_st.current_index == 1);
     assert(mp_st.volume_pct == 55 && mp_st.auto_play && !mp_st.overlay_open);
+    assert(mp_st.selected_row == 0);
     assert(mp_st.accent_r == 0x22 && mp_st.accent_g == 0xd3 && mp_st.accent_b == 0xee);
     assert(mp_st.tracks[2].is_radio && !strcmp(mp_st.tracks[2].title, "Radio Ilha"));
-    /* While Mini-Player is closed, normal game R2/L2/B/A must be ignored */
+    /* While GTA Trainer is closed, normal gameplay inputs must be completely ignored */
     assert(bg_mp_handle_action(&mp_st, BG_ACT_R2) == BG_RES_NONE);
     assert(bg_mp_handle_action(&mp_st, BG_ACT_L2) == BG_RES_NONE);
+    assert(bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) == BG_RES_NONE);
+    assert(bg_mp_handle_action(&mp_st, BG_ACT_CONFIRM) == BG_RES_NONE);
     assert(mp_st.current_index == 1 && !mp_st.overlay_open);
-    /* SELECT+R2 opens Mini-Player */
-    unsigned int r_open = bg_mp_handle_action(&mp_st, BG_ACT_SELECT_R2);
-    assert((r_open & BG_RES_OPEN_OVERLAY) && mp_st.overlay_open);
-    /* R2 skips to next track (1 -> 2), then wraps (2 -> 0) */
-    unsigned int r_next = bg_mp_handle_action(&mp_st, BG_ACT_R2);
-    assert((r_next & BG_RES_TRACK_CHANGED) && mp_st.current_index == 2);
-    assert((bg_mp_handle_action(&mp_st, BG_ACT_R2) & BG_RES_TRACK_CHANGED) &&
-           mp_st.current_index == 0);
-    /* L2 goes back (0 -> 2) */
-    assert((bg_mp_handle_action(&mp_st, BG_ACT_L2) & BG_RES_TRACK_CHANGED) &&
-           mp_st.current_index == 2);
-    /* B/START toggles pause, UP/DOWN adjusts volume */
-    assert((bg_mp_handle_action(&mp_st, BG_ACT_TOGGLE_PAUSE) & BG_RES_PAUSE_TOGGLED) &&
+    /* L3+R3 opens GTA Trainer menu at row 0 */
+    unsigned int r_open = bg_mp_handle_action(&mp_st, BG_ACT_L3_R3);
+    assert((r_open & BG_RES_OPEN_OVERLAY) && mp_st.overlay_open && mp_st.selected_row == 0);
+    /* Confirm on row 0 toggles play/pause */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_CONFIRM) & BG_RES_PAUSE_TOGGLED) &&
            mp_st.paused);
-    assert((bg_mp_handle_action(&mp_st, BG_ACT_VOL_UP) & BG_RES_VOLUME_CHANGED) &&
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_CONFIRM) & BG_RES_PAUSE_TOGGLED) &&
+           !mp_st.paused);
+    /* D-Pad DOWN moves to row 1 (PROXIMA MUSICA) and CONFIRM skips track (1 -> 2) */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) & BG_RES_REDRAW) &&
+           mp_st.selected_row == 1);
+    unsigned int r_next = bg_mp_handle_action(&mp_st, BG_ACT_CONFIRM);
+    assert((r_next & BG_RES_TRACK_CHANGED) && mp_st.current_index == 2);
+    /* Direct R2 shortcut wraps (2 -> 0) and highlights row 1 */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_R2) & BG_RES_TRACK_CHANGED) &&
+           mp_st.current_index == 0 && mp_st.selected_row == 1);
+    /* Direct L2 shortcut goes back (0 -> 2) and highlights row 2 */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_L2) & BG_RES_TRACK_CHANGED) &&
+           mp_st.current_index == 2 && mp_st.selected_row == 2);
+    /* Navigate to row 3 (VOLUME) and adjust with RIGHT/LEFT */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) & BG_RES_REDRAW) &&
+           mp_st.selected_row == 3);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_RIGHT) & BG_RES_VOLUME_CHANGED) &&
            mp_st.volume_pct == 65);
-    assert((bg_mp_handle_action(&mp_st, BG_ACT_VOL_DOWN) & BG_RES_VOLUME_CHANGED) &&
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_LEFT) & BG_RES_VOLUME_CHANGED) &&
            mp_st.volume_pct == 55);
-    /* A closes Mini-Player */
+    /* Navigate to row 4 (FECHAR TRAINER) and CONFIRM closes overlay */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) & BG_RES_REDRAW) &&
+           mp_st.selected_row == 4);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_CONFIRM) & BG_RES_CLOSE_OVERLAY) &&
+           !mp_st.overlay_open);
+    /* Reopen with L3+R3 and close with L3+R3 toggle */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_L3_R3) & BG_RES_OPEN_OVERLAY) &&
+           mp_st.overlay_open);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_L3_R3) & BG_RES_CLOSE_OVERLAY) &&
+           !mp_st.overlay_open);
+    /* Reopen with L3+R3 and close with A */
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_L3_R3) & BG_RES_OPEN_OVERLAY) &&
+           mp_st.overlay_open);
     assert((bg_mp_handle_action(&mp_st, BG_ACT_CLOSE) & BG_RES_CLOSE_OVERLAY) &&
            !mp_st.overlay_open);
-    /* Closed + SELECT+L2 goes back immediately (2 -> 1) */
-    assert((bg_mp_handle_action(&mp_st, BG_ACT_SELECT_L2) & BG_RES_TRACK_CHANGED) &&
-           mp_st.current_index == 1 && !mp_st.overlay_open);
+
+    /* R36S SDL_GAMECONTROLLERCONFIG parser (L3/R3 sticks + D-Pad) & GTA Trainer RGBA renderer */
+    {
+      const char *r36s_cfg =
+          "190000004b4800000010000000010000,GO-Super Gamepad,a:b0,b:b1,x:b2,y:b3,"
+          "leftshoulder:b4,rightshoulder:b5,lefttrigger:b6,righttrigger:b7,"
+          "dpup:b8,dpdown:b9,dpleft:b10,dpright:b11,leftstick:b12,rightstick:b13,"
+          "back:b14,start:b15,guide:b16,platform:Linux,\n";
+      BgSdlMap sm;
+      assert(bg_mp_parse_sdl_mapping(r36s_cfg, "GO-Super Gamepad", &sm));
+      assert(sm.valid && sm.l3_btn == 12 && sm.r3_btn == 13);
+      assert(sm.back_btn == 14 && sm.start_btn == 15 && sm.guide_btn == 16);
+      assert(sm.l2_btn == 6 && sm.r2_btn == 7 && sm.a_btn == 0 && sm.b_btn == 1);
+      assert(sm.dpup_btn == 8 && sm.dpdown_btn == 9 && sm.dpleft_btn == 10 && sm.dpright_btn == 11);
+
+      KpOverlayShared ov;
+      memset(&ov, 0, sizeof(ov));
+      ov.magic = KP_OV_MAGIC;
+      ov.version = KP_OV_VERSION;
+      ov.overlay_open = 1;
+      ov.selected_row = 1;
+      ov.track_index = 1;
+      ov.track_count = 3;
+      ov.volume_pct = 55;
+      ov.accent_r = 0x22;
+      ov.accent_g = 0xd3;
+      ov.accent_b = 0xee;
+      snprintf(ov.title, sizeof(ov.title), "Faixa Dois — R36S");
+      uint32_t *rgba = (uint32_t *)calloc((size_t)KP_OV_CARD_W * KP_OV_CARD_H, sizeof(uint32_t));
+      assert(rgba != NULL);
+      kp_ov_render_rgba(&ov, rgba);
+      /* Top border & banner pixel must have accent color and opaque alpha */
+      assert(rgba[0] == kp_ov_rgba(0x22, 0xd3, 0xee, 255));
+      assert(rgba[5 * KP_OV_CARD_W + 5] == kp_ov_rgba(0x22, 0xd3, 0xee, 255));
+      /* Selected GTA Trainer row 1 interior must render high-contrast white bar */
+      int sel_y = 74 + 1 * 26 + 2;
+      assert(rgba[sel_y * KP_OV_CARD_W + 20] == kp_ov_rgba(244, 247, 252, 252));
+      free(rgba);
+    }
 
     unlink(f_txt);
     unlink(f_m3u8);

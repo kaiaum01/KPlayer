@@ -78,7 +78,7 @@ jobs:
           ASAN_OPTIONS=detect_leaks=0 output/test-tags
           (cd ports/kplayer && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ../../output/test-native)
           rm -f *.bmp
-          python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py ports/kplayer/news_fetch.py ports/kplayer/file_ops.py
+          python3 -m py_compile ports/kplayer/updater.py ports/kplayer/weather_fetch.py ports/kplayer/iptv_fetch.py ports/kplayer/football_fetch.py ports/kplayer/news_fetch.py ports/kplayer/file_ops.py ports/kplayer/bg_audio.py ports/kplayer/pdf_ops.py
           python3 -m unittest discover -s tests -p "test_*.py" -v
 
       - name: Compilar KPlayer ARM64 (R36S)
@@ -86,7 +86,9 @@ jobs:
           aarch64-linux-gnu-gcc -O2 -std=gnu11 -Wall -Wextra -Werror \
             -I source/include source/kplayer.c -o ports/kplayer/kplayer \
             -ldl -lpthread -lm
-          file ports/kplayer/kplayer
+          aarch64-linux-gnu-gcc -O2 -std=gnu11 -shared -fPIC -Wall -Wextra -Werror \
+            source/kp_overlay.c -o ports/kplayer/libkp_overlay.so -ldl
+          file ports/kplayer/kplayer ports/kplayer/libkp_overlay.so
 
       - name: Gravar repositório do canal de auto-update
         run: echo "${{ github.repository }}" > ports/kplayer/update-repo.txt

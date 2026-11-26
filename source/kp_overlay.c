@@ -174,26 +174,27 @@ static bool kp_refresh_rgba_if_needed(const KpOverlayShared *shm) {
 }
 
 static void kp_compute_card_rect(int sw, int sh, int *rx, int *ry, int *rw, int *rh) {
-  int target_w = sw - 24;
-  if (target_w > 560) target_w = 560;
-  if (target_w < 200) target_w = sw - 8;
+  /* Classic GTA Cheat Trainer placement: vertical floating panel docked at top-left */
+  int margin_x = sw >= 480 ? 16 : 8;
+  int margin_y = sh >= 360 ? 16 : 8;
+  int target_w = (sw * 46) / 100;
+  if (target_w > 304) target_w = 304;
+  if (target_w < 200) target_w = sw - margin_x * 2;
   int target_h = (target_w * KP_OV_CARD_H) / KP_OV_CARD_W;
-  int max_h = (sh * 36) / 100;
-  if (max_h < 72) max_h = 72;
+  int max_h = (sh * 64) / 100;
+  if (max_h < 150) max_h = sh - margin_y * 2;
   if (target_h > max_h) {
     target_h = max_h;
     target_w = (target_h * KP_OV_CARD_W) / KP_OV_CARD_H;
   }
-  if (target_w > sw - 8) target_w = sw - 8;
-  if (target_h > sh - 8) target_h = sh - 8;
-  if (target_w < 64) target_w = 64;
-  if (target_h < 32) target_h = 32;
-  int margin = sh >= 360 ? 14 : 6;
+  if (target_w > sw - margin_x * 2) target_w = sw - margin_x * 2;
+  if (target_h > sh - margin_y * 2) target_h = sh - margin_y * 2;
+  if (target_w < 120) target_w = 120;
+  if (target_h < 96) target_h = 96;
   *rw = target_w;
   *rh = target_h;
-  *rx = (sw - target_w) / 2;
-  *ry = sh - target_h - margin;
-  if (*ry < 4) *ry = 4;
+  *rx = margin_x;
+  *ry = margin_y;
 }
 
 /* ==================== LAZY GLES2 / EGL RESOLVER ==================== */

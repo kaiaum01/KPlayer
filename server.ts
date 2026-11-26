@@ -217,7 +217,7 @@ async function fetchTextTimeout(url: string, timeoutMs = 14_000): Promise<string
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-R36S/2.1.4' },
+      headers: { 'User-Agent': 'KPlayer-R36S/2.1.5' },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -872,7 +872,7 @@ async function fetchXmltvTextBounded(url: string, timeoutMs = 15_000): Promise<s
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'KPlayer-EPG/2.1.4' },
+      headers: { 'User-Agent': 'KPlayer-EPG/2.1.5' },
     });
     clearTimeout(timer);
     if (!res.ok) return '';
@@ -1651,7 +1651,7 @@ async function fetchJsonWithFallback(paths: string[], timeoutMs = 8000): Promise
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-R36S/2.1.4' },
+        headers: { 'User-Agent': 'KPlayer-R36S/2.1.5' },
       });
       clearTimeout(timer);
       if (res.ok) return await res.json();
@@ -1672,7 +1672,7 @@ async function createServer() {
   app.use('/sprites', express.static(path.join(__dirname, 'ports', 'kplayer', 'sprites')));
   app.use('/fonts', express.static(path.join(__dirname, 'extras', 'fontes-modernas')));
 
-  const r36sZipFilename = 'KPlayer-v2.1.4-R36S.zip';
+  const r36sZipFilename = 'KPlayer-v2.1.5-R36S.zip';
   const r36sZipPath = path.join(__dirname, 'releases', r36sZipFilename);
   const r36sShaPath = `${r36sZipPath}.sha256`;
 
@@ -1687,14 +1687,14 @@ async function createServer() {
       }
       return res.json({
         ready: true,
-        version: '2.1.4',
+        version: '2.1.5',
         filename: r36sZipFilename,
         sizeBytes: stat.size,
         sha256,
         arch: 'ARM64 (aarch64-linux-gnu / dArkOS / PortMaster)',
       });
     } catch {
-      return res.status(404).json({ ready: false, version: '2.1.4', filename: r36sZipFilename });
+      return res.status(404).json({ ready: false, version: '2.1.5', filename: r36sZipFilename });
     }
   });
 
@@ -1777,7 +1777,7 @@ async function createServer() {
     } catch {
       // Fallback below
     }
-    return '2.1.4';
+    return '2.1.5';
   }
 
   async function readLocalUpdateManifest(): Promise<Record<string, unknown> | null> {
@@ -2482,7 +2482,7 @@ async function createServer() {
         try {
           const r = await fetch(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.id}/scoreboard`,
-            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.4' } }
+            { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.5' } }
           );
           clearTimeout(timer);
           if (!r.ok) return;
@@ -2593,7 +2593,7 @@ async function createServer() {
     try {
       const r = await fetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${id}`,
-        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.4' } }
+        { signal: controller.signal, headers: { 'User-Agent': 'KPlayer-R36S/2.1.5' } }
       );
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -2791,7 +2791,7 @@ async function createServer() {
     try {
       const r = await fetch('https://ipwho.is/', {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.4' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.5' },
       });
       const data = (await r.json()) as {
         success?: boolean;
@@ -2886,7 +2886,7 @@ async function createServer() {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=pt&format=json`;
       const upstream = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.4' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.5' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ results: [], error: 'geocoding_unavailable' });
@@ -2949,7 +2949,7 @@ async function createServer() {
         `&timezone=auto&forecast_days=7`;
       const upstream = await fetch(apiUrl, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KPlayer-Weather/2.1.4' },
+        headers: { 'User-Agent': 'KPlayer-Weather/2.1.5' },
       });
       clearTimeout(timer);
       if (!upstream.ok) return res.status(502).json({ error: 'weather_unavailable' });
@@ -3216,7 +3216,7 @@ async function createServer() {
         });
         const upstream = await fetch(`https://newsdata.io/api/1/latest?${params.toString()}`, {
           signal: controller.signal,
-          headers: { 'User-Agent': 'KPlayer-R36S/2.1.4', Accept: 'application/json' },
+          headers: { 'User-Agent': 'KPlayer-R36S/2.1.5', Accept: 'application/json' },
         });
         clearTimeout(timer);
         if (upstream.ok) {
@@ -3493,19 +3493,19 @@ async function createServer() {
 
       await writeIfMissing(
         'roms/ports/kplayer/settings.cfg',
-        'theme=0\nvisualizer=0\nkey_sfx=1\nbg_audio=0\nversion=2.1.4\n'
+        'theme=0\nvisualizer=0\nkey_sfx=1\nbg_audio=0\nversion=2.1.5\n'
       );
       await writeIfMissing(
         'roms/ports/kplayer/changelog.txt',
-        'KPlayer v2.1.4 (R36S)\n- Opcao Teste previo: Audio em jogos (ativar/desativar) para manter musica/radio no fundo ao abrir jogos .sh\n- Leitor de PDF no Gerenciador de Arquivos compativel com PdfCraft R36S (kaiaum01/PdfReader-R36s)\n- Editor de texto nativo (TXT, XML, HTML, SH, CFG, JSON, M3U8) e 7-Zip oficial preservados\n'
+        'KPlayer v2.1.5 (R36S)\n- Novo Mini-Player estilo GTA Trainer no jogo acionado por L3 + R3 (clique dos dois analogicos)\n- Navegacao vertical tipo menu de cheats (cima/baixo, B ativa, esquerda/direita volume, L2/R2 troca faixa, A fecha)\n- Leitor de PDF (PdfCraft R36S), Editor de texto nativo e 7-Zip oficial preservados\n'
       );
       await writeIfMissing(
         'roms/ports/kplayer/guia.html',
-        '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8" />\n  <title>Guia R36S — KPlayer v2.1.4</title>\n</head>\n<body>\n  <h1>KPlayer R36S v2.1.4</h1>\n  <p>Edite arquivos HTML, XML, TXT e scripts .sh, abra PDFs (PdfCraft R36S) e teste audio em jogos .sh.</p>\n</body>\n</html>\n'
+        '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8" />\n  <title>Guia R36S — KPlayer v2.1.5</title>\n</head>\n<body>\n  <h1>KPlayer R36S v2.1.5</h1>\n  <p>Edite arquivos HTML, XML, TXT e scripts .sh, abra PDFs (PdfCraft R36S) e use L3 + R3 para abrir o Trainer de Musica no jogo.</p>\n</body>\n</html>\n'
       );
       await writeIfMissing(
         'roms/ports/gamelist.xml',
-        '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n  <game>\n    <path>./KPlayer.sh</path>\n    <name>KPlayer</name>\n    <desc>Player de mídia, rádio, IPTV, notícias, placar e gerenciador de arquivos para R36S.</desc>\n  </game>\n  <game>\n    <path>./IniciarJogo.sh</path>\n    <name>Demo PortMaster R36S</name>\n    <desc>Script .sh de exemplo para testar abertura e edição no KPlayer v2.1.4.</desc>\n  </game>\n</gameList>\n'
+        '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n  <game>\n    <path>./KPlayer.sh</path>\n    <name>KPlayer</name>\n    <desc>Player de mídia, rádio, IPTV, notícias, placar e gerenciador de arquivos para R36S.</desc>\n  </game>\n  <game>\n    <path>./IniciarJogo.sh</path>\n    <name>Demo PortMaster R36S</name>\n    <desc>Script .sh de exemplo para testar abertura e edição no KPlayer v2.1.5.</desc>\n  </game>\n</gameList>\n'
       );
       await writeIfMissing(
         'roms/ports/IniciarJogo.sh',
@@ -3533,7 +3533,7 @@ async function createServer() {
       );
       await writeIfMissing(
         'home/ark/Downloads/LEIA-ME-SENHA.txt',
-        'Arquivos de teste do Gerenciador de Arquivos KPlayer v2.1.4:\n' +
+        'Arquivos de teste do Gerenciador de Arquivos KPlayer v2.1.5:\n' +
           '- Manual-KPlayer-R36S.pdf (Documento PDF multi-pagina compativel com PdfCraft R36S)\n' +
           '- pacote-temas-r36s.zip (ZIP padrão, sem senha)\n' +
           '- backup-protegido.zip (ZIP protegido por senha -> senha: r36s)\n'
@@ -3561,12 +3561,12 @@ async function createServer() {
           ];
           return ops.join('\n') + '\n';
         };
-        const p1 = makePageStream('KPlayer v2.1.4 - Manual R36S (Pagina 1/2)', [
+        const p1 = makePageStream('KPlayer v2.1.5 - Manual R36S (Pagina 1/2)', [
           'Leitor de PDF compativel com PdfCraft R36S (kaiaum01/PdfReader-R36s).',
           ' ',
-          'Novidades da versao 2.1.4:',
-          '1. Opcao Teste previo: Audio em jogos (.sh) - ativar/desativar em Opcoes.',
-          '2. Mantem musica local ou radio online tocando no fundo com volume reduzido.',
+          'Novidades da versao 2.1.5:',
+          '1. Novo Mini-Player estilo GTA Trainer no jogo acionado por L3 + R3.',
+          '2. Menu flutuante vertical no topo esquerdo: cima/baixo, B ativa, <> volume.',
           '3. Leitor PDF integrado com paginas (L1/R1), zoom (X) e modo texto (Y).',
           '4. Deteccao automatica do motor pdfcraft-core.aarch64 e PdfCraft.sh no R36S.',
         ]);
@@ -3587,7 +3587,7 @@ async function createServer() {
           '5 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>\nendobj\n',
           `6 0 obj\n<< /Length ${Buffer.byteLength(p2, 'latin1')} >>\nstream\n${p2}endstream\nendobj\n`,
           '7 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
-          '8 0 obj\n<< /Title (Manual KPlayer R36S v2.1.4) /Author (KPlayer R36S) >>\nendobj\n',
+          '8 0 obj\n<< /Title (Manual KPlayer R36S v2.1.5) /Author (KPlayer R36S) >>\nendobj\n',
         ];
         let body = '%PDF-1.4\n';
         const offsets: number[] = [0];
@@ -4271,9 +4271,9 @@ async function createServer() {
               `[Áudio em fundo] ./kplayer --bg-audio (libVLC nativo + ALSA dmix/Pulse): ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" (55% vol)`
             );
           } else {
-            lines.push(`[Áudio em fundo] ./kplayer --bg-audio pronto com fila de músicas/rádios (pausado até SELECT+R2).`);
+            lines.push(`[Áudio em fundo] ./kplayer --bg-audio pronto com fila de músicas/rádios (pausado até L3 + R3).`);
           }
-          lines.push(`[Mini-Player no Jogo] Oculto por padrão • SELECT+R2 abre/fecha • L2 volta faixa • R2 pula faixa • B pausa • ↑↓ volume.`);
+          lines.push(`[KPlayer Trainer] Menu estilo GTA oculto por padrão • L3 + R3 abre/fecha • ↑↓ menu • B ativa • ←→ vol • L2/R2 faixa.`);
           lines.push(`[R36S] Diretório de trabalho: ${gameDir || targetDir}`);
           lines.push(`[R36S] Executando via bg_audio.py: ${interpreter.split(/\s+/)[0]} "${resolved.virtualPath}"`);
           if (execLine) {
@@ -4295,8 +4295,8 @@ async function createServer() {
         if (bgAudioPreview) {
           lines.push(
             activeMediaKind && activeMediaTitle
-              ? `[R36S • Teste prévio] ./kplayer --bg-audio mantendo ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" com Mini-Player SELECT+R2 (L2/R2 troca faixa).`
-              : `[R36S • Teste prévio] ./kplayer --bg-audio pronto — pressione SELECT+R2 no jogo para abrir o Mini-Player.`
+              ? `[R36S • Teste prévio] ./kplayer --bg-audio mantendo ${activeMediaKind === 'radio' ? 'rádio' : 'música'} "${activeMediaTitle}" com KPlayer Trainer (L3 + R3).`
+              : `[R36S • Teste prévio] ./kplayer --bg-audio pronto — pressione L3 + R3 no jogo para abrir o KPlayer Trainer.`
           );
         } else {
           lines.push(`[R36S] Encerrando SDL2/libVLC do KPlayer para liberar framebuffer DRM/KMS...`);
@@ -4670,7 +4670,7 @@ async function createServer() {
         }
       }
       const headers: Record<string, string> = {
-        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.4',
+        'User-Agent': hostMeta?.userAgent || 'KPlayer-R36S/2.1.5',
         Accept: '*/*',
       };
       if (hostMeta?.referer) {
@@ -4766,7 +4766,7 @@ async function createServer() {
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`KPlayer 2.1.4 (R36S) listening on http://${HOST}:${PORT}`);
+    console.log(`KPlayer 2.1.5 (R36S) listening on http://${HOST}:${PORT}`);
   });
 }
 

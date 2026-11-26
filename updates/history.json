@@ -1,7 +1,20 @@
 {
   "schemaVersion": 2,
-  "latest": "2.1.4",
+  "latest": "2.1.5",
   "releases": [
+    {
+      "version": "2.1.5",
+      "releaseTag": "v2.1.5",
+      "releasedAt": "2026-11-26T19:00:00Z",
+      "r36s": "updates/v2.1.5/KPlayer-v2.1.5-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Mini-Player no Jogo estilo GTA Trainer (L3 + R3) com painel vertical flutuante no canto superior esquerdo e cursor branco de alto contraste.",
+        "Novo combo de ativação L3 + R3 (clique nos dois analógicos) imune ao gptokeyb via EVIOCGKEY e SDL_GAMECONTROLLERCONFIG.",
+        "Menu em 5 linhas: Tocar/Pausar, Próxima Música/Rádio, Voltar Música/Rádio, Volume (10%–100%) e Fechar Trainer, além de atalhos diretos R2/L2.",
+        "Demonstração interativa do GTA Trainer na Preview Web (botão Demo Trainer L3+R3 e botões virtuais L3/R3)."
+      ]
+    },
     {
       "version": "2.1.4",
       "releaseTag": "v2.1.4",
@@ -11,163 +24,10 @@
       "notes": [
         "Música e Rádio em Segundo Plano + Mini-Player no Jogo (SELECT + R2) (Teste prévio):",
         "Nova opção Áudio em jogos (Teste prévio) em SELECT → Opções, permitindo ativar ou desativar a qualquer momento (salva em settings.cfg, desativada por padrão).",
-        "Roda diretamente pelo próprio ./kplayer --bg-audio usando a libvlc.so.5 embarcada (sem depender de cvlc/mpv/ffplay), com mixagem compartilhada automática via PulseAudio/PipeWire ou",
-        "Mini-Player no Jogo sob demanda: fica oculto durante a jogatina e só abre ao pressionar SELECT + R2. Com ele aberto: R2 pula para a próxima música/estação, L2 volta para a anterior",
+        "Roda diretamente pelo próprio ./kplayer --bg-audio usando a libvlc.so.5 embarcada (sem depender de cvlc/mpv/ffplay), com mixagem compartilhada automática via PulseAudio/PipeWire ou ALSA dmix.",
+        "Mini-Player no Jogo sob demanda (SELECT + R2) com overlay GLES2/SDL2 nativo (libkp_overlay.so) + leitura de controle imune ao gptokeyb (EVIOCGKEY/SDL_GAMECONTROLLERCONFIG) e fila completa da pasta.",
         "Leitor de PDF Integrado Compatível com PdfCraft R36S (github.com/kaiaum01/PdfReader-R36s):",
         "Abra arquivos .pdf diretamente no Gerenciador de Arquivos (Arquivos)."
-      ]
-    },
-    {
-      "version": "2.1.3",
-      "releaseTag": "v2.1.3",
-      "releasedAt": "2026-11-25T13:26:13Z",
-      "r36s": "updates/v2.1.3/KPlayer-v2.1.3-R36S.zip",
-      "sha256": "610444f0b3e081932ebe9a7a9863e94330bace3e20bc8b95d65df36c698a8eaa",
-      "notes": [
-        "Editor de Texto Integrado no Gerenciador de Arquivos (Arquivos):",
-        "Abra, visualize, edite e salve arquivos .txt, .xml, .html, .htm, .sh, .cfg, .conf, .ini, .json, .log, .md, .m3u8, .m3u, .pls, .xspf e .tsv diretamente no console.",
-        "Salvamento atômico com confirmação ao sair caso existam alterações não salvas e bloqueio seguro contra arquivos binários.",
-        "Execução de Scripts .sh de Jogos do R36S e Executáveis do EmulationStation:",
-        "Detecta scripts .sh e binários ELF (\\x7fELF, sem falsos positivos em /roms FAT32/exFAT).",
-        "Ao abrir, permite escolher entre Executar no console (encerrando SDL2/libVLC/ALSA de forma limpa e transferindo o controle com execv) ou Editar script no Editor de Texto."
-      ]
-    },
-    {
-      "version": "2.1.2",
-      "releaseTag": "v2.1.2",
-      "releasedAt": "2026-11-25T11:25:55Z",
-      "r36s": "updates/v2.1.2/KPlayer-v2.1.2-R36S.zip",
-      "sha256": "293d37de8948e0e112f4b40a918defb1ab63ee9f4575c97fa1c30087f87b1817",
-      "notes": [
-        "Novo Gerenciador de Arquivos Completo (Arquivos na Home — Separado de Músicas e Vídeos):",
-        "Mantém o gerenciador de Músicas e Vídeos 100% intacto e adiciona um Gerenciador de Arquivos independente com acesso à pasta raiz do console (/) e a todos os arquivos e diretórios (",
-        "Operações completas: criar pastas, apagar arquivos e pastas (com confirmação explícita e proteção contra exclusão de pastas críticas do sistema), copiar, mover/recortar, colar (R1)",
-        "Integração Oficial do 7-Zip Público (github.com/ip7z/7zip):",
-        "Inclui o binário oficial estático ARM64 7zzs (com fallback automático em Python zipfile/tarfile) para abrir/navegar e descompactar .zip, .7z, .rar, .tar.*, .cbz, .cbr e .iso.",
-        "Suporte completo a arquivos protegidos por senha: detecta automaticamente arquivos criptografados, abre prompt de senha com máscara (Y para exibir/ocultar) e envia a senha de forma"
-      ]
-    },
-    {
-      "version": "2.1.1",
-      "releaseTag": "v2.1.1",
-      "releasedAt": "2026-11-24T23:19:27Z",
-      "r36s": "updates/v2.1.1/KPlayer-v2.1.1-R36S.zip",
-      "sha256": "f8d97e9bb9e5eab01b3ac571ce313bcb59d0809d6b35aee03ee87da451e8c387",
-      "notes": [
-        "Correção Crítica de Reprodução de Mídias (ALSA + Sons das Teclas):",
-        "Corrigido o bug da v2.1.0 em que o dispositivo de áudio SDL2 dos sons das teclas mantinha o ALSA bloqueado e impedia músicas, vídeos, rádios online e IPTV de tocar na libVLC (--aou",
-        "O sintetizador de cliques agora só ativa após a inicialização completa do player, libera o dispositivo ALSA imediatamente antes de qualquer reprodução (sfx_release_device()) e fech",
-        "Lazy-Loading Assíncrono da Biblioteca de Mídias na Inicialização:",
-        "A varredura de músicas (/roms/bgmusic, /roms2/bgmusic) e vídeos (/roms/videos, /roms2/videos) agora roda de forma assíncrona em segundo plano (pthread), deixando o boot mais rápido",
-        "Atualização na Mesma Versão (com Aviso e Confirmação):"
-      ]
-    },
-    {
-      "version": "2.1.0",
-      "releaseTag": "v2.1.0",
-      "releasedAt": "2026-11-23T15:06:05Z",
-      "r36s": "updates/v2.1.0/KPlayer-v2.1.0-R36S.zip",
-      "sha256": "5a7db2c0474f5b8843e539e4046f07858d11c53993b757f16376de8595e693fa",
-      "notes": [
-        "Nova Aba Notícias (antes do Placar da Bola):",
-        "Manchetes do Brasil em português com filtros rápidos (Todas, Urgente, Mundo, Polícia, Entretenimento e Esportes) via API NewsData.io (configurável por news.cfg no R36S ou NEWSDATA_",
-        "Dashboard Reorganizada (Músicas e Vídeos Unificados):",
-        "Os cards de músicas e vídeos foram unidos em Músicas e Vídeos, deixando a Home com Músicas e Vídeos, Arquivos, Rádio Online, IPTV, Notícias e Placar da Bola.",
-        "Correção Visual em Todos os 14 Temas do R36S:",
-        "Eliminado o artefato de listras horizontais dentro das caixas translúcidas e dos painéis do Protetor de Tela (relógio/clima, barra \"tocando agora\", letras e badges). Todas as caixa"
-      ]
-    },
-    {
-      "version": "2.0.9",
-      "releaseTag": "v2.0.9",
-      "releasedAt": "2026-11-22T23:59:00Z",
-      "r36s": "updates/v2.0.9/KPlayer-v2.0.9-R36S.zip",
-      "sha256": "25454bafb8f73a05ab8215170bae376ac2b6f245429329eb7f889f428be2a08f",
-      "notes": [
-        "Corrigido bug do lançador .sh que procurava arquivo versionado e impedia abrir o app: restaurado KPlayer.sh estável com versão atualizada internamente e limpeza de KPlayer v*.sh",
-        "Novas artes de alta resolução fiéis ao disco de vinil K original: Capa transparente (1200×1200) e Marquee transparente (1600×490)",
-        "Boxart vertical (900×1200) e Fanart Full HD (1920×1080) do disco K salvos em kplayer/scraper/",
-        "Edição automática de metadados no gamelist.xml removida — seus XMLs não são mais alterados pelo player"
-      ]
-    },
-    {
-      "version": "2.0.8",
-      "releaseTag": "v2.0.8",
-      "releasedAt": "2026-11-22T23:55:00Z",
-      "r36s": "updates/v2.0.8/KPlayer-v2.0.8-R36S.zip",
-      "sha256": "dd0120eef513884576e9091a216eabc008b69da8963b1cd239f595e09b630796",
-      "notes": [
-        "Pacote inicial de imagens de scraper dentro de kplayer/scraper/",
-        "Lançador .sh versionado automaticamente a cada atualização (KPlayer v2.0.8.sh)"
-      ]
-    },
-    {
-      "version": "2.0.7",
-      "releaseTag": "v2.0.7",
-      "releasedAt": "2026-11-22T22:25:56Z",
-      "r36s": "updates/v2.0.7/KPlayer-v2.0.7-R36S.zip",
-      "sha256": "c32bf5da4303d15be49bc19601c8f157f33f842db97d5184da7fda844c2f8e0d",
-      "notes": [
-        "Changelog Pós-Atualização (Exibido Apenas Uma Vez):",
-        "Toda vez que o KPlayer for atualizado para uma nova versão, uma tela dedicada \"Novidades da versão vX.Y.Z\" aparece automaticamente antes da tela inicial resumindo o que mudou.",
-        "Ao pressionar B para continuar, a versão vista é salva localmente (settings.cfg) para não aparecer novamente até o próximo update — e cada novo pacote já embute automaticamente o c",
-        "Visualizador / Protetor de Tela em 30 Segundos Ativado por Padrão:",
-        "O protetor de tela com os 5 visualizadores inspirados no Windows Media Player (Barras e Ondas, Alquimia, Bateria / Pulso, Plenitude e Ambience / Cosmos), relógio/data/clima e letra",
-        "Pode ser ajustado ou desativado a qualquer momento em SELECT → Protetor de tela (Desativado, 30 segundos, 60 segundos, 2 minutos, 5 minutos)."
-      ]
-    },
-    {
-      "version": "2.0.6",
-      "releaseTag": "v2.0.6",
-      "releasedAt": "2026-11-22T18:13:42Z",
-      "r36s": "updates/v2.0.6/KPlayer-v2.0.6-R36S.zip",
-      "sha256": "39338a11ac1ef7c78c80d2400cf9367d1596b604de319f2a39adbd10f4f668b6",
-      "notes": [
-        "Nova Tela Inicial com Layout Invertível:",
-        "Clima Open-Meteo ampliado ocupando o card maior na parte inferior da tela inicial, exibindo temperatura atual, condição, sensação térmica, umidade, vento, máxima/mínima e resumo da",
-        "Mini Player compacto no topo direito ao lado de \"Seu som. Sua tela.\", mostrando de forma limpa apenas o que está sendo reproduzido no momento.",
-        "Opção Layout da tela inicial nas Configurações gerais (Clima embaixo + Mini player ou Player embaixo + Clima no topo) salva localmente.",
-        "Tutorial de Comandos na Primeira Inicialização + \"Rever comandos\":",
-        "Os antigos \"Atalhos\" agora se chamam Comandos e aparecem automaticamente em formato de tutorial visual na primeira vez que o KPlayer inicia."
-      ]
-    },
-    {
-      "version": "2.0.5",
-      "releaseTag": "v2.0.5",
-      "releasedAt": "2026-11-22T07:20:00Z",
-      "r36s": "updates/v2.0.5/KPlayer-v2.0.5-R36S.zip",
-      "sha256": "",
-      "notes": [
-        "Todos os updates das versões 2.0.2, 2.0.3 e 2.0.4 aplicados no binário nativo do R36S (C + SDL2)",
-        "Reajustes finos no auto-updater R36S (cache-busting, retries, espelho GitHub Releases, SHA-256 e auto-reload do KPlayer.sh)",
-        "Clima Open-Meteo nativo no botão X + widget no canto direito da Home",
-        "Opções em ordem alfabética (sem abas laterais), barra inferior removida + guia de Comandos, EPG ao vivo no IPTV",
-        "Workflow de updates/ e GitHub Releases 100% focado no R36S"
-      ]
-    },
-    {
-      "version": "2.0.4",
-      "releaseTag": "v2.0.4",
-      "releasedAt": "2026-11-21T21:40:00Z",
-      "r36s": "updates/v2.0.4/KPlayer-v2.0.4-R36S.zip",
-      "sha256": "",
-      "notes": [
-        "App de Clima Open-Meteo no botão X + widget compacto na tela inicial",
-        "Barra inferior removida + lista de comandos nas Opções",
-        "Opções em ordem alfabética com Verificar atualizações (A) em penúltimo e Sair por último"
-      ]
-    },
-    {
-      "version": "2.0.3",
-      "releaseTag": "v2.0.3",
-      "releasedAt": "2026-11-21T00:00:00Z",
-      "r36s": "updates/v2.0.3/KPlayer-v2.0.3-R36S.zip",
-      "sha256": "",
-      "notes": [
-        "Auto-Update via pasta updates/ do GitHub sem perda de dados/histórico",
-        "Novo menu de Opções (SELECT) por seleção direta",
-        "EPG ao vivo + IPTV Brasil 2026 integrado",
-        "Adaptação dinâmica de tela no R36S"
       ]
     }
   ]

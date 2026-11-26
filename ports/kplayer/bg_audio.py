@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Background audio & external launch handoff for KPlayer R36S (v2.1.4 — Teste prévio).
+"""Background audio & external launch handoff for KPlayer R36S (v2.1.5 — Teste prévio).
 
 Invoked by KPlayer.sh when ./kplayer exits with code 43 after writing a JSON
 handoff descriptor (e.g. ./.bg-launch.json). Safely runs a `.sh` game script,
 EmulationStation binary, or PdfCraft.sh while running KPlayer's native headless
-`./kplayer --bg-audio <handoff.json> <game_pid>` Mini-Player daemon (with
-PulseAudio/PipeWire or ALSA dmix shared mixing and isolated LD_LIBRARY_PATH).
+`./kplayer --bg-audio <handoff.json> <game_pid>` GTA Trainer Mini-Player daemon
+(with PulseAudio/PipeWire or ALSA dmix shared mixing and `libkp_overlay.so`).
 
 In-game controls (handled natively via Linux evdev in `./kplayer --bg-audio`):
-  - SELECT + R2: Open / Close In-Game Mini-Player (/dev/fb0 overlay)
-  - R2 (when open): Next track / radio station
-  - L2 (when open): Previous track / radio station (or SELECT + L2 when closed)
-  - B / START (when open): Pause / Resume
-  - UP / DOWN (when open): Background volume +/- 10%
-  - A (when open): Close Mini-Player and resume game
+  - L3 + R3: Open / Close GTA-style Trainer Mini-Player (click both sticks)
+  - UP / DOWN (when open): Move Trainer highlight cursor
+  - LEFT / RIGHT (when open): Volume +/- 10% or switch track on track rows
+  - B / START (when open): Activate highlighted Trainer option
+  - R2 / L2 (when open): Instant Next / Previous track from any row
+  - A / L3 + R3 (when open): Close Trainer and return to game
 """
 from __future__ import annotations
 
@@ -241,6 +241,8 @@ def create_alsa_dmix_config(
 def build_target_env(
     base_env: dict[str, str],
     alsa_conf_path: Path | None = None,
+    overlay_so: Path | None = None,
+    overlay_shm: Path | None = None,
 ) -> dict[str, str]:
     """Build clean environment for the launched game (no KPlayer VLC lib leakage)."""
     env = dict(base_env)
@@ -254,6 +256,15 @@ def build_target_env(
     env.pop("VLC_DATA_PATH", None)
     if alsa_conf_path is not None:
         env["ALSA_CONFIG_PATH"] = str(alsa_conf_path)
+    if overlay_shm is not None:
+        env["KPLAYER_OVERLAY_SHM"] = str(overlay_shm)
+    if overlay_so is not None and overlay_so.is_file():
+        cur_preload = env.get("LD_PRELOAD", "").strip()
+        so_str = str(overlay_so)
+        parts = [p for p in cur_preload.split(":") if p]
+        if so_str not in parts:
+            parts.insert(0, so_str)
+            env["LD_PRELOAD"] = ":".join(parts)
     return env
 
 
@@ -262,9 +273,11 @@ def build_audio_env(
     backend: str,
     alsa_conf_path: Path | None = None,
     gamedir: Path | None = None,
+    overlay_shm: Path | None = None,
 ) -> dict[str, str]:
     """Build environment for headless ./kplayer --bg-audio with bundled libvlc.so.5."""
     env = dict(base_env)
+    env.pop("LD_PRELOAD", None)
     gdir = gamedir or Path(env.get("KPLAYER_GAMEDIR") or Path(__file__).resolve().parent)
     lib_dir = gdir / "lib"
     if lib_dir.is_dir():
@@ -277,6 +290,8 @@ def build_audio_env(
     env["KPLAYER_BG_ALSA_DEV"] = "default"
     if alsa_conf_path is not None and backend == "alsa":
         env["ALSA_CONFIG_PATH"] = str(alsa_conf_path)
+    if overlay_shm is not None:
+        env["KPLAYER_OVERLAY_SHM"] = str(overlay_shm)
     return env
 
 
@@ -411,9 +426,22 @@ def run_handoff(payload_path: Path) -> int:
 
     gamedir = Path(os.environ.get("KPLAYER_GAMEDIR") or Path(__file__).resolve().parent)
     native_kplayer = gamedir / "kplayer"
+    overlay_so = gamedir / "libkp_overlay.so"
     backend = detect_audio_backend(os.environ)
     alsa_conf: Path | None = None
     clean_json_path: Path | None = None
+    overlay_shm_path: Path | None = None
+
+    if validated["bg_audio_enabled"]:
+        try:
+            shm_fd, shm_raw = tempfile.mkstemp(prefix="kp-ov-", suffix=".shm")
+            try:
+                os.ftruncate(shm_fd, 4096)
+            finally:
+                os.close(shm_fd)
+            overlay_shm_path = Path(shm_raw)
+        except OSError:
+            overlay_shm_path = None
 
     if validated["bg_audio_enabled"] and backend == "alsa":
         hw_dev = detect_alsa_hw_device()
@@ -440,7 +468,12 @@ def run_handoff(payload_path: Path) -> int:
     try:
         target_cmd = build_target_cmd(validated)
         work_dir = str(Path(validated["target_path"]).parent)
-        target_env = build_target_env(os.environ, alsa_conf)
+        target_env = build_target_env(
+            os.environ,
+            alsa_conf,
+            overlay_so=overlay_so if validated["bg_audio_enabled"] else None,
+            overlay_shm=overlay_shm_path,
+        )
         target_proc = subprocess.Popen(
             target_cmd,
             cwd=work_dir if os.path.isdir(work_dir) else None,
@@ -465,9 +498,15 @@ def run_handoff(payload_path: Path) -> int:
                 backend=backend,
             )
             if audio_cmd:
-                audio_env = build_audio_env(os.environ, backend, alsa_conf, gamedir)
+                audio_env = build_audio_env(
+                    os.environ,
+                    backend,
+                    alsa_conf,
+                    gamedir,
+                    overlay_shm=overlay_shm_path,
+                )
                 sys.stderr.write(
-                    f"bg_audio: iniciando mini-player ({audio_cmd[0]}, backend={backend}, faixas={len(validated['tracks'])})\n"
+                    f"bg_audio: iniciando mini-player ({audio_cmd[0]}, backend={backend}, faixas={len(validated['tracks'])}, overlay={'sim' if overlay_so.is_file() else 'fb0'})\n"
                 )
                 try:
                     audio_proc = subprocess.Popen(
@@ -490,7 +529,7 @@ def run_handoff(payload_path: Path) -> int:
         _stop_proc(audio_proc)
         signal.signal(signal.SIGINT, old_int)
         signal.signal(signal.SIGTERM, old_term)
-        for p in (clean_json_path, alsa_conf, payload_path):
+        for p in (clean_json_path, alsa_conf, overlay_shm_path, payload_path):
             if p is not None:
                 try:
                     p.unlink(missing_ok=True)

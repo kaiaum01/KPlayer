@@ -2,23 +2,25 @@
 #define KPLAYER_BG_MINIPLAYER_H
 
 /*
- * KPlayer R36S Headless Background Audio + In-Game Mini-Player (v2.1.4)
+ * KPlayer R36S Headless Background Audio + GTA-Style In-Game Trainer (v2.1.5)
  *
  * Runs as `./kplayer --bg-audio <handoff.json> [game_pid]` without SDL2.
  * Uses KPlayer's bundled libvlc.so.5 directly over PulseAudio/PipeWire or
- * ALSA dmix, listens to Linux evdev gamepad inputs passively, and opens a
- * compact /dev/fb0 Mini-Player overlay ONLY when SELECT + R2 is pressed.
+ * ALSA dmix, polls Linux evdev hardware state via EVIOCGKEY/EVIOCGABS
+ * (immune to gptokeyb's EVIOCGRAB) using exact SDL_GAMECONTROLLERCONFIG
+ * button mappings, and displays the GTA Cheat Trainer-style Mini-Player via:
+ *   1) Shared-memory GLES2/EGL/SDL2 overlay (`libkp_overlay.so`, KMS/DRM safe)
+ *   2) Automatic `/dev/fb0` fallback if no GLES/SDL frame is presented in 260ms
  *
  * Controls:
  *   Closed:
- *     SELECT + R2        -> Open In-Game Mini-Player (grabs gamepad, pauses game)
- *     SELECT + L2        -> Previous track/station directly in background
+ *     L3 + R3            -> Open GTA-Style Trainer Mini-Player (click both sticks)
  *   Open:
- *     R2                 -> Next track / station (Pular musica)
- *     L2                 -> Previous track / station (Voltar musica)
- *     B / START          -> Play / Pause
- *     UP / DOWN          -> Background volume +/- 10% (10% - 100%)
- *     A / SELECT + R2    -> Close Mini-Player (restores screen, resumes game)
+ *     UP / DOWN          -> Move Trainer cursor (5 items)
+ *     LEFT / RIGHT       -> Adjust Volume (+/- 10%) or switch track on track rows
+ *     B / START          -> Activate highlighted Trainer option
+ *     R2 / L2            -> Instant Next / Previous track from any row
+ *     A / L3 + R3        -> Close Trainer and return to game
  */
 
 #include <ctype.h>
@@ -32,15 +34,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
+#include "kp_overlay_shared.h"
+
 #define BG_MP_MAX_TRACKS 128
 #define BG_MP_MAX_EVDEV 16
 #define BG_MP_MAX_JSON (256 * 1024)
+#define BG_MP_MAX_CODES 128
+#define BG_MP_DEBOUNCE_MS 180
 
 typedef struct {
   char uri[1024];
@@ -54,6 +61,7 @@ typedef struct {
   int current_index;
   long long initial_pos_ms;
   int volume_pct;
+  int selected_row;
   bool auto_play;
   bool paused;
   bool started;
@@ -65,13 +73,14 @@ typedef struct {
 
 typedef enum {
   BG_ACT_NONE = 0,
-  BG_ACT_SELECT_R2,
-  BG_ACT_SELECT_L2,
+  BG_ACT_L3_R3,
+  BG_ACT_NAV_UP,
+  BG_ACT_NAV_DOWN,
+  BG_ACT_NAV_LEFT,
+  BG_ACT_NAV_RIGHT,
+  BG_ACT_CONFIRM,
   BG_ACT_R2,
   BG_ACT_L2,
-  BG_ACT_TOGGLE_PAUSE,
-  BG_ACT_VOL_UP,
-  BG_ACT_VOL_DOWN,
   BG_ACT_CLOSE
 } BgMpAction;
 
@@ -84,6 +93,184 @@ typedef enum {
   BG_RES_VOLUME_CHANGED = 1 << 4,
   BG_RES_REDRAW = 1 << 5
 } BgMpResultFlags;
+
+typedef struct {
+  bool valid;
+  int l3_btn;     /* SDL 'leftstick'  (R36S L3 click) */
+  int r3_btn;     /* SDL 'rightstick' (R36S R3 click) */
+  int back_btn;
+  int guide_btn;
+  int start_btn;
+  int l2_btn;
+  int l2_axis;
+  int r2_btn;
+  int r2_axis;
+  int a_btn;      /* SDL 'a' = south button (R36S B = confirm) */
+  int b_btn;      /* SDL 'b' = east button  (R36S A = close) */
+  int dpup_btn;
+  int dpdown_btn;
+  int dpleft_btn;
+  int dpright_btn;
+  bool dpad_hat;
+} BgSdlMap;
+
+/* ==================== SDL_GAMECONTROLLERCONFIG PARSER ==================== */
+
+static void bg_sdl_map_reset(BgSdlMap *m) {
+  if (!m) return;
+  m->valid = false;
+  m->l3_btn = -1;
+  m->r3_btn = -1;
+  m->back_btn = -1;
+  m->guide_btn = -1;
+  m->start_btn = -1;
+  m->l2_btn = -1;
+  m->l2_axis = -1;
+  m->r2_btn = -1;
+  m->r2_axis = -1;
+  m->a_btn = -1;
+  m->b_btn = -1;
+  m->dpup_btn = -1;
+  m->dpdown_btn = -1;
+  m->dpleft_btn = -1;
+  m->dpright_btn = -1;
+  m->dpad_hat = false;
+}
+
+static bool bg_str_icontains(const char *hay, const char *needle) {
+  if (!hay || !needle || !needle[0]) return false;
+  size_t nlen = strlen(needle);
+  for (const char *p = hay; *p; p++) {
+    size_t i = 0;
+    while (i < nlen && p[i] &&
+           tolower((unsigned char)p[i]) == tolower((unsigned char)needle[i])) {
+      i++;
+    }
+    if (i == nlen) return true;
+  }
+  return false;
+}
+
+static void bg_sdl_parse_binding(const char *val, int *out_btn, int *out_axis, bool *out_hat) {
+  if (!val || !val[0]) return;
+  if (val[0] == 'b' && isdigit((unsigned char)val[1])) {
+    if (out_btn) *out_btn = atoi(val + 1);
+  } else if ((val[0] == 'a' || val[0] == '+' || val[0] == '-') && out_axis) {
+    const char *p = (val[0] == '+' || val[0] == '-') ? val + 1 : val;
+    if (*p == 'a' && isdigit((unsigned char)p[1])) {
+      *out_axis = atoi(p + 1);
+    }
+  } else if (val[0] == 'h' && out_hat) {
+    *out_hat = true;
+  }
+}
+
+static bool bg_sdl_parse_line(const char *line, size_t len,
+                              char *name_out, size_t name_cap, BgSdlMap *m) {
+  bg_sdl_map_reset(m);
+  if (name_out && name_cap > 0) name_out[0] = 0;
+  if (!line || len < 16) return false;
+
+  const char *end = line + len;
+  const char *c1 = (const char *)memchr(line, ',', (size_t)(end - line));
+  if (!c1 || c1 + 1 >= end) return false;
+  const char *c2 = (const char *)memchr(c1 + 1, ',', (size_t)(end - (c1 + 1)));
+  if (!c2) return false;
+
+  if (name_out && name_cap > 1) {
+    size_t nlen = (size_t)(c2 - (c1 + 1));
+    if (nlen >= name_cap) nlen = name_cap - 1;
+    memcpy(name_out, c1 + 1, nlen);
+    name_out[nlen] = 0;
+  }
+
+  const char *p = c2 + 1;
+  while (p < end) {
+    const char *comma = (const char *)memchr(p, ',', (size_t)(end - p));
+    const char *tok_end = comma ? comma : end;
+    const char *colon = (const char *)memchr(p, ':', (size_t)(tok_end - p));
+    if (colon && colon > p && colon + 1 < tok_end) {
+      char key[32], val[32];
+      size_t klen = (size_t)(colon - p);
+      size_t vlen = (size_t)(tok_end - (colon + 1));
+      if (klen < sizeof(key) && vlen < sizeof(val)) {
+        memcpy(key, p, klen);
+        key[klen] = 0;
+        memcpy(val, colon + 1, vlen);
+        val[vlen] = 0;
+        if (!strcmp(key, "leftstick")) {
+          bg_sdl_parse_binding(val, &m->l3_btn, NULL, NULL);
+        } else if (!strcmp(key, "rightstick")) {
+          bg_sdl_parse_binding(val, &m->r3_btn, NULL, NULL);
+        } else if (!strcmp(key, "back")) {
+          bg_sdl_parse_binding(val, &m->back_btn, NULL, NULL);
+        } else if (!strcmp(key, "guide")) {
+          bg_sdl_parse_binding(val, &m->guide_btn, NULL, NULL);
+        } else if (!strcmp(key, "start")) {
+          bg_sdl_parse_binding(val, &m->start_btn, NULL, NULL);
+        } else if (!strcmp(key, "lefttrigger")) {
+          bg_sdl_parse_binding(val, &m->l2_btn, &m->l2_axis, NULL);
+        } else if (!strcmp(key, "righttrigger")) {
+          bg_sdl_parse_binding(val, &m->r2_btn, &m->r2_axis, NULL);
+        } else if (!strcmp(key, "a")) {
+          bg_sdl_parse_binding(val, &m->a_btn, NULL, NULL);
+        } else if (!strcmp(key, "b")) {
+          bg_sdl_parse_binding(val, &m->b_btn, NULL, NULL);
+        } else if (!strcmp(key, "dpup")) {
+          bg_sdl_parse_binding(val, &m->dpup_btn, NULL, &m->dpad_hat);
+        } else if (!strcmp(key, "dpdown")) {
+          bg_sdl_parse_binding(val, &m->dpdown_btn, NULL, &m->dpad_hat);
+        } else if (!strcmp(key, "dpleft")) {
+          bg_sdl_parse_binding(val, &m->dpleft_btn, NULL, &m->dpad_hat);
+        } else if (!strcmp(key, "dpright")) {
+          bg_sdl_parse_binding(val, &m->dpright_btn, NULL, &m->dpad_hat);
+        }
+      }
+    }
+    if (!comma) break;
+    p = comma + 1;
+  }
+
+  m->valid = (m->l3_btn >= 0 || m->r3_btn >= 0 || m->back_btn >= 0 ||
+              m->l2_btn >= 0 || m->r2_btn >= 0 || m->l2_axis >= 0 ||
+              m->r2_axis >= 0 || m->a_btn >= 0);
+  return m->valid;
+}
+
+static bool bg_mp_parse_sdl_mapping(const char *cfg, const char *dev_name, BgSdlMap *out) {
+  bg_sdl_map_reset(out);
+  if (!cfg || !cfg[0] || !out) return false;
+
+  BgSdlMap first_valid;
+  bg_sdl_map_reset(&first_valid);
+  const char *p = cfg;
+  while (*p) {
+    while (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t') p++;
+    if (!*p) break;
+    const char *nl = strpbrk(p, "\r\n");
+    size_t len = nl ? (size_t)(nl - p) : strlen(p);
+    if (p[0] != '#') {
+      char line_name[96];
+      BgSdlMap cur;
+      if (bg_sdl_parse_line(p, len, line_name, sizeof(line_name), &cur)) {
+        if (!first_valid.valid) first_valid = cur;
+        if (dev_name && dev_name[0] && line_name[0] &&
+            (bg_str_icontains(dev_name, line_name) || bg_str_icontains(line_name, dev_name))) {
+          *out = cur;
+          return true;
+        }
+      }
+    }
+    if (!nl) break;
+    p = nl + 1;
+  }
+
+  if (first_valid.valid) {
+    *out = first_valid;
+    return true;
+  }
+  return false;
+}
 
 /* ==================== SAFE JSON PARSER FOR .bg-launch.json ==================== */
 
@@ -110,7 +297,6 @@ static const char *bg_json_read_string(const char *p, char *out, size_t cap) {
         case 'r': c = ' '; break;
         case 't': c = ' '; break;
         case 'u':
-          /* Skip 4 hex digits if present */
           for (int i = 0; i < 4 && *p; i++) p++;
           c = '?';
           break;
@@ -388,9 +574,12 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
   if (!st || act == BG_ACT_NONE) return BG_RES_NONE;
   unsigned int res = BG_RES_NONE;
 
-  if (act == BG_ACT_SELECT_R2) {
+  if (act == BG_ACT_L3_R3) {
     if (!st->overlay_open) {
       st->overlay_open = true;
+      if (st->selected_row < 0 || st->selected_row >= KP_OV_ROW_COUNT) {
+        st->selected_row = 0;
+      }
       res |= BG_RES_OPEN_OVERLAY | BG_RES_REDRAW;
       if (!st->started && st->track_count > 0) {
         st->started = true;
@@ -404,41 +593,35 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
     return res;
   }
 
-  if (act == BG_ACT_SELECT_L2) {
-    if (st->track_count > 0) {
-      st->current_index = (st->current_index + st->track_count - 1) % st->track_count;
-      st->started = true;
-      st->paused = false;
-      res |= BG_RES_TRACK_CHANGED;
-      if (st->overlay_open) res |= BG_RES_REDRAW;
-    }
-    return res;
-  }
-
+  /* While Trainer is closed, ignore all normal gameplay controls */
   if (!st->overlay_open) {
-    /* Mini-Player is closed: ignore normal game buttons R2, L2, B, A, UP, DOWN */
     return BG_RES_NONE;
   }
 
   switch (act) {
-    case BG_ACT_R2:
-      if (st->track_count > 0) {
-        st->current_index = (st->current_index + 1) % st->track_count;
-        st->started = true;
-        st->paused = false;
-        res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
-      }
+    case BG_ACT_NAV_UP:
+      st->selected_row = (st->selected_row + KP_OV_ROW_COUNT - 1) % KP_OV_ROW_COUNT;
+      res |= BG_RES_REDRAW;
       break;
-    case BG_ACT_L2:
-      if (st->track_count > 0) {
-        st->current_index = (st->current_index + st->track_count - 1) % st->track_count;
-        st->started = true;
-        st->paused = false;
-        res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
-      }
+    case BG_ACT_NAV_DOWN:
+      st->selected_row = (st->selected_row + 1) % KP_OV_ROW_COUNT;
+      res |= BG_RES_REDRAW;
       break;
-    case BG_ACT_TOGGLE_PAUSE:
-      if (st->track_count > 0) {
+    case BG_ACT_NAV_LEFT:
+      if (st->selected_row == 3) {
+        if (st->volume_pct > 10) {
+          st->volume_pct -= 10;
+          if (st->volume_pct < 10) st->volume_pct = 10;
+          res |= BG_RES_VOLUME_CHANGED | BG_RES_REDRAW;
+        }
+      } else if (st->selected_row == 1 || st->selected_row == 2) {
+        if (st->track_count > 0) {
+          st->current_index = (st->current_index + st->track_count - 1) % st->track_count;
+          st->started = true;
+          st->paused = false;
+          res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
+        }
+      } else if (st->selected_row == 0 && st->track_count > 0) {
         if (!st->started) {
           st->started = true;
           st->paused = false;
@@ -449,18 +632,82 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
         }
       }
       break;
-    case BG_ACT_VOL_UP:
-      if (st->volume_pct < 100) {
-        st->volume_pct += 10;
-        if (st->volume_pct > 100) st->volume_pct = 100;
-        res |= BG_RES_VOLUME_CHANGED | BG_RES_REDRAW;
+    case BG_ACT_NAV_RIGHT:
+      if (st->selected_row == 3) {
+        if (st->volume_pct < 100) {
+          st->volume_pct += 10;
+          if (st->volume_pct > 100) st->volume_pct = 100;
+          res |= BG_RES_VOLUME_CHANGED | BG_RES_REDRAW;
+        }
+      } else if (st->selected_row == 1 || st->selected_row == 2) {
+        if (st->track_count > 0) {
+          st->current_index = (st->current_index + 1) % st->track_count;
+          st->started = true;
+          st->paused = false;
+          res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
+        }
+      } else if (st->selected_row == 0 && st->track_count > 0) {
+        if (!st->started) {
+          st->started = true;
+          st->paused = false;
+          res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
+        } else {
+          st->paused = !st->paused;
+          res |= BG_RES_PAUSE_TOGGLED | BG_RES_REDRAW;
+        }
       }
       break;
-    case BG_ACT_VOL_DOWN:
-      if (st->volume_pct > 10) {
-        st->volume_pct -= 10;
-        if (st->volume_pct < 10) st->volume_pct = 10;
+    case BG_ACT_CONFIRM:
+      if (st->selected_row == 0) {
+        if (st->track_count > 0) {
+          if (!st->started) {
+            st->started = true;
+            st->paused = false;
+            res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
+          } else {
+            st->paused = !st->paused;
+            res |= BG_RES_PAUSE_TOGGLED | BG_RES_REDRAW;
+          }
+        }
+      } else if (st->selected_row == 1) {
+        if (st->track_count > 0) {
+          st->current_index = (st->current_index + 1) % st->track_count;
+          st->started = true;
+          st->paused = false;
+          res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
+        }
+      } else if (st->selected_row == 2) {
+        if (st->track_count > 0) {
+          st->current_index = (st->current_index + st->track_count - 1) % st->track_count;
+          st->started = true;
+          st->paused = false;
+          res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
+        }
+      } else if (st->selected_row == 3) {
+        st->volume_pct = (st->volume_pct >= 100) ? 20 : (st->volume_pct + 10);
+        if (st->volume_pct > 100) st->volume_pct = 100;
         res |= BG_RES_VOLUME_CHANGED | BG_RES_REDRAW;
+      } else if (st->selected_row == 4) {
+        st->overlay_open = false;
+        res |= BG_RES_CLOSE_OVERLAY;
+      }
+      break;
+    case BG_ACT_R2:
+      if (st->track_count > 0) {
+        st->selected_row = 1;
+        st->current_index = (st->current_index + 1) % st->track_count;
+        st->started = true;
+        st->paused = false;
+        res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
+      }
+      break;
+    case BG_ACT_L2:
+      if (st->track_count > 0) {
+        st->selected_row = 2;
+        st->current_index = (st->current_index + st->track_count - 1) % st->track_count;
+        st->started = true;
+        st->paused = false;
+        res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
       }
       break;
     case BG_ACT_CLOSE:
@@ -475,107 +722,56 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
 
 #ifndef KPLAYER_BG_MINIPLAYER_TEST_ONLY
 
-/* ==================== BUILT-IN 5x7 BITMAP FONT FOR /dev/fb0 ==================== */
+/* ==================== SHARED MEMORY OVERLAY BRIDGE ==================== */
 
-static void bg_font_rows(unsigned char ch, uint8_t rows[7]) {
-  static const struct {
-    char c;
-    uint8_t r[7];
-  } tbl[] = {
-      {' ', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
-      {'!', {0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04}},
-      {'%', {0x19, 0x19, 0x02, 0x04, 0x08, 0x13, 0x13}},
-      {'(', {0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02}},
-      {')', {0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08}},
-      {'+', {0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00}},
-      {'-', {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00}},
-      {'.', {0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06}},
-      {'/', {0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10}},
-      {':', {0x00, 0x06, 0x06, 0x00, 0x06, 0x06, 0x00}},
-      {'[', {0x0E, 0x08, 0x08, 0x08, 0x08, 0x08, 0x0E}},
-      {']', {0x0E, 0x02, 0x02, 0x02, 0x02, 0x02, 0x0E}},
-      {'|', {0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
-      {'^', {0x04, 0x0A, 0x11, 0x00, 0x00, 0x00, 0x00}},
-      {'v', {0x00, 0x00, 0x00, 0x00, 0x11, 0x0A, 0x04}},
-      {'<', {0x02, 0x04, 0x08, 0x10, 0x08, 0x04, 0x02}},
-      {'>', {0x08, 0x04, 0x02, 0x01, 0x02, 0x04, 0x08}},
-      {'_', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F}},
-      {'0', {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}},
-      {'1', {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E}},
-      {'2', {0x0E, 0x11, 0x01, 0x06, 0x08, 0x10, 0x1F}},
-      {'3', {0x1F, 0x02, 0x04, 0x06, 0x01, 0x11, 0x0E}},
-      {'4', {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}},
-      {'5', {0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E}},
-      {'6', {0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E}},
-      {'7', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08}},
-      {'8', {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}},
-      {'9', {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C}},
-      {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
-      {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
-      {'C', {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}},
-      {'D', {0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C}},
-      {'E', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}},
-      {'F', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10}},
-      {'G', {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F}},
-      {'H', {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
-      {'I', {0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E}},
-      {'J', {0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C}},
-      {'K', {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}},
-      {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}},
-      {'M', {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}},
-      {'N', {0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11}},
-      {'O', {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}},
-      {'P', {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}},
-      {'Q', {0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D}},
-      {'R', {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}},
-      {'S', {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E}},
-      {'T', {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
-      {'U', {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}},
-      {'V', {0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04}},
-      {'W', {0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11}},
-      {'X', {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}},
-      {'Y', {0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}},
-      {'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}},
-  };
-  char up = (ch >= 'a' && ch <= 'z' && ch != 'v') ? (char)(ch - 32) : (char)ch;
-  for (size_t i = 0; i < sizeof(tbl) / sizeof(tbl[0]); i++) {
-    if (tbl[i].c == up) {
-      memcpy(rows, tbl[i].r, 7);
-      return;
-    }
-  }
-  static const uint8_t fallback[7] = {0x0E, 0x11, 0x02, 0x04, 0x04, 0x00, 0x04};
-  memcpy(rows, fallback, 7);
+static void bg_mp_fill_shared(KpOverlayShared *dst, const BgMpState *st) {
+  if (!dst || !st) return;
+  const BgMpTrack *cur = (st->track_count > 0) ? &st->tracks[st->current_index] : NULL;
+  dst->overlay_open = st->overlay_open ? 1u : 0u;
+  dst->paused = st->paused ? 1u : 0u;
+  dst->is_radio = (cur && cur->is_radio) ? 1u : 0u;
+  dst->track_index = (uint32_t)(st->current_index >= 0 ? st->current_index : 0);
+  dst->track_count = (uint32_t)(st->track_count >= 0 ? st->track_count : 0);
+  dst->volume_pct = (uint32_t)st->volume_pct;
+  dst->selected_row = (uint32_t)(st->selected_row >= 0 && st->selected_row < KP_OV_ROW_COUNT
+                                     ? st->selected_row
+                                     : 0);
+  dst->accent_r = st->accent_r;
+  dst->accent_g = st->accent_g;
+  dst->accent_b = st->accent_b;
+  snprintf(dst->title, sizeof(dst->title), "%.159s",
+           cur ? cur->title : "Nenhuma faixa disponivel");
+  __atomic_add_fetch(&dst->seq, 1u, __ATOMIC_RELEASE);
 }
 
-static void bg_utf8_to_ascii(const char *src, char *dst, size_t cap) {
-  if (!dst || cap == 0) return;
-  size_t out = 0;
-  for (size_t i = 0; src && src[i] && out + 1 < cap; i++) {
-    unsigned char c = (unsigned char)src[i];
-    if (c < 0x80) {
-      dst[out++] = (c >= 32) ? (char)c : ' ';
-    } else if (c == 0xC3 && src[i + 1]) {
-      unsigned char n = (unsigned char)src[++i];
-      char mapped = ' ';
-      if ((n >= 0x80 && n <= 0x85) || (n >= 0xA0 && n <= 0xA5)) mapped = 'A';
-      else if (n == 0x87 || n == 0xA7) mapped = 'C';
-      else if ((n >= 0x88 && n <= 0x8B) || (n >= 0xA8 && n <= 0xAB)) mapped = 'E';
-      else if ((n >= 0x8C && n <= 0x8F) || (n >= 0xAC && n <= 0xAF)) mapped = 'I';
-      else if (n == 0x91 || n == 0xB1) mapped = 'N';
-      else if ((n >= 0x92 && n <= 0x96) || (n >= 0xB2 && n <= 0xB6)) mapped = 'O';
-      else if ((n >= 0x99 && n <= 0x9C) || (n >= 0xB9 && n <= 0xBC)) mapped = 'U';
-      else if (n == 0x9D || n == 0xBD || n == 0xBF) mapped = 'Y';
-      dst[out++] = mapped;
-    } else if (c == 0xE2 && src[i + 1] && src[i + 2]) {
-      i += 2;
-      dst[out++] = '-';
-    }
+static KpOverlayShared *bg_mp_shm_open(const BgMpState *st) {
+  const char *path = getenv("KPLAYER_OVERLAY_SHM");
+  if (!path || !path[0]) return NULL;
+  int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+  if (fd < 0) return NULL;
+  if (ftruncate(fd, (off_t)sizeof(KpOverlayShared)) != 0) {
+    close(fd);
+    return NULL;
   }
-  dst[out] = 0;
+  void *m = mmap(NULL, sizeof(KpOverlayShared), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  close(fd);
+  if (m == MAP_FAILED) return NULL;
+  KpOverlayShared *shm = (KpOverlayShared *)m;
+  memset(shm, 0, sizeof(*shm));
+  shm->magic = KP_OV_MAGIC;
+  shm->version = KP_OV_VERSION;
+  bg_mp_fill_shared(shm, st);
+  return shm;
 }
 
-/* ==================== DIRECT /dev/fb0 OVERLAY RENDERER ==================== */
+static void bg_mp_shm_close(KpOverlayShared *shm) {
+  if (!shm) return;
+  shm->overlay_open = 0;
+  __atomic_add_fetch(&shm->seq, 1u, __ATOMIC_RELEASE);
+  munmap(shm, sizeof(KpOverlayShared));
+}
+
+/* ==================== /dev/fb0 FALLBACK RENDERER ==================== */
 
 typedef struct {
   int fd;
@@ -603,9 +799,7 @@ static void bg_fb_put_pixel(BgFbOverlay *fb, int x, int y, uint8_t r, uint8_t g,
     uint32_t px = ((uint32_t)r << fb->vinfo.red.offset) |
                   ((uint32_t)g << fb->vinfo.green.offset) |
                   ((uint32_t)b << fb->vinfo.blue.offset);
-    if (fb->vinfo.transp.length > 0) {
-      px |= (0xFFu << fb->vinfo.transp.offset);
-    }
+    if (fb->vinfo.transp.length > 0) px |= (0xFFu << fb->vinfo.transp.offset);
     memcpy(fb->map + off, &px, 4);
   } else if (fb->vinfo.bits_per_pixel == 16) {
     uint16_t px = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
@@ -613,39 +807,8 @@ static void bg_fb_put_pixel(BgFbOverlay *fb, int x, int y, uint8_t r, uint8_t g,
   }
 }
 
-static void bg_fb_fill_rect(BgFbOverlay *fb, int x, int y, int w, int h,
-                            uint8_t r, uint8_t g, uint8_t b) {
-  for (int yy = y; yy < y + h; yy++) {
-    for (int xx = x; xx < x + w; xx++) {
-      bg_fb_put_pixel(fb, xx, yy, r, g, b);
-    }
-  }
-}
-
-static void bg_fb_draw_text(BgFbOverlay *fb, int x, int y, int scale, int max_w,
-                            const char *utf8_text, uint8_t r, uint8_t g, uint8_t b) {
-  char asc[192];
-  bg_utf8_to_ascii(utf8_text, asc, sizeof(asc));
-  int step = 6 * scale;
-  int cx = x;
-  for (size_t i = 0; asc[i]; i++) {
-    if (max_w > 0 && (cx - x) + step > max_w) break;
-    uint8_t rows[7];
-    bg_font_rows((unsigned char)asc[i], rows);
-    for (int ry = 0; ry < 7; ry++) {
-      for (int rx = 0; rx < 5; rx++) {
-        if (rows[ry] & (1u << (4 - rx))) {
-          bg_fb_fill_rect(fb, cx + rx * scale, y + ry * scale, scale, scale, r, g, b);
-        }
-      }
-    }
-    cx += step;
-  }
-}
-
 static bool bg_fb_open(BgFbOverlay *fb) {
   memset(fb, 0, sizeof(*fb));
-  fb->fd = -1;
   fb->fd = open("/dev/fb0", O_RDWR | O_CLOEXEC);
   if (fb->fd < 0) return false;
   if (ioctl(fb->fd, FBIOGET_FSCREENINFO, &fb->finfo) < 0 ||
@@ -673,14 +836,21 @@ static bool bg_fb_open(BgFbOverlay *fb) {
   }
   int sw = (int)fb->vinfo.xres;
   int sh = (int)fb->vinfo.yres;
-  fb->box_w = sw - 32;
-  if (fb->box_w > 580) fb->box_w = 580;
-  if (fb->box_w < 220) fb->box_w = sw - 8;
-  fb->box_h = 122;
-  if (fb->box_h > sh - 16) fb->box_h = sh - 16;
-  fb->box_x = (sw - fb->box_w) / 2;
-  fb->box_y = sh - fb->box_h - 14;
-  if (fb->box_y < 4) fb->box_y = 4;
+  int margin_x = sw >= 480 ? 16 : 8;
+  int margin_y = sh >= 360 ? 16 : 8;
+  fb->box_w = (sw * 46) / 100;
+  if (fb->box_w > 304) fb->box_w = 304;
+  if (fb->box_w < 200) fb->box_w = sw - margin_x * 2;
+  fb->box_h = (fb->box_w * KP_OV_CARD_H) / KP_OV_CARD_W;
+  int max_h = (sh * 64) / 100;
+  if (fb->box_h > max_h) {
+    fb->box_h = max_h;
+    fb->box_w = (fb->box_h * KP_OV_CARD_W) / KP_OV_CARD_H;
+  }
+  if (fb->box_w > sw - margin_x * 2) fb->box_w = sw - margin_x * 2;
+  if (fb->box_h > sh - margin_y * 2) fb->box_h = sh - margin_y * 2;
+  fb->box_x = margin_x;
+  fb->box_y = margin_y;
 
   size_t bpp = fb->vinfo.bits_per_pixel / 8;
   fb->saved_row_bytes = (size_t)fb->box_w * bpp;
@@ -701,52 +871,24 @@ static bool bg_fb_open(BgFbOverlay *fb) {
 
 static void bg_fb_render(BgFbOverlay *fb, const BgMpState *st) {
   if (!fb || !fb->map || !st) return;
-  int x = fb->box_x;
-  int y = fb->box_y;
-  int w = fb->box_w;
-  int h = fb->box_h;
-  uint8_t ar = st->accent_r, ag = st->accent_g, ab = st->accent_b;
-
-  /* Dark opaque card with theme accent border */
-  bg_fb_fill_rect(fb, x, y, w, h, 14, 17, 23);
-  bg_fb_fill_rect(fb, x, y, w, 4, ar, ag, ab);
-  bg_fb_fill_rect(fb, x, y + h - 2, w, 2, ar, ag, ab);
-  bg_fb_fill_rect(fb, x, y, 2, h, ar, ag, ab);
-  bg_fb_fill_rect(fb, x + w - 2, y, 2, h, ar, ag, ab);
-
-  /* Header row */
-  const BgMpTrack *cur = (st->track_count > 0) ? &st->tracks[st->current_index] : NULL;
-  char header[128];
-  snprintf(header, sizeof(header), "K PLAYER MINI  %s  %s %d/%d",
-           st->paused ? "[PAUSADO]" : "[TOCANDO]",
-           (cur && cur->is_radio) ? "RADIO" : "FAIXA",
-           st->track_count > 0 ? st->current_index + 1 : 0,
-           st->track_count);
-  int title_scale = (w >= 460) ? 2 : 1;
-  bg_fb_draw_text(fb, x + 14, y + 12, 1, w - 28, header, ar, ag, ab);
-
-  /* Track / Station title */
-  const char *tname = cur ? cur->title : "Nenhuma faixa disponivel";
-  bg_fb_draw_text(fb, x + 14, y + 30, title_scale, w - 28, tname, 245, 248, 255);
-
-  /* Volume bar */
-  int bar_y = y + (title_scale == 2 ? 56 : 48);
-  int bar_x = x + 14;
-  int bar_w = w - 120;
-  if (bar_w < 80) bar_w = 80;
-  bg_fb_fill_rect(fb, bar_x, bar_y + 2, bar_w, 8, 38, 44, 58);
-  int fill_w = (bar_w * st->volume_pct) / 100;
-  if (fill_w > 0) bg_fb_fill_rect(fb, bar_x, bar_y + 2, fill_w, 8, ar, ag, ab);
-  char vol_txt[32];
-  snprintf(vol_txt, sizeof(vol_txt), "VOL %d%%", st->volume_pct);
-  bg_fb_draw_text(fb, bar_x + bar_w + 10, bar_y + 2, 1, 96, vol_txt, 220, 228, 240);
-
-  /* Divider & bottom control legend */
-  int div_y = y + h - 34;
-  bg_fb_fill_rect(fb, x + 12, div_y, w - 24, 1, 45, 52, 68);
-  bg_fb_draw_text(fb, x + 14, div_y + 10, 1, w - 28,
-                  "L2 VOLTAR  R2 PROXIMA  B PAUSA  ^v VOL  A FECHAR",
-                  185, 196, 214);
+  uint32_t *rgba = (uint32_t *)malloc((size_t)KP_OV_CARD_W * KP_OV_CARD_H * sizeof(uint32_t));
+  if (!rgba) return;
+  KpOverlayShared tmp;
+  memset(&tmp, 0, sizeof(tmp));
+  bg_mp_fill_shared(&tmp, st);
+  kp_ov_render_rgba(&tmp, rgba);
+  for (int yy = 0; yy < fb->box_h; yy++) {
+    int sy = (yy * KP_OV_CARD_H) / fb->box_h;
+    for (int xx = 0; xx < fb->box_w; xx++) {
+      int sx = (xx * KP_OV_CARD_W) / fb->box_w;
+      uint32_t px = rgba[(size_t)sy * KP_OV_CARD_W + (size_t)sx];
+      bg_fb_put_pixel(fb, fb->box_x + xx, fb->box_y + yy,
+                      (uint8_t)(px & 0xFFu),
+                      (uint8_t)((px >> 8) & 0xFFu),
+                      (uint8_t)((px >> 16) & 0xFFu));
+    }
+  }
+  free(rgba);
 }
 
 static void bg_fb_close(BgFbOverlay *fb) {
@@ -776,27 +918,187 @@ static void bg_fb_close(BgFbOverlay *fb) {
   }
 }
 
-/* ==================== LINUX EVDEV GAMEPAD LISTENER ==================== */
+/* ==================== EVIOCGKEY / EVIOCGABS R36S INPUT POLLING ==================== */
 
 typedef struct {
-  int fds[BG_MP_MAX_EVDEV];
+  int fd;
+  int event_idx;
+  bool is_gamepad;
+  char name[96];
+  int l3_code;
+  int r3_code;
+  int trainer_key_code;
+  int start_code;
+  int l2_code;
+  int r2_code;
+  int l2_axis;
+  int r2_axis;
+  int l2_axis_thresh;
+  int r2_axis_thresh;
+  int confirm_code;
+  int close_code;
+  int up_code;
+  int down_code;
+  int left_code;
+  int right_code;
+  bool has_hat0x;
+  bool has_hat0y;
+} BgEvdevDev;
+
+typedef struct {
+  BgEvdevDev devs[BG_MP_MAX_EVDEV];
   int count;
   bool grabbed;
-  bool select_held;
-  bool r2_held;
-  bool l2_held;
-  int hat_y;
+  bool prev_l3_r3;
+  bool prev_r2;
+  bool prev_l2;
+  bool prev_confirm;
+  bool prev_close;
+  bool prev_up;
+  bool prev_down;
+  bool prev_left;
+  bool prev_right;
+  int64_t last_action_ms;
+  int64_t last_scan_ms;
 } BgEvdevSet;
 
-static bool bg_evdev_has_bit(const unsigned long *bits, int bit) {
-  return (bits[bit / (int)(8 * sizeof(unsigned long))] &
-          (1UL << (bit % (int)(8 * sizeof(unsigned long))))) != 0;
+static bool bg_evdev_test_bit(const unsigned long *bits, int bit) {
+  if (bit < 0) return false;
+  const int bpl = (int)(8 * sizeof(unsigned long));
+  return (bits[bit / bpl] & (1UL << (bit % bpl))) != 0;
 }
 
-static void bg_evdev_open_all(BgEvdevSet *ev) {
-  memset(ev, 0, sizeof(*ev));
-  for (int i = 0; i < BG_MP_MAX_EVDEV; i++) ev->fds[i] = -1;
+static bool bg_evdev_has_event_idx(const BgEvdevSet *ev, int idx) {
+  for (int i = 0; i < ev->count; i++) {
+    if (ev->devs[i].fd >= 0 && ev->devs[i].event_idx == idx) return true;
+  }
+  return false;
+}
+
+static void bg_evdev_configure_device(BgEvdevDev *d) {
+  d->l3_code = -1;
+  d->r3_code = -1;
+  d->trainer_key_code = -1;
+  d->start_code = -1;
+  d->l2_code = -1;
+  d->r2_code = -1;
+  d->l2_axis = -1;
+  d->r2_axis = -1;
+  d->l2_axis_thresh = 64;
+  d->r2_axis_thresh = 64;
+  d->confirm_code = -1;
+  d->close_code = -1;
+  d->up_code = -1;
+  d->down_code = -1;
+  d->left_code = -1;
+  d->right_code = -1;
+  d->has_hat0x = false;
+  d->has_hat0y = false;
+
+  unsigned long keybits[(KEY_MAX / (8 * sizeof(unsigned long))) + 2];
+  unsigned long absbits[(ABS_MAX / (8 * sizeof(unsigned long))) + 2];
+  memset(keybits, 0, sizeof(keybits));
+  memset(absbits, 0, sizeof(absbits));
+  (void)ioctl(d->fd, EVIOCGBIT(EV_KEY, sizeof(keybits)), keybits);
+  (void)ioctl(d->fd, EVIOCGBIT(EV_ABS, sizeof(absbits)), absbits);
+
+  /* Build exact SDL2 Linux button & axis index tables */
+  int btn_codes[BG_MP_MAX_CODES];
+  int nbtns = 0;
+  for (int c = BTN_JOYSTICK; c < KEY_MAX && nbtns < BG_MP_MAX_CODES; c++) {
+    if (bg_evdev_test_bit(keybits, c)) btn_codes[nbtns++] = c;
+  }
+  for (int c = BTN_MISC; c < BTN_JOYSTICK && nbtns < BG_MP_MAX_CODES; c++) {
+    if (bg_evdev_test_bit(keybits, c)) btn_codes[nbtns++] = c;
+  }
+
+  int abs_codes[BG_MP_MAX_CODES];
+  int nabs = 0;
+  for (int a = 0; a < ABS_MAX && nabs < BG_MP_MAX_CODES; a++) {
+    if (a >= ABS_HAT0X && a <= ABS_HAT3Y) continue;
+    if (bg_evdev_test_bit(absbits, a)) abs_codes[nabs++] = a;
+  }
+
+  d->has_hat0x = bg_evdev_test_bit(absbits, ABS_HAT0X);
+  d->has_hat0y = bg_evdev_test_bit(absbits, ABS_HAT0Y);
+  d->is_gamepad = (nbtns >= 6);
+
+  if (d->is_gamepad) {
+    const char *sdl_cfg = getenv("SDL_GAMECONTROLLERCONFIG");
+    BgSdlMap sm;
+    if (bg_mp_parse_sdl_mapping(sdl_cfg, d->name, &sm) && sm.valid) {
+      if (sm.l3_btn >= 0 && sm.l3_btn < nbtns) d->l3_code = btn_codes[sm.l3_btn];
+      if (sm.r3_btn >= 0 && sm.r3_btn < nbtns) d->r3_code = btn_codes[sm.r3_btn];
+      if (sm.start_btn >= 0 && sm.start_btn < nbtns) d->start_code = btn_codes[sm.start_btn];
+      if (sm.l2_btn >= 0 && sm.l2_btn < nbtns) d->l2_code = btn_codes[sm.l2_btn];
+      if (sm.r2_btn >= 0 && sm.r2_btn < nbtns) d->r2_code = btn_codes[sm.r2_btn];
+      if (sm.l2_axis >= 0 && sm.l2_axis < nabs) d->l2_axis = abs_codes[sm.l2_axis];
+      if (sm.r2_axis >= 0 && sm.r2_axis < nabs) d->r2_axis = abs_codes[sm.r2_axis];
+      if (sm.a_btn >= 0 && sm.a_btn < nbtns) d->confirm_code = btn_codes[sm.a_btn];
+      if (sm.b_btn >= 0 && sm.b_btn < nbtns) d->close_code = btn_codes[sm.b_btn];
+      if (sm.dpup_btn >= 0 && sm.dpup_btn < nbtns) d->up_code = btn_codes[sm.dpup_btn];
+      if (sm.dpdown_btn >= 0 && sm.dpdown_btn < nbtns) d->down_code = btn_codes[sm.dpdown_btn];
+      if (sm.dpleft_btn >= 0 && sm.dpleft_btn < nbtns) d->left_code = btn_codes[sm.dpleft_btn];
+      if (sm.dpright_btn >= 0 && sm.dpright_btn < nbtns) d->right_code = btn_codes[sm.dpright_btn];
+    }
+
+    /* Hardware-safe fallbacks for R36S / standard Linux gamepads */
+    if (d->l3_code < 0) {
+      if (bg_evdev_test_bit(keybits, BTN_THUMBL)) d->l3_code = BTN_THUMBL;
+      else if (bg_evdev_test_bit(keybits, BTN_TRIGGER_HAPPY3)) d->l3_code = BTN_TRIGGER_HAPPY3;
+    }
+    if (d->r3_code < 0) {
+      if (bg_evdev_test_bit(keybits, BTN_THUMBR)) d->r3_code = BTN_THUMBR;
+      else if (bg_evdev_test_bit(keybits, BTN_TRIGGER_HAPPY4)) d->r3_code = BTN_TRIGGER_HAPPY4;
+    }
+    if (d->start_code < 0) {
+      if (bg_evdev_test_bit(keybits, BTN_START)) d->start_code = BTN_START;
+      else if (bg_evdev_test_bit(keybits, BTN_TRIGGER_HAPPY2)) d->start_code = BTN_TRIGGER_HAPPY2;
+    }
+    if (d->l2_code < 0 && bg_evdev_test_bit(keybits, BTN_TL2)) d->l2_code = BTN_TL2;
+    if (d->r2_code < 0 && bg_evdev_test_bit(keybits, BTN_TR2)) d->r2_code = BTN_TR2;
+    if (d->l2_code < 0 && d->l2_axis < 0 && bg_evdev_test_bit(absbits, ABS_Z)) d->l2_axis = ABS_Z;
+    if (d->r2_code < 0 && d->r2_axis < 0 && bg_evdev_test_bit(absbits, ABS_RZ)) d->r2_axis = ABS_RZ;
+    if (d->confirm_code < 0 && bg_evdev_test_bit(keybits, BTN_SOUTH)) d->confirm_code = BTN_SOUTH;
+    if (d->close_code < 0 && bg_evdev_test_bit(keybits, BTN_EAST)) d->close_code = BTN_EAST;
+    if (d->up_code < 0 && bg_evdev_test_bit(keybits, BTN_DPAD_UP)) d->up_code = BTN_DPAD_UP;
+    if (d->down_code < 0 && bg_evdev_test_bit(keybits, BTN_DPAD_DOWN)) d->down_code = BTN_DPAD_DOWN;
+    if (d->left_code < 0 && bg_evdev_test_bit(keybits, BTN_DPAD_LEFT)) d->left_code = BTN_DPAD_LEFT;
+    if (d->right_code < 0 && bg_evdev_test_bit(keybits, BTN_DPAD_RIGHT)) d->right_code = BTN_DPAD_RIGHT;
+
+    struct input_absinfo ai;
+    if (d->l2_axis >= 0 && ioctl(d->fd, EVIOCGABS(d->l2_axis), &ai) == 0) {
+      d->l2_axis_thresh = ai.minimum + ((ai.maximum - ai.minimum) / 2);
+    }
+    if (d->r2_axis >= 0 && ioctl(d->fd, EVIOCGABS(d->r2_axis), &ai) == 0) {
+      d->r2_axis_thresh = ai.minimum + ((ai.maximum - ai.minimum) / 2);
+    }
+
+    fprintf(stderr,
+            "bg_miniplayer: gamepad event%d '%s' (btns=%d, l3=%d, r3=%d, l2=%d/a%d, r2=%d/a%d, ok=%d, close=%d, dpad=%d/%d/%d/%d, hat=%d/%d)\n",
+            d->event_idx, d->name, nbtns, d->l3_code, d->r3_code,
+            d->l2_code, d->l2_axis, d->r2_code, d->r2_axis,
+            d->confirm_code, d->close_code, d->up_code, d->down_code,
+            d->left_code, d->right_code, d->has_hat0x ? 1 : 0, d->has_hat0y ? 1 : 0);
+  } else {
+    /* Keyboard / virtual uinput keyboard fallback */
+    d->trainer_key_code = KEY_F8;
+    d->start_code = KEY_TAB;
+    d->l2_code = KEY_PAGEUP;
+    d->r2_code = KEY_PAGEDOWN;
+    d->confirm_code = KEY_ENTER;
+    d->close_code = KEY_BACKSPACE;
+    d->up_code = KEY_UP;
+    d->down_code = KEY_DOWN;
+    d->left_code = KEY_LEFT;
+    d->right_code = KEY_RIGHT;
+  }
+}
+
+static void bg_evdev_scan_devices(BgEvdevSet *ev) {
+  if (!ev) return;
   for (int idx = 0; idx < 24 && ev->count < BG_MP_MAX_EVDEV; idx++) {
+    if (bg_evdev_has_event_idx(ev, idx)) continue;
     char path[64];
     snprintf(path, sizeof(path), "/dev/input/event%d", idx);
     int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
@@ -804,28 +1106,42 @@ static void bg_evdev_open_all(BgEvdevSet *ev) {
     unsigned long evbits[4];
     memset(evbits, 0, sizeof(evbits));
     if (ioctl(fd, EVIOCGBIT(0, sizeof(evbits)), evbits) < 0 ||
-        !bg_evdev_has_bit(evbits, EV_KEY)) {
+        !bg_evdev_test_bit(evbits, EV_KEY)) {
       close(fd);
       continue;
     }
-    /* Skip devices that don't expose gamepad or keyboard keys */
     char name[96] = "";
     if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) >= 0) {
       if (strstr(name, "Power Button") || strstr(name, "pwrkey") ||
-          strstr(name, "rk805")) {
+          strstr(name, "rk805") || strstr(name, "Headset")) {
         close(fd);
         continue;
       }
     }
-    ev->fds[ev->count++] = fd;
+    BgEvdevDev *d = &ev->devs[ev->count++];
+    memset(d, 0, sizeof(*d));
+    d->fd = fd;
+    d->event_idx = idx;
+    snprintf(d->name, sizeof(d->name), "%.95s", name[0] ? name : path);
+    bg_evdev_configure_device(d);
+    if (ev->grabbed) {
+      (void)ioctl(d->fd, EVIOCGRAB, 1);
+    }
   }
+  ev->last_scan_ms = kp_ov_now_ms();
+}
+
+static void bg_evdev_open_all(BgEvdevSet *ev) {
+  memset(ev, 0, sizeof(*ev));
+  for (int i = 0; i < BG_MP_MAX_EVDEV; i++) ev->devs[i].fd = -1;
+  bg_evdev_scan_devices(ev);
 }
 
 static void bg_evdev_set_grab(BgEvdevSet *ev, bool grab) {
   if (!ev || ev->grabbed == grab) return;
   for (int i = 0; i < ev->count; i++) {
-    if (ev->fds[i] >= 0) {
-      (void)ioctl(ev->fds[i], EVIOCGRAB, grab ? 1 : 0);
+    if (ev->devs[i].fd >= 0) {
+      (void)ioctl(ev->devs[i].fd, EVIOCGRAB, grab ? 1 : 0);
     }
   }
   ev->grabbed = grab;
@@ -835,104 +1151,135 @@ static void bg_evdev_close_all(BgEvdevSet *ev) {
   if (!ev) return;
   bg_evdev_set_grab(ev, false);
   for (int i = 0; i < ev->count; i++) {
-    if (ev->fds[i] >= 0) {
-      close(ev->fds[i]);
-      ev->fds[i] = -1;
+    if (ev->devs[i].fd >= 0) {
+      close(ev->devs[i].fd);
+      ev->devs[i].fd = -1;
     }
   }
   ev->count = 0;
 }
 
-static bool bg_code_is_select(uint16_t code) {
-  return code == BTN_SELECT || code == BTN_TRIGGER_HAPPY1 || code == KEY_F1;
-}
-static bool bg_code_is_start(uint16_t code) {
-  return code == BTN_START || code == BTN_TRIGGER_HAPPY2 || code == KEY_TAB;
-}
-static bool bg_code_is_r2(uint16_t code) {
-  return code == BTN_TR2 || code == BTN_TRIGGER_HAPPY4 || code == KEY_PAGEDOWN;
-}
-static bool bg_code_is_l2(uint16_t code) {
-  return code == BTN_TL2 || code == BTN_TRIGGER_HAPPY3 || code == KEY_PAGEUP;
-}
-static bool bg_code_is_pause(uint16_t code) {
-  return code == BTN_SOUTH || code == KEY_ENTER || bg_code_is_start(code);
-}
-static bool bg_code_is_close(uint16_t code) {
-  return code == BTN_EAST || code == KEY_BACKSPACE || code == KEY_ESC;
-}
-static bool bg_code_is_up(uint16_t code) {
-  return code == BTN_DPAD_UP || code == KEY_UP;
-}
-static bool bg_code_is_down(uint16_t code) {
-  return code == BTN_DPAD_DOWN || code == KEY_DOWN;
+static bool bg_evdev_key_down(const unsigned long *state, int code) {
+  return code >= 0 && code < KEY_MAX && bg_evdev_test_bit(state, code);
 }
 
 static BgMpAction bg_evdev_poll_action(BgEvdevSet *ev) {
   if (!ev) return BG_ACT_NONE;
-  struct input_event ie;
+  int64_t now = kp_ov_now_ms();
+  if (now - ev->last_scan_ms >= 2000) {
+    bg_evdev_scan_devices(ev);
+  }
+
+  bool cur_l3 = false;
+  bool cur_r3 = false;
+  bool cur_trainer_key = false;
+  bool cur_r2 = false;
+  bool cur_l2 = false;
+  bool cur_confirm = false;
+  bool cur_close = false;
+  bool cur_up = false;
+  bool cur_down = false;
+  bool cur_left = false;
+  bool cur_right = false;
+
+  unsigned long kstate[(KEY_MAX / (8 * sizeof(unsigned long))) + 2];
+  struct input_event drain[16];
+
   for (int i = 0; i < ev->count; i++) {
-    int fd = ev->fds[i];
-    if (fd < 0) continue;
-    while (read(fd, &ie, sizeof(ie)) == (ssize_t)sizeof(ie)) {
-      if (ie.type == EV_KEY) {
-        bool pressed = (ie.value == 1);
-        bool released = (ie.value == 0);
-        if (bg_code_is_select(ie.code)) {
-          if (pressed) {
-            ev->select_held = true;
-            if (ev->r2_held) return BG_ACT_SELECT_R2;
-            if (ev->l2_held) return BG_ACT_SELECT_L2;
-          } else if (released) {
-            ev->select_held = false;
-          }
-        } else if (bg_code_is_r2(ie.code)) {
-          if (pressed) {
-            ev->r2_held = true;
-            return ev->select_held ? BG_ACT_SELECT_R2 : BG_ACT_R2;
-          } else if (released) {
-            ev->r2_held = false;
-          }
-        } else if (bg_code_is_l2(ie.code)) {
-          if (pressed) {
-            ev->l2_held = true;
-            return ev->select_held ? BG_ACT_SELECT_L2 : BG_ACT_L2;
-          } else if (released) {
-            ev->l2_held = false;
-          }
-        } else if (pressed) {
-          if (bg_code_is_pause(ie.code)) return BG_ACT_TOGGLE_PAUSE;
-          if (bg_code_is_close(ie.code)) return BG_ACT_CLOSE;
-          if (bg_code_is_up(ie.code)) return BG_ACT_VOL_UP;
-          if (bg_code_is_down(ie.code)) return BG_ACT_VOL_DOWN;
-        }
-      } else if (ie.type == EV_ABS) {
-        if (ie.code == ABS_HAT0Y) {
-          int prev = ev->hat_y;
-          ev->hat_y = ie.value;
-          if (ie.value < 0 && prev >= 0) return BG_ACT_VOL_UP;
-          if (ie.value > 0 && prev <= 0) return BG_ACT_VOL_DOWN;
-        } else if (ie.code == ABS_RZ) {
-          bool active_r2 = (ie.value > 64);
-          if (active_r2 && !ev->r2_held) {
-            ev->r2_held = true;
-            return ev->select_held ? BG_ACT_SELECT_R2 : BG_ACT_R2;
-          } else if (!active_r2) {
-            ev->r2_held = false;
-          }
-        } else if (ie.code == ABS_Z) {
-          bool active_l2 = (ie.value > 64);
-          if (active_l2 && !ev->l2_held) {
-            ev->l2_held = true;
-            return ev->select_held ? BG_ACT_SELECT_L2 : BG_ACT_L2;
-          } else if (!active_l2) {
-            ev->l2_held = false;
-          }
-        }
+    BgEvdevDev *d = &ev->devs[i];
+    if (d->fd < 0) continue;
+
+    /* Drain any non-grabbed unread events to keep kernel queue empty */
+    while (read(d->fd, drain, sizeof(drain)) > 0) {
+    }
+
+    /* Live kernel hardware key bitmap: bypasses EVIOCGRAB from gptokeyb! */
+    memset(kstate, 0, sizeof(kstate));
+    if (ioctl(d->fd, EVIOCGKEY(sizeof(kstate)), kstate) < 0) {
+      if (errno == ENODEV) {
+        close(d->fd);
+        d->fd = -1;
       }
+      continue;
+    }
+
+    if (bg_evdev_key_down(kstate, d->l3_code)) cur_l3 = true;
+    if (bg_evdev_key_down(kstate, d->r3_code)) cur_r3 = true;
+    if (bg_evdev_key_down(kstate, d->trainer_key_code)) cur_trainer_key = true;
+    if (bg_evdev_key_down(kstate, d->r2_code)) cur_r2 = true;
+    if (bg_evdev_key_down(kstate, d->l2_code)) cur_l2 = true;
+    if (bg_evdev_key_down(kstate, d->confirm_code) ||
+        bg_evdev_key_down(kstate, d->start_code)) {
+      cur_confirm = true;
+    }
+    if (bg_evdev_key_down(kstate, d->close_code) ||
+        (!d->is_gamepad && bg_evdev_key_down(kstate, KEY_ESC))) {
+      cur_close = true;
+    }
+    if (bg_evdev_key_down(kstate, d->up_code)) cur_up = true;
+    if (bg_evdev_key_down(kstate, d->down_code)) cur_down = true;
+    if (bg_evdev_key_down(kstate, d->left_code)) cur_left = true;
+    if (bg_evdev_key_down(kstate, d->right_code)) cur_right = true;
+
+    struct input_absinfo ai;
+    if (d->r2_axis >= 0 && ioctl(d->fd, EVIOCGABS(d->r2_axis), &ai) == 0) {
+      if (ai.value > d->r2_axis_thresh) cur_r2 = true;
+    }
+    if (d->l2_axis >= 0 && ioctl(d->fd, EVIOCGABS(d->l2_axis), &ai) == 0) {
+      if (ai.value > d->l2_axis_thresh) cur_l2 = true;
+    }
+    if (d->has_hat0y && ioctl(d->fd, EVIOCGABS(ABS_HAT0Y), &ai) == 0) {
+      if (ai.value < 0) cur_up = true;
+      else if (ai.value > 0) cur_down = true;
+    }
+    if (d->has_hat0x && ioctl(d->fd, EVIOCGABS(ABS_HAT0X), &ai) == 0) {
+      if (ai.value < 0) cur_left = true;
+      else if (ai.value > 0) cur_right = true;
     }
   }
-  return BG_ACT_NONE;
+
+  bool cur_l3_r3 = (cur_l3 && cur_r3) || cur_trainer_key;
+
+  BgMpAction act = BG_ACT_NONE;
+  if (cur_l3_r3 && !ev->prev_l3_r3) {
+    act = BG_ACT_L3_R3;
+  } else if (cur_r2 && !ev->prev_r2) {
+    act = BG_ACT_R2;
+  } else if (cur_l2 && !ev->prev_l2) {
+    act = BG_ACT_L2;
+  } else if (cur_confirm && !ev->prev_confirm) {
+    act = BG_ACT_CONFIRM;
+  } else if (cur_close && !ev->prev_close) {
+    act = BG_ACT_CLOSE;
+  } else if (cur_up && !ev->prev_up) {
+    act = BG_ACT_NAV_UP;
+  } else if (cur_down && !ev->prev_down) {
+    act = BG_ACT_NAV_DOWN;
+  } else if (cur_left && !ev->prev_left) {
+    act = BG_ACT_NAV_LEFT;
+  } else if (cur_right && !ev->prev_right) {
+    act = BG_ACT_NAV_RIGHT;
+  }
+
+  ev->prev_l3_r3 = cur_l3_r3;
+  ev->prev_r2 = cur_r2;
+  ev->prev_l2 = cur_l2;
+  ev->prev_confirm = cur_confirm;
+  ev->prev_close = cur_close;
+  ev->prev_up = cur_up;
+  ev->prev_down = cur_down;
+  ev->prev_left = cur_left;
+  ev->prev_right = cur_right;
+
+  if (act != BG_ACT_NONE) {
+    if ((act == BG_ACT_L3_R3 || act == BG_ACT_R2 || act == BG_ACT_L2 ||
+         act == BG_ACT_CONFIRM) &&
+        (now - ev->last_action_ms) < BG_MP_DEBOUNCE_MS) {
+      return BG_ACT_NONE;
+    }
+    ev->last_action_ms = now;
+  }
+  return act;
 }
 
 /* ==================== HEADLESS LIBVLC DAEMON ENTRY POINT ==================== */
@@ -987,6 +1334,8 @@ static void bg_mp_play_current(libvlc_instance_t *inst, libvlc_media_player_t *m
     libvlc_media_player_set_time(mp, (libvlc_time_t)seek_ms);
   }
   bg_mp_apply_volume(mp, st->volume_pct);
+  fprintf(stderr, "bg_miniplayer: tocando [%d/%d] %s\n",
+          st->current_index + 1, st->track_count, tr->title);
 }
 
 static libvlc_instance_t *bg_mp_create_vlc(void) {
@@ -1058,40 +1407,63 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
             libvlc_errmsg() ? libvlc_errmsg() : "erro desconhecido");
     return 1;
   }
-  libvlc_set_user_agent(inst, "KPlayer/2.1.4 (R36S Background)", "KPlayer/2.1.4");
+  libvlc_set_user_agent(inst, "KPlayer/2.1.5 (R36S Background)", "KPlayer/2.1.5");
   libvlc_media_player_t *mp = libvlc_media_player_new(inst);
   if (!mp) {
     libvlc_release(inst);
     return 1;
   }
 
+  KpOverlayShared *shm = bg_mp_shm_open(&st);
   BgEvdevSet ev;
   bg_evdev_open_all(&ev);
   BgFbOverlay fb;
   memset(&fb, 0, sizeof(fb));
   fb.fd = -1;
   bool game_stopped = false;
+  bool fb_fallback_pending = false;
+  int64_t fb_open_start_ms = 0;
+  int64_t fb_open_prev_draw_ms = 0;
   int vol_sync_ticks = 0;
 
   if (st.auto_play && st.track_count > 0) {
     st.started = true;
     st.paused = false;
     bg_mp_play_current(inst, mp, &st, st.initial_pos_ms);
-    vol_sync_ticks = 18; /* Re-apply volume after VLC opens audio sink */
+    vol_sync_ticks = 20;
+    if (shm) bg_mp_fill_shared(shm, &st);
   }
 
   fprintf(stderr,
-          "bg_miniplayer: pronto (%d faixa(s), vol=%d%%, evdev=%d, game_pid=%ld, auto=%d)\n",
-          st.track_count, st.volume_pct, ev.count, (long)game_pid, st.auto_play ? 1 : 0);
+          "bg_miniplayer: pronto (%d faixa(s), vol=%d%%, evdev=%d, shm=%d, game_pid=%ld, auto=%d)\n",
+          st.track_count, st.volume_pct, ev.count, shm ? 1 : 0, (long)game_pid, st.auto_play ? 1 : 0);
 
-  struct timespec ts = {0, 25000000L}; /* 25ms loop = 40Hz responsive hotkeys */
+  struct timespec ts = {0, 20000000L}; /* 20ms = 50Hz responsive polling */
   while (bg_mp_running) {
     if (!bg_mp_game_alive(game_pid)) break;
 
     if (vol_sync_ticks > 0) {
       vol_sync_ticks--;
-      if (vol_sync_ticks == 0 || vol_sync_ticks == 9) {
+      if (vol_sync_ticks == 0 || vol_sync_ticks == 10) {
         bg_mp_apply_volume(mp, st.volume_pct);
+      }
+    }
+
+    /* Fallback to /dev/fb0 only if GLES/SDL overlay has not rendered a frame within 260ms */
+    if (st.overlay_open && fb_fallback_pending) {
+      if (shm && shm->last_draw_ms > fb_open_prev_draw_ms) {
+        fb_fallback_pending = false;
+        fprintf(stderr, "bg_miniplayer: overlay GLES/SDL ativo\n");
+      } else if (kp_ov_now_ms() - fb_open_start_ms >= 260) {
+        fb_fallback_pending = false;
+        if (game_pid > 1 && !game_stopped) {
+          bg_mp_signal_game(game_pid, SIGSTOP);
+          game_stopped = true;
+        }
+        if (bg_fb_open(&fb)) {
+          bg_fb_render(&fb, &st);
+          fprintf(stderr, "bg_miniplayer: overlay fallback /dev/fb0 ativo\n");
+        }
       }
     }
 
@@ -1101,43 +1473,57 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
       if (vstate == libvlc_Ended) {
         st.current_index = (st.current_index + 1) % st.track_count;
         bg_mp_play_current(inst, mp, &st, 0);
-        vol_sync_ticks = 14;
-        if (st.overlay_open && fb.map) {
-          bg_fb_render(&fb, &st);
-        }
+        vol_sync_ticks = 16;
+        if (shm) bg_mp_fill_shared(shm, &st);
+        if (st.overlay_open && fb.map) bg_fb_render(&fb, &st);
       }
     }
 
     BgMpAction act = bg_evdev_poll_action(&ev);
     if (act != BG_ACT_NONE) {
       unsigned int flags = bg_mp_handle_action(&st, act);
-      if (flags & BG_RES_OPEN_OVERLAY) {
-        bg_evdev_set_grab(&ev, true);
-        if (game_pid > 1 && !game_stopped) {
-          bg_mp_signal_game(game_pid, SIGSTOP);
-          game_stopped = true;
+      if (flags != BG_RES_NONE) {
+        if (flags & BG_RES_OPEN_OVERLAY) {
+          fprintf(stderr, "bg_miniplayer: abrindo KPlayer Trainer (L3+R3)\n");
+          bg_evdev_set_grab(&ev, true);
+          fb_fallback_pending = true;
+          fb_open_start_ms = kp_ov_now_ms();
+          fb_open_prev_draw_ms = shm ? shm->last_draw_ms : 0;
+          if (!shm) {
+            /* No SHM available -> open /dev/fb0 immediately */
+            fb_fallback_pending = false;
+            if (game_pid > 1 && !game_stopped) {
+              bg_mp_signal_game(game_pid, SIGSTOP);
+              game_stopped = true;
+            }
+            (void)bg_fb_open(&fb);
+          }
         }
-        (void)bg_fb_open(&fb);
-      }
-      if (flags & BG_RES_TRACK_CHANGED) {
-        bg_mp_play_current(inst, mp, &st, 0);
-        vol_sync_ticks = 14;
-      }
-      if (flags & BG_RES_PAUSE_TOGGLED) {
-        libvlc_media_player_set_pause(mp, st.paused ? 1 : 0);
-      }
-      if (flags & BG_RES_VOLUME_CHANGED) {
-        bg_mp_apply_volume(mp, st.volume_pct);
-      }
-      if ((flags & BG_RES_REDRAW) && st.overlay_open && fb.map) {
-        bg_fb_render(&fb, &st);
-      }
-      if (flags & BG_RES_CLOSE_OVERLAY) {
-        bg_fb_close(&fb);
-        bg_evdev_set_grab(&ev, false);
-        if (game_stopped) {
-          bg_mp_signal_game(game_pid, SIGCONT);
-          game_stopped = false;
+        if (flags & BG_RES_TRACK_CHANGED) {
+          bg_mp_play_current(inst, mp, &st, 0);
+          vol_sync_ticks = 16;
+        }
+        if (flags & BG_RES_PAUSE_TOGGLED) {
+          libvlc_media_player_set_pause(mp, st.paused ? 1 : 0);
+        }
+        if (flags & BG_RES_VOLUME_CHANGED) {
+          bg_mp_apply_volume(mp, st.volume_pct);
+        }
+        if (shm) {
+          bg_mp_fill_shared(shm, &st);
+        }
+        if ((flags & BG_RES_REDRAW) && st.overlay_open && fb.map) {
+          bg_fb_render(&fb, &st);
+        }
+        if (flags & BG_RES_CLOSE_OVERLAY) {
+          fprintf(stderr, "bg_miniplayer: fechando Mini-Player\n");
+          fb_fallback_pending = false;
+          bg_fb_close(&fb);
+          bg_evdev_set_grab(&ev, false);
+          if (game_stopped) {
+            bg_mp_signal_game(game_pid, SIGCONT);
+            game_stopped = false;
+          }
         }
       }
     }
@@ -1145,7 +1531,8 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
     nanosleep(&ts, NULL);
   }
 
-  /* Guaranteed safe teardown: never leave game frozen or gamepad grabbed */
+  /* Guaranteed safe teardown: never leave game frozen, overlay stuck, or gamepad grabbed */
+  bg_mp_shm_close(shm);
   bg_fb_close(&fb);
   bg_evdev_close_all(&ev);
   if (game_stopped) {

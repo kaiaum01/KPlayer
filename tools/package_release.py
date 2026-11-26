@@ -39,6 +39,7 @@ if not launcher_src.is_file():
 files = [
     BASE / "ports" / "images" / "KPlayer-image.png",
     runtime / "kplayer",
+    runtime / "libkp_overlay.so",
     runtime / "kplayer.gptk",
     runtime / "cover.png",
     runtime / "scraper" / "kplayer-image.png",

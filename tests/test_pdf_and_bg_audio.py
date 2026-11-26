@@ -196,22 +196,34 @@ class BgAudioPreviewTest(unittest.TestCase):
             self.assertIn('pcm "hw:1,2"', text)
             self.assertIn("type dmix", text)
 
-            # Game env restores KPLAYER_ORIG_LD_LIBRARY_PATH and strips VLC env vars
+            # Game env restores KPLAYER_ORIG_LD_LIBRARY_PATH, strips VLC env vars, and injects libkp_overlay.so
+            fake_overlay = tmp_dir / "libkp_overlay.so"
+            fake_overlay.write_bytes(b"\x7fELF")
+            fake_shm = tmp_dir / "kp-ov-test.shm"
             base_env = {
                 "LD_LIBRARY_PATH": "/roms/ports/kplayer/lib:/usr/local/lib",
                 "KPLAYER_ORIG_LD_LIBRARY_PATH": "/usr/local/lib",
                 "VLC_PLUGIN_PATH": "/usr/lib/aarch64-linux-gnu/vlc/plugins",
                 "VLC_DATA_PATH": "/usr/share/vlc",
+                "LD_PRELOAD": "/usr/lib/existing.so",
             }
-            game_env = bg_audio.build_target_env(base_env, dmix_conf)
+            game_env = bg_audio.build_target_env(
+                base_env, dmix_conf, overlay_so=fake_overlay, overlay_shm=fake_shm
+            )
             self.assertEqual(game_env["LD_LIBRARY_PATH"], "/usr/local/lib")
             self.assertNotIn("VLC_PLUGIN_PATH", game_env)
             self.assertEqual(game_env["ALSA_CONFIG_PATH"], str(dmix_conf))
+            self.assertEqual(game_env["KPLAYER_OVERLAY_SHM"], str(fake_shm))
+            self.assertEqual(game_env["LD_PRELOAD"], f"{fake_overlay}:/usr/lib/existing.so")
 
-            # Audio daemon env keeps KPLAYER_BG_AOUT and ALSA_CONFIG_PATH
-            audio_env = bg_audio.build_audio_env(base_env, "alsa", dmix_conf, tmp_dir)
+            # Audio daemon env keeps KPLAYER_BG_AOUT, ALSA_CONFIG_PATH, KPLAYER_OVERLAY_SHM and drops LD_PRELOAD
+            audio_env = bg_audio.build_audio_env(
+                base_env, "alsa", dmix_conf, tmp_dir, overlay_shm=fake_shm
+            )
             self.assertEqual(audio_env["KPLAYER_BG_AOUT"], "alsa")
             self.assertEqual(audio_env["ALSA_CONFIG_PATH"], str(dmix_conf))
+            self.assertEqual(audio_env["KPLAYER_OVERLAY_SHM"], str(fake_shm))
+            self.assertNotIn("LD_PRELOAD", audio_env)
 
 
 class PdfOpsPdfCraftCompatTest(unittest.TestCase):

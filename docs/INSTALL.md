@@ -1,9 +1,9 @@
-# Instalação / Installation — KPlayer v2.1.4 (R36S / dArkOS)
+# Instalação / Installation — KPlayer v2.1.5 (R36S / dArkOS)
 
 ## Português
 
 ### Instalação nova no R36S (dArkOS / PortMaster)
-1. Baixe **`KPlayer-v2.1.4-R36S.zip`** na aba **Releases** do GitHub. *(Não baixe o ZIP de código-fonte do repositório como instalador.)*
+1. Baixe **`KPlayer-v2.1.5-R36S.zip`** na aba **Releases** do GitHub. *(Não baixe o ZIP de código-fonte do repositório como instalador.)*
 2. Extraia o pacote e copie para `/roms/ports/` (ou `/roms2/ports/` no segundo cartão):
    - **`KPlayer.sh`** (lançador fixo sem espaços, com a versão atualizada internamente a cada update)
    - pasta **`kplayer/`** (binário nativo ARM64, sprites, fontes, scripts auxiliares e artes de alta resolução em `kplayer/scraper/`)
@@ -14,7 +14,7 @@
 Se você já tem o KPlayer instalado (v2.0.3+):
 1. Conecte o R36S ao Wi-Fi e abra o KPlayer.
 2. Pressione **`SELECT` → `[A] Verificar atualizações` → `Baixar e atualizar (sem perder dados)`**.
-3. A barra de carregamento mostra o progresso em tempo real, valida o SHA-256, preserva favoritos, histórico, configurações, listas de IPTV/Rádio e `gamelist.xml`, atualiza o lançador fixo `KPlayer.sh` (limpando sobras antigas `KPlayer v*.sh`) e reinicia o player automaticamente exibindo o resumo de novidades da v2.1.4 uma única vez.
+3. A barra de carregamento mostra o progresso em tempo real, valida o SHA-256, preserva favoritos, histórico, configurações, listas de IPTV/Rádio e `gamelist.xml`, atualiza o lançador fixo `KPlayer.sh` (limpando sobras antigas `KPlayer v*.sh`) e reinicia o player automaticamente exibindo o resumo de novidades da v2.1.5 uma única vez.
 
 ### Pastas de mídia (carregamento rápido sem sobrecarregar o console)
 
@@ -37,7 +37,7 @@ Se você já tem o KPlayer instalado (v2.0.3+):
 
 ## English
 
-1. Download **`KPlayer-v2.1.4-R36S.zip`** from GitHub **Releases**. *(Do not install the source archive.)*
+1. Download **`KPlayer-v2.1.5-R36S.zip`** from GitHub **Releases**. *(Do not install the source archive.)*
 2. Extract and copy **`KPlayer.sh`** and the **`kplayer/`** directory into `/roms/ports/` (or `/roms2/ports/` on SD2).
 3. Open **Ports → KPlayer** on your R36S.
    - High-resolution vinyl-disc scraper artwork (transparent `1200×1200` Cover, transparent `1600×490` Marquee, `900×1200` Boxart, and `1920×1080` Fanart) is stored in `kplayer/scraper/`.

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "version": "2.1.4",
-  "nextVersion": "2.1.5",
+  "version": "2.1.5",
+  "nextVersion": "2.1.6",
   "channel": "stable",
   "platform": "r36s",
-  "releaseTag": "v2.1.4",
-  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.4",
-  "releasedAt": "2026-11-26T17:39:58Z",
+  "releaseTag": "v2.1.5",
+  "releasePageUrl": "https://github.com/kaiaum01/KPlayer/releases/tag/v2.1.5",
+  "releasedAt": "2026-11-26T19:00:00Z",
   "repository": "kaiaum01/KPlayer",
   "branch": "main",
   "updatesDir": "updates",
@@ -25,24 +25,23 @@
     "resume.cfg"
   ],
   "notes": [
-    "Música e Rádio em Segundo Plano + Mini-Player no Jogo (SELECT + R2) (Teste prévio):",
-    "Nova opção Áudio em jogos (Teste prévio) em SELECT → Opções, permitindo ativar ou desativar a qualquer momento (salva em settings.cfg, desativada por padrão).",
-    "Roda diretamente pelo próprio ./kplayer --bg-audio usando a libvlc.so.5 embarcada (sem depender de cvlc/mpv/ffplay), com mixagem compartilhada automática via PulseAudio/PipeWire ou",
-    "Mini-Player no Jogo sob demanda: fica oculto durante a jogatina e só abre ao pressionar SELECT + R2. Com ele aberto: R2 pula para a próxima música/estação, L2 volta para a anterior",
-    "Leitor de PDF Integrado Compatível com PdfCraft R36S (github.com/kaiaum01/PdfReader-R36s):",
-    "Abra arquivos .pdf diretamente no Gerenciador de Arquivos (Arquivos)."
+    "Mini-Player no Jogo estilo GTA Trainer (L3 + R3): painel vertical flutuante no canto superior esquerdo sobre jogos GLES2/SDL2/KMS com banner do tema e cursor branco de alto contraste.",
+    "Novo combo de ativação L3 + R3 (clique nos dois analógicos) imune ao gptokeyb via EVIOCGKEY e SDL_GAMECONTROLLERCONFIG.",
+    "Menu navegável em 5 ações: Tocar/Pausar, Próxima Música/Rádio, Voltar Música/Rádio, Volume (10%–100%) e Fechar Trainer (↑/↓ move, ←/→ volume, B/START ativa, R2/L2 faixa, A ou L3+R3 fecha).",
+    "Demonstração interativa do GTA Trainer direto na Preview Web (botão Demo Trainer L3+R3 e botões virtuais L3/R3).",
+    "Áudio em jogos nativo via ./kplayer --bg-audio (libvlc.so.5) e Leitor de PDF compatível com PdfCraft R36S mantidos."
   ],
   "r36s": {
-    "filename": "KPlayer-v2.1.4-R36S.zip",
-    "path": "updates/v2.1.4/KPlayer-v2.1.4-R36S.zip",
-    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.4/KPlayer-v2.1.4-R36S.zip",
-    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.4/KPlayer-v2.1.4-R36S.zip",
-    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.4/KPlayer-v2.1.4-R36S.zip.sha256",
-    "sha256": "d0b85f9bf4a2ce4c36afe6f9d199bd6d26af6a2e4bca2facfe7c17821734a7aa",
-    "sizeBytes": 18171965
+    "filename": "KPlayer-v2.1.5-R36S.zip",
+    "path": "updates/v2.1.5/KPlayer-v2.1.5-R36S.zip",
+    "url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.5/KPlayer-v2.1.5-R36S.zip",
+    "releaseUrl": "https://github.com/kaiaum01/KPlayer/releases/download/v2.1.5/KPlayer-v2.1.5-R36S.zip",
+    "sha256Url": "https://raw.githubusercontent.com/kaiaum01/KPlayer/main/updates/v2.1.5/KPlayer-v2.1.5-R36S.zip.sha256",
+    "sha256": "",
+    "sizeBytes": 0
   },
   "web": {
-    "version": "2.1.4",
+    "version": "2.1.5",
     "reloadRequired": true
   }
 }
