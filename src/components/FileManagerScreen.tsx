@@ -1147,9 +1147,9 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
       const target = modal.target;
       const runDesc = bgAudioPreview
         ? activeBackgroundAudio
-          ? `Teste prévio ATIVO: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • Aperte L3 + R3 no jogo para abrir o Trainer`
-          : 'Teste prévio ATIVO: aperte L3 + R3 no jogo para abrir o Trainer de Música'
-        : 'Encerra SDL2/libVLC e entrega controle direto ao script/executável (ative Teste prévio em Opções para áudio em jogos)';
+          ? `Áudio em 2º plano ATIVO: ${activeBackgroundAudio.kind === 'radio' ? 'rádio' : 'música'} "${activeBackgroundAudio.title}" • Aperte L3 + R3 no jogo para abrir o Mini-Player`
+          : 'Áudio em 2º plano ATIVO: aperte L3 + R3 no jogo para abrir o Mini-Player KPlayer'
+        : 'Encerra SDL2/libVLC e entrega controle direto ao script/executável (ative Áudio em 2º plano em Opções para ouvir fora do app)';
       const opts: Array<{ id: string; label: string; desc: string; run: () => void }> = [
         {
           id: 'run',
@@ -1453,7 +1453,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                 l3ArmTimerRef.current = window.setTimeout(() => {
                   setL3Armed(false);
                 }, 2200);
-                notify('L3 pressionado — aperte R3 agora para abrir/fechar o Trainer');
+                notify('L3 pressionado — aperte R3 agora para abrir/fechar o Mini-Player');
               }
               return;
             }
@@ -1469,7 +1469,7 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                 l3ArmTimerRef.current = window.setTimeout(() => {
                   setL3Armed(false);
                 }, 2200);
-                notify('R3 pressionado — aperte L3 agora para abrir/fechar o Trainer');
+                notify('R3 pressionado — aperte L3 agora para abrir/fechar o Mini-Player');
               }
               return;
             }
@@ -2801,8 +2801,8 @@ export const FileManagerScreen = forwardRef<FileManagerScreenHandle, FileManager
                     >
                       <span className="truncate font-semibold">
                         {l3Armed
-                          ? 'Combine L3 + R3 agora para abrir o Trainer de Música'
-                          : 'Trainer oculto no jogo • Aperte L3 + R3 (ou F8) para abrir'}
+                          ? 'Combine L3 + R3 agora para abrir o Mini-Player KPlayer'
+                          : 'Mini-Player oculto • Aperte L3 + R3 (ou F8) para abrir'}
                       </span>
                       <button
                         type="button"

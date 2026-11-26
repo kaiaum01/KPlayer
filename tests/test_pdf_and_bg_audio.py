@@ -225,6 +225,70 @@ class BgAudioPreviewTest(unittest.TestCase):
             self.assertEqual(audio_env["KPLAYER_OVERLAY_SHM"], str(fake_shm))
             self.assertNotIn("LD_PRELOAD", audio_env)
 
+    def test_es_daemon_payload_and_reversible_es_bgm_silencer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            song = tmp_dir / "es_track.mp3"
+            song.write_bytes(b"ID3" + b"\x00" * 32)
+
+            v_daemon = bg_audio.validate_daemon_payload(
+                {
+                    "bg_audio_enabled": True,
+                    "auto_play": True,
+                    "media_type": "music",
+                    "media_uri": str(song),
+                    "volume_pct": 65,
+                    "theme_accent": "#1db954",
+                    "tracks": [{"uri": str(song), "title": "ES Track", "type": "music"}],
+                    "track_index": 0,
+                }
+            )
+            self.assertTrue(v_daemon["bg_audio_enabled"])
+            self.assertEqual(v_daemon["target_path"], "")
+            self.assertEqual(len(v_daemon["tracks"]), 1)
+
+            # Reversible ES BGM silencer on a temp es_settings.cfg (never touches gamelist.xml)
+            es_cfg = tmp_dir / "es_settings.cfg"
+            es_cfg.write_text(
+                '<?xml version="1.0"?>\n'
+                '<bool name="audio.bgmusic" value="true" />\n'
+                '<bool name="BackgroundMusic" value="true" />\n'
+                '<string name="ThemeSet" value="es-theme-epic-noir" />\n',
+                encoding="utf-8",
+            )
+            gamelist = tmp_dir / "gamelist.xml"
+            gamelist_orig = "<gameList><game><name>KPlayer</name></game></gameList>\n"
+            gamelist.write_text(gamelist_orig, encoding="utf-8")
+            state_file = tmp_dir / ".es-bgm-state.json"
+
+            res_mute = bg_audio.silence_es_bgm(
+                state_file=state_file,
+                settings_paths=[es_cfg],
+                stop_procs=False,
+                touch_pulse=False,
+            )
+            self.assertEqual(res_mute["modified_files"], [str(es_cfg)])
+            muted_xml = es_cfg.read_text(encoding="utf-8")
+            self.assertIn('<bool name="audio.bgmusic" value="false" />', muted_xml)
+            self.assertIn('<bool name="BackgroundMusic" value="false" />', muted_xml)
+            self.assertTrue(state_file.is_file())
+
+            # Calling silence_es_bgm a second time must preserve the original "true" backup
+            bg_audio.silence_es_bgm(
+                state_file=state_file,
+                settings_paths=[es_cfg],
+                stop_procs=False,
+                touch_pulse=False,
+            )
+
+            res_restore = bg_audio.restore_es_bgm(state_file=state_file, touch_pulse=False)
+            self.assertEqual(res_restore["restored_files"], [str(es_cfg)])
+            restored_xml = es_cfg.read_text(encoding="utf-8")
+            self.assertIn('<bool name="audio.bgmusic" value="true" />', restored_xml)
+            self.assertIn('<bool name="BackgroundMusic" value="true" />', restored_xml)
+            self.assertFalse(state_file.exists())
+            self.assertEqual(gamelist.read_text(encoding="utf-8"), gamelist_orig)
+
 
 class PdfOpsPdfCraftCompatTest(unittest.TestCase):
     def test_pure_python_pdf_inspect_and_text_extraction(self) -> None:

@@ -1,20 +1,31 @@
 {
   "schemaVersion": 2,
-  "latest": "2.1.5",
+  "latest": "2.1.6",
   "releases": [
+    {
+      "version": "2.1.6",
+      "releaseTag": "v2.1.6",
+      "releasedAt": "2026-11-26T20:00:00Z",
+      "r36s": "updates/v2.1.6/KPlayer-v2.1.6-R36S.zip",
+      "sha256": "",
+      "notes": [
+        "Áudio em 2º plano fora do KPlayer (EmulationStation e jogos), com ativação e desativação exclusivas dentro do app KPlayer.",
+        "Silenciamento automático e reversível da música de fundo do EmulationStation sem alterar gamelist.xml.",
+        "Mini-Player flutuante (L3 + R3) redesenhado no visual arredondado do KPlayer (emblema vinil K, card Tocando Agora e foco no tema ativo).",
+        "Demonstração interativa na Preview Web com alternância entre EmulationStation e Jogo em execução."
+      ]
+    },
     {
       "version": "2.1.5",
       "releaseTag": "v2.1.5",
-      "releasedAt": "2026-11-26T19:09:17Z",
+      "releasedAt": "2026-11-26T19:00:00Z",
       "r36s": "updates/v2.1.5/KPlayer-v2.1.5-R36S.zip",
-      "sha256": "17de60bf0b4914d12eace9f4e2d52755253c52983fbc32146ef35504ad307743",
+      "sha256": "",
       "notes": [
-        "Mini-Player no Jogo Estilo GTA Trainer (L3 + R3) (Teste prévio):",
-        "Visual de Mod Menu / Cheat Trainer no Canto Superior Esquerdo: Painel vertical translúcido (libkp_overlay.so sobre KMS/DRM, OpenGL ES 2.0 e SDL2, com fallback /dev/fb0) com banner ",
-        "Ativação por L3 + R3 (clique nos dois analógicos): Fica 100% invisível durante a jogatina sem atrapalhar nenhum botão do jogo; aperte L3 + R3 juntos para abrir ou fechar instantane",
-        "Controles do Menu Trainer: ↑/↓ navega pelas 5 ações (Tocar / Pausar, Próxima Música/Rádio, Voltar Música/Rádio, Volume do Áudio, Fechar Trainer), ←/→ ajusta o volume (10%–100%) ou ",
-        "Demonstração na Preview Web: Botão Demo Trainer (L3+R3) na barra superior e botões L3/R3 no controle virtual para testar o menu sobre um jogo retrô estilo GTA ao vivo.",
-        "Áudio em Jogos + Leitor de PDF (PdfCraft R36S) Preservados:"
+        "Mini-Player flutuante acionado por L3 + R3 (clique nos dois analógicos) no canto superior esquerdo.",
+        "Combo L3 + R3 imune ao gptokeyb via EVIOCGKEY e SDL_GAMECONTROLLERCONFIG.",
+        "Menu navegável em 5 linhas (Tocar/Pausar, Próxima, Anterior, Volume 10%–100% e Ocultar Menu) e atalhos diretos R2/L2.",
+        "Demonstração interativa na Preview Web com botões virtuais L3/R3."
       ]
     },
     {

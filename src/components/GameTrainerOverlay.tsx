@@ -1,6 +1,18 @@
-import React, { useEffect, useRef } from 'react';
-import { Volume2, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  EyeOff,
+  Gamepad2,
+  Monitor,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 import type { KpTheme } from '../themes';
+import { rgbToRgba, themeHairline } from './R36SIcons';
 
 export interface TrainerAudioInfo {
   kind: 'music' | 'radio';
@@ -12,14 +24,7 @@ export interface TrainerAudioInfo {
 
 export const TRAINER_ROW_COUNT = 5;
 
-function accentLuminance(hex: string): number {
-  const clean = hex.replace('#', '');
-  if (clean.length < 6) return 150;
-  const r = parseInt(clean.slice(0, 2), 16) || 0;
-  const g = parseInt(clean.slice(2, 4), 16) || 0;
-  const b = parseInt(clean.slice(4, 6), 16) || 0;
-  return (r * 299 + g * 587 + b * 114) / 1000;
-}
+const rgba = rgbToRgba;
 
 export interface GameTrainerHudProps {
   theme: KpTheme;
@@ -34,12 +39,13 @@ export interface GameTrainerHudProps {
 }
 
 /**
- * GTA Cheat Trainer-style vertical floating menu HUD.
- * Matches the native C `kp_overlay_shared.h` layout row-for-row:
- *   Header banner ("KPLAYER TRAINER" + "1/5")
- *   Sub-header (Status + Track/Radio title)
- *   5 selectable rows with high-contrast white active bar
- *   Bottom control legend (↑↓ Menu · ←→ Vol · B Ativar · L2/R2 Faixa · L3+R3 Fechar)
+ * Floating KPlayer Mini-Player HUD (L3 + R3).
+ * Matches KPlayer's native visual design system across all 14 themes:
+ *   - Rounded theme-tinted surface panel with subtle accent top line
+ *   - KPlayer vinyl disc emblem ("K PLAYER" + "Mini-Player")
+ *   - Rounded Now-Playing card with mini equalizer bars
+ *   - 5 rounded KPlayer-style option cards with accent focus border & left bar
+ *   - Zero "Trainer" wording anywhere
  */
 export function GameTrainerHud({
   theme,
@@ -52,8 +58,6 @@ export function GameTrainerHud({
   onClose,
   className = '',
 }: GameTrainerHudProps) {
-  const hdrDarkText = accentLuminance(theme.accent) > 140;
-  const hdrFg = hdrDarkText ? '#0a0c10' : '#f8fafc';
   const isRadio = audio.kind === 'radio';
   const safeRow = ((selectedRow % TRAINER_ROW_COUNT) + TRAINER_ROW_COUNT) % TRAINER_ROW_COUNT;
 
@@ -61,89 +65,166 @@ export function GameTrainerHud({
     id: number;
     label: string;
     value: string;
+    icon: React.ReactNode;
     accentWhenInactive?: boolean;
   }> = [
     {
       id: 0,
-      label: 'TOCAR / PAUSAR',
-      value: audio.isPlaying ? '[TOCANDO]' : '[PAUSADO]',
+      label: 'Tocar / Pausar',
+      value: audio.isPlaying ? 'Tocando' : 'Pausado',
+      icon: audio.isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />,
       accentWhenInactive: audio.isPlaying,
     },
     {
       id: 1,
-      label: isRadio ? 'PRÓXIMA RÁDIO' : 'PRÓXIMA MÚSICA',
-      value: '[R2 >>]',
+      label: isRadio ? 'Próxima rádio' : 'Próxima música',
+      value: 'R2',
+      icon: <SkipForward className="w-3.5 h-3.5" />,
     },
     {
       id: 2,
-      label: isRadio ? 'VOLTAR RÁDIO' : 'VOLTAR MÚSICA',
-      value: '[<< L2]',
+      label: isRadio ? 'Voltar rádio' : 'Voltar música',
+      value: 'L2',
+      icon: <SkipBack className="w-3.5 h-3.5" />,
     },
     {
       id: 3,
-      label: 'VOLUME DO ÁUDIO',
-      value: `< ${volumePct}% >`,
+      label: 'Volume do áudio',
+      value: `${volumePct}%`,
+      icon: <Volume2 className="w-3.5 h-3.5" />,
     },
     {
       id: 4,
-      label: 'FECHAR TRAINER',
-      value: '[L3+R3]',
+      label: 'Ocultar mini-player',
+      value: 'L3+R3',
+      icon: <EyeOff className="w-3.5 h-3.5" />,
     },
   ];
 
   return (
     <div
-      className={`w-[288px] select-none overflow-hidden shadow-[0_14px_34px_rgba(0,0,0,0.78)] ${className}`}
+      className={`w-[292px] rounded-2xl select-none overflow-hidden shadow-[0_18px_42px_rgba(0,0,0,0.72)] backdrop-blur-md ${className}`}
       style={{
-        backgroundColor: 'rgba(8, 10, 15, 0.92)',
-        border: `1.5px solid ${theme.accent}`,
+        background: `linear-gradient(180deg, ${rgba(theme.panel, 0.96)} 0%, ${rgba(theme.bg, 0.96)} 100%)`,
+        border: `1.5px solid ${rgba(theme.accent, 0.55)}`,
+        color: theme.text,
       }}
     >
-      {/* Classic GTA Trainer solid bold Header Banner */}
+      {/* Subtle KPlayer top accent line */}
       <div
-        className="px-3 py-2 flex items-center justify-between"
+        className="h-[2.5px] w-full"
         style={{
-          backgroundColor: theme.accent,
-          color: hdrFg,
-          borderBottom: '2px solid rgba(0, 0, 0, 0.35)',
+          background: `linear-gradient(90deg, transparent 0%, ${theme.accent} 25%, ${theme.accent} 75%, transparent 100%)`,
         }}
-      >
-        <div className="leading-none">
-          <div className="text-[15px] font-black tracking-[0.08em] uppercase font-mono">
-            KPLAYER TRAINER
+      />
+
+      {/* KPlayer Header: Vinyl Disc K Emblem + Brand + Item Index */}
+      <div className="px-3 pt-2.5 pb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* KPlayer Vinyl Disc Emblem */}
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 relative shadow-inner"
+            style={{
+              backgroundColor: theme.isLight ? '#18181b' : '#0c1016',
+              border: `2px solid ${theme.accent}`,
+              boxShadow: `0 0 12px ${rgba(theme.accent, 0.32)}`,
+            }}
+          >
+            <div
+              className="w-5 h-5 rounded-full border border-white/15 flex items-center justify-center"
+            >
+              <div
+                className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black leading-none"
+                style={{
+                  backgroundColor: theme.accent,
+                  color: theme.isLight ? '#ffffff' : '#080b10',
+                }}
+              >
+                K
+              </div>
+            </div>
           </div>
-          <div className="text-[9px] font-bold tracking-[0.14em] uppercase opacity-80 mt-0.5">
-            MOD MENU DE ÁUDIO • v2.1.5
+          <div className="leading-tight min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[13px] font-extrabold tracking-wide">K PLAYER</span>
+              <span
+                className="text-[8.5px] font-bold px-1.5 py-[1px] rounded uppercase tracking-wider"
+                style={{
+                  backgroundColor: rgba(theme.accent, 0.16),
+                  color: theme.accent,
+                  border: `1px solid ${rgba(theme.accent, 0.35)}`,
+                }}
+              >
+                Mini-Player
+              </span>
+            </div>
+            <div className="text-[9.5px] mt-0.5 truncate" style={{ color: theme.muted }}>
+              2º plano • v2.1.6
+            </div>
           </div>
         </div>
-        <span className="text-[11px] font-black font-mono tabular-nums">
+        <span
+          className="text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.5 rounded"
+          style={{
+            backgroundColor: rgba(theme.elevated, 0.85),
+            color: theme.muted,
+            border: `1px solid ${themeHairline(theme)}`,
+          }}
+        >
           {safeRow + 1}/{TRAINER_ROW_COUNT}
         </span>
       </div>
 
-      {/* Black Sub-Header: Status + Active Track */}
-      <div
-        className="px-2.5 py-1.5"
-        style={{
-          backgroundColor: 'rgba(4, 5, 8, 0.96)',
-          borderBottom: `2px solid ${theme.accent}`,
-        }}
-      >
-        <div className="flex items-center justify-between text-[9.5px] font-mono font-bold tracking-wider">
-          <span style={{ color: theme.accent }}>
-            {audio.isPlaying ? 'STATUS: TOCANDO' : 'STATUS: PAUSADO'}
-          </span>
-          <span className="text-zinc-400 tabular-nums">
-            {isRadio ? 'RÁDIO' : 'FAIXA'} {audio.total > 0 ? audio.index + 1 : 0}/{audio.total}
-          </span>
-        </div>
-        <div className="text-[11.5px] font-bold text-zinc-100 truncate mt-0.5">
-          {audio.title || 'Nenhuma faixa disponível'}
+      {/* KPlayer Now-Playing Card */}
+      <div className="px-2.5 pb-2">
+        <div
+          className="rounded-xl px-2.5 py-2 flex items-center gap-2.5"
+          style={{
+            backgroundColor: rgba(theme.elevated, 0.92),
+            border: `1px solid ${themeHairline(theme)}`,
+          }}
+        >
+          {/* Mini Equalizer / Paused Indicator */}
+          <div className="w-6 h-6 rounded-lg flex items-end justify-center gap-[2.5px] pb-1 shrink-0"
+            style={{ backgroundColor: rgba(theme.accent, 0.12) }}
+          >
+            {audio.isPlaying ? (
+              <>
+                <span
+                  className="w-[3px] rounded-full animate-pulse"
+                  style={{ height: '9px', backgroundColor: theme.accent }}
+                />
+                <span
+                  className="w-[3px] rounded-full animate-pulse"
+                  style={{ height: '14px', backgroundColor: theme.accent, animationDelay: '120ms' }}
+                />
+                <span
+                  className="w-[3px] rounded-full animate-pulse"
+                  style={{ height: '11px', backgroundColor: theme.accent, animationDelay: '240ms' }}
+                />
+              </>
+            ) : (
+              <Pause className="w-3.5 h-3.5 my-auto" style={{ color: theme.muted }} />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-wider">
+              <span style={{ color: audio.isPlaying ? theme.accent : theme.muted }}>
+                {audio.isPlaying ? 'Tocando agora' : 'Pausado'}
+              </span>
+              <span className="tabular-nums" style={{ color: theme.muted }}>
+                {isRadio ? 'Rádio' : 'Faixa'} {audio.total > 0 ? audio.index + 1 : 0}/{audio.total}
+              </span>
+            </div>
+            <div className="text-[11.5px] font-bold truncate mt-0.5" style={{ color: theme.text }}>
+              {audio.title || 'Nenhuma faixa disponível'}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 5 Selectable Trainer Menu Rows */}
-      <div className="divide-y divide-white/[0.04]">
+      {/* 5 KPlayer-Style Rounded Option Rows */}
+      <div className="px-2.5 pb-2 flex flex-col gap-1">
         {rows.map((row) => {
           const active = row.id === safeRow;
           return (
@@ -154,26 +235,28 @@ export function GameTrainerHud({
                 onSelectRow(row.id);
                 onActivateRow(row.id);
               }}
-              className="relative px-2.5 py-[6.5px] cursor-pointer transition-colors"
+              className="relative rounded-xl px-2.5 py-[6.5px] cursor-pointer transition-all"
               style={{
-                backgroundColor: active
-                  ? 'rgba(244, 247, 252, 0.98)'
-                  : row.id % 2 === 1
-                  ? 'rgba(16, 20, 28, 0.88)'
-                  : 'rgba(11, 14, 20, 0.88)',
-                color: active ? '#0a0c10' : '#eef2f9',
+                background: active
+                  ? `linear-gradient(90deg, ${rgba(theme.accent, theme.isLight ? 0.18 : 0.24)} 0%, ${rgba(theme.elevated, 0.94)} 100%)`
+                  : rgba(theme.elevated, 0.56),
+                border: `1.5px solid ${active ? theme.accent : 'transparent'}`,
+                color: theme.text,
               }}
             >
               {active && (
                 <div
-                  className="absolute left-0 top-0 bottom-0 w-1"
+                  className="absolute left-1 top-1.5 bottom-1.5 w-[3px] rounded-full"
                   style={{ backgroundColor: theme.accent }}
                 />
               )}
-              <div className="flex items-center justify-between gap-2 text-[11px] font-mono font-bold tracking-wide pl-1">
-                <span className="truncate">{row.label}</span>
+              <div className="flex items-center justify-between gap-2 text-[11px] font-semibold pl-1.5">
+                <span className="flex items-center gap-2 min-w-0">
+                  <span style={{ color: active ? theme.accent : theme.muted }}>{row.icon}</span>
+                  <span className="truncate">{row.label}</span>
+                </span>
                 {row.id === 3 ? (
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 font-mono text-[10.5px] font-bold">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -181,12 +264,15 @@ export function GameTrainerHud({
                         onSelectRow(3);
                         onVolumeDelta(-10);
                       }}
-                      className="px-1 rounded hover:bg-black/15 cursor-pointer"
+                      className="px-1 rounded hover:bg-white/10 cursor-pointer"
+                      style={{ color: active ? theme.accent : theme.muted }}
                       title="Diminuir volume (←)"
                     >
                       &lt;
                     </button>
-                    <span className="tabular-nums min-w-[30px] text-center">{volumePct}%</span>
+                    <span className="tabular-nums min-w-[30px] text-center" style={{ color: active ? theme.accent : theme.text }}>
+                      {volumePct}%
+                    </span>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -194,7 +280,8 @@ export function GameTrainerHud({
                         onSelectRow(3);
                         onVolumeDelta(10);
                       }}
-                      className="px-1 rounded hover:bg-black/15 cursor-pointer"
+                      className="px-1 rounded hover:bg-white/10 cursor-pointer"
+                      style={{ color: active ? theme.accent : theme.muted }}
                       title="Aumentar volume (→)"
                     >
                       &gt;
@@ -202,13 +289,16 @@ export function GameTrainerHud({
                   </div>
                 ) : (
                   <span
-                    className="shrink-0 text-[10.5px] font-extrabold"
+                    className="shrink-0 text-[10px] font-bold px-1.5 py-[1px] rounded"
                     style={{
+                      backgroundColor: active
+                        ? rgba(theme.accent, 0.18)
+                        : rgba(theme.bg, 0.45),
                       color: active
-                        ? '#0a0c10'
+                        ? theme.accent
                         : row.accentWhenInactive
                         ? theme.accent
-                        : '#a5b4cc',
+                        : theme.muted,
                     }}
                   >
                     {row.value}
@@ -218,13 +308,13 @@ export function GameTrainerHud({
 
               {row.id === 3 && (
                 <div
-                  className="mt-1 ml-1 h-[3px] w-[calc(100%-4px)] overflow-hidden"
+                  className="mt-1.5 ml-1.5 h-[4px] w-[calc(100%-6px)] rounded-full overflow-hidden"
                   style={{
-                    backgroundColor: active ? 'rgba(15,23,42,0.22)' : 'rgba(255,255,255,0.12)',
+                    backgroundColor: rgba(theme.text, 0.14),
                   }}
                 >
                   <div
-                    className="h-full transition-all"
+                    className="h-full rounded-full transition-all"
                     style={{ width: `${volumePct}%`, backgroundColor: theme.accent }}
                   />
                 </div>
@@ -234,28 +324,31 @@ export function GameTrainerHud({
         })}
       </div>
 
-      {/* Footer Key Legend */}
+      {/* KPlayer Footer Legend */}
       <div
-        className="px-2.5 py-1.5 text-[9px] font-mono leading-tight"
+        className="px-3 py-2 text-[9px] leading-tight"
         style={{
-          backgroundColor: 'rgba(4, 6, 10, 0.96)',
-          borderTop: '1.5px solid rgba(52, 62, 82, 0.9)',
+          backgroundColor: rgba(theme.bg, 0.72),
+          borderTop: `1px solid ${themeHairline(theme)}`,
         }}
       >
-        <div className="flex items-center justify-between text-zinc-400">
-          <span>↑↓ MENU</span>
-          <span>←→ VOL</span>
-          <span>B ATIVAR</span>
+        <div className="flex items-center justify-between font-medium" style={{ color: theme.muted }}>
+          <span>↑↓ Menu</span>
+          <span>←→ Volume</span>
+          <span>B Confirmar</span>
+          <span>L2/R2 Faixa</span>
         </div>
-        <div className="flex items-center justify-between mt-0.5 font-bold" style={{ color: theme.accent }}>
-          <span>L2/R2 FAIXA</span>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-[8.5px]" style={{ color: theme.muted }}>
+            Ativar/desativar só no KPlayer
+          </span>
           <button
             type="button"
             onClick={onClose}
-            className="hover:underline cursor-pointer"
+            className="font-bold hover:underline cursor-pointer"
             style={{ color: theme.accent }}
           >
-            A / L3+R3 FECHAR
+            A / L3+R3 Ocultar
           </button>
         </div>
       </div>
@@ -276,10 +369,17 @@ export interface GameTrainerDemoStageProps {
   onExitDemo: () => void;
 }
 
+const ES_SYSTEMS = [
+  { name: 'PORTMASTER', count: '14 JOGOS', color: '#38bdf8' },
+  { name: 'PLAYSTATION', count: '42 JOGOS', color: '#818cf8' },
+  { name: 'SUPER NINTENDO', count: '118 JOGOS', color: '#a855f7' },
+  { name: 'GAME BOY ADVANCE', count: '96 JOGOS', color: '#34d399' },
+];
+
 /**
- * Full 640x480 interactive in-game preview demonstration showing a retro
- * night-city GTA-inspired game viewport running on the R36S with the
- * KPlayer Trainer Menu floating at top-left (toggled with L3 + R3).
+ * Full 640x480 interactive preview demonstrating the KPlayer Mini-Player (L3 + R3)
+ * working OUTSIDE the app in EmulationStation (with ES BGM automatically silenced)
+ * as well as inside a running retro game.
  */
 export function GameTrainerDemoStage({
   theme,
@@ -293,9 +393,11 @@ export function GameTrainerDemoStage({
   onVolumeDelta,
   onExitDemo,
 }: GameTrainerDemoStageProps) {
+  const [scene, setScene] = useState<'es' | 'game'>('es');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
+    if (scene !== 'game') return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -322,7 +424,6 @@ export function GameTrainerDemoStage({
       const h = canvas.height;
       const horizon = Math.floor(h * 0.48);
 
-      // Night-city vice dusk sky gradient
       const sky = ctx.createLinearGradient(0, 0, 0, horizon);
       sky.addColorStop(0, '#090d1f');
       sky.addColorStop(0.55, '#1d1438');
@@ -331,7 +432,6 @@ export function GameTrainerDemoStage({
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, w, horizon);
 
-      // Retro sunset sun behind skyline
       const sunGrad = ctx.createLinearGradient(0, horizon - 72, 0, horizon);
       sunGrad.addColorStop(0, '#ffd166');
       sunGrad.addColorStop(1, '#ef476f');
@@ -340,7 +440,6 @@ export function GameTrainerDemoStage({
       ctx.arc(w * 0.56, horizon - 14, 52, 0, Math.PI * 2);
       ctx.fill();
 
-      // City skyline silhouettes + warm lit windows
       for (let i = 0; i < buildings.length; i++) {
         const b = buildings[i];
         const by = horizon - b.h;
@@ -356,11 +455,9 @@ export function GameTrainerDemoStage({
         }
       }
 
-      // Ground / sidewalk plane
       ctx.fillStyle = '#12141e';
       ctx.fillRect(0, horizon, w, h - horizon);
 
-      // Perspective asphalt boulevard
       ctx.fillStyle = '#1b1f2c';
       ctx.beginPath();
       ctx.moveTo(w * 0.43, horizon);
@@ -370,7 +467,6 @@ export function GameTrainerDemoStage({
       ctx.closePath();
       ctx.fill();
 
-      // Road shoulder curb lines
       ctx.strokeStyle = '#ff6b9d';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -380,7 +476,6 @@ export function GameTrainerDemoStage({
       ctx.lineTo(w * 0.94, h);
       ctx.stroke();
 
-      // Animated dashed center lane dividers
       const dashCount = 9;
       const phase = (t * 1.45) % 1;
       for (let i = 0; i < dashCount; i++) {
@@ -395,9 +490,8 @@ export function GameTrainerDemoStage({
         ctx.fillRect(w * 0.5 - lw * 0.5, y0, lw, Math.max(2, y1 - y0));
       }
 
-      // Passing street lamp posts
       for (let i = 0; i < 6; i++) {
-        const z = ((i / 6) + phase / 6 * 3) % 1;
+        const z = ((i / 6) + (phase / 6) * 3) % 1;
         const p = z * z;
         const py = horizon + p * (h - horizon);
         const spread = 50 + p * 270;
@@ -412,13 +506,11 @@ export function GameTrainerDemoStage({
         ctx.fill();
       }
 
-      // Stylized retro cruiser car silhouette at bottom-center
       const bob = Math.sin(t * 7) * 1.2;
       const cx = w * 0.5 + Math.sin(t * 0.7) * 10;
       const cy = h - 76 + bob;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(cx - 58, cy + 44, 116, 12);
-      // Car body
       ctx.fillStyle = '#252c42';
       ctx.fillRect(cx - 54, cy + 12, 108, 32);
       ctx.fillStyle = '#333f5e';
@@ -429,7 +521,6 @@ export function GameTrainerDemoStage({
       ctx.lineTo(cx + 42, cy + 12);
       ctx.closePath();
       ctx.fill();
-      // Rear window
       ctx.fillStyle = '#111728';
       ctx.beginPath();
       ctx.moveTo(cx - 32, cy + 9);
@@ -438,21 +529,15 @@ export function GameTrainerDemoStage({
       ctx.lineTo(cx + 32, cy + 9);
       ctx.closePath();
       ctx.fill();
-      // Glowing red taillights
       ctx.fillStyle = '#ff2a4b';
       ctx.fillRect(cx - 48, cy + 19, 18, 8);
       ctx.fillRect(cx + 30, cy + 19, 18, 8);
-      ctx.fillStyle = 'rgba(255, 42, 75, 0.25)';
-      ctx.fillRect(cx - 54, cy + 15, 28, 16);
-      ctx.fillRect(cx + 26, cy + 15, 28, 16);
-      // License plate
       ctx.fillStyle = '#f8fafc';
       ctx.fillRect(cx - 12, cy + 24, 24, 9);
       ctx.fillStyle = '#111827';
       ctx.font = 'bold 7px monospace';
       ctx.fillText('R36S', cx - 9, cy + 31);
 
-      // Classic GTA-style circular minimap radar (bottom-left)
       const rx = 56;
       const ry = h - 54;
       ctx.save();
@@ -472,7 +557,6 @@ export function GameTrainerDemoStage({
       ctx.moveTo(rx, ry - 40);
       ctx.lineTo(rx, ry + 40);
       ctx.stroke();
-      // Player radar arrow
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.moveTo(rx, ry - 7);
@@ -482,7 +566,6 @@ export function GameTrainerDemoStage({
       ctx.fill();
       ctx.restore();
 
-      // Subtle CRT scanline sheen
       ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
       for (let sy = 0; sy < h; sy += 4) {
         ctx.fillRect(0, sy, w, 1);
@@ -493,41 +576,96 @@ export function GameTrainerDemoStage({
 
     raf = window.requestAnimationFrame(render);
     return () => window.cancelAnimationFrame(raf);
-  }, []);
+  }, [scene]);
 
   return (
-    <div className="absolute inset-0 z-40 overflow-hidden bg-black">
-      {/* Live retro night-city game canvas */}
-      <canvas
-        ref={canvasRef}
-        width={640}
-        height={480}
-        className="w-full h-full block object-cover"
-      />
+    <div className="absolute inset-0 z-40 overflow-hidden bg-[#0b101b]">
+      {scene === 'es' ? (
+        /* Authentic R36S EmulationStation Home Carousel Backdrop */
+        <div
+          className="absolute inset-0 flex flex-col justify-between p-5 select-none"
+          style={{
+            background:
+              'radial-gradient(circle at 72% 32%, rgba(56, 189, 248, 0.22) 0%, rgba(15, 23, 42, 0.96) 58%, #070b14 100%)',
+          }}
+        >
+          {/* ES Top Status Bar */}
+          <div className="flex items-center justify-end gap-2.5 text-[10.5px] font-semibold text-slate-300">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/45 border border-white/10 text-emerald-300">
+              <VolumeX className="w-3.5 h-3.5" />
+              BGM do EmulationStation: Silenciada
+            </span>
+            <span className="px-2 py-1 rounded-lg bg-black/45 border border-white/10 text-slate-300">
+              dArkOS · ES
+            </span>
+          </div>
 
-      {/* Simulated GTA-style top-right game HUD */}
-      <div className="absolute top-3.5 right-3.5 flex flex-col items-end gap-1 pointer-events-none select-none">
-        <div className="font-mono font-black text-[18px] leading-none tracking-wider text-emerald-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
-          $0048520
-        </div>
-        <div className="flex items-center gap-1 text-amber-400 text-[13px] drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
-          <span>★</span>
-          <span>★</span>
-          <span className="text-zinc-600/80">★</span>
-          <span className="text-zinc-600/80">★</span>
-          <span className="text-zinc-600/80">★</span>
-        </div>
-        <div className="w-24 h-2 bg-black/75 border border-black p-[1px]">
-          <div className="h-full w-[82%] bg-emerald-500" />
-        </div>
-        <div className="w-24 h-1.5 bg-black/75 border border-black p-[1px]">
-          <div className="h-full w-[64%] bg-sky-400" />
-        </div>
-      </div>
+          {/* ES System Carousel Center Band */}
+          <div className="my-auto flex flex-col items-end pr-2">
+            <div className="text-[10px] uppercase tracking-[0.22em] text-sky-300/80 font-bold mb-1">
+              EmulationStation · Fora do KPlayer
+            </div>
+            <div className="text-[32px] font-black tracking-tight text-white leading-none drop-shadow">
+              PORTMASTER
+            </div>
+            <div className="text-[12px] text-slate-300 mt-1.5">
+              14 jogos disponíveis · KPlayer tocando em 2º plano
+            </div>
 
-      {/* Top-Left Docked GTA Cheat Trainer HUD (toggled by L3 + R3) */}
+            <div className="mt-5 flex items-center gap-2.5">
+              {ES_SYSTEMS.map((sys, idx) => (
+                <div
+                  key={sys.name}
+                  className="px-3 py-2 rounded-xl border text-right"
+                  style={{
+                    backgroundColor: idx === 0 ? 'rgba(56, 189, 248, 0.16)' : 'rgba(15, 23, 42, 0.65)',
+                    borderColor: idx === 0 ? 'rgba(56, 189, 248, 0.7)' : 'rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <div className="text-[10px] font-extrabold tracking-wide text-white">{sys.name}</div>
+                  <div className="text-[8.5px] text-slate-400 mt-0.5">{sys.count}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ES Bottom Hint Strip */}
+          <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-white/10 pt-2">
+            <span>A SELECIONAR · START MENU ES · L3+R3 MINI-PLAYER KPLAYER</span>
+          </div>
+        </div>
+      ) : (
+        <>
+          <canvas
+            ref={canvasRef}
+            width={640}
+            height={480}
+            className="w-full h-full block object-cover"
+          />
+          <div className="absolute top-3.5 right-3.5 flex flex-col items-end gap-1 pointer-events-none select-none">
+            <div className="font-mono font-black text-[18px] leading-none tracking-wider text-emerald-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
+              $0048520
+            </div>
+            <div className="flex items-center gap-1 text-amber-400 text-[13px] drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]">
+              <span>★</span>
+              <span>★</span>
+              <span className="text-zinc-600/80">★</span>
+              <span className="text-zinc-600/80">★</span>
+              <span className="text-zinc-600/80">★</span>
+            </div>
+            <div className="w-24 h-2 bg-black/75 border border-black p-[1px]">
+              <div className="h-full w-[82%] bg-emerald-500" />
+            </div>
+            <div className="w-24 h-1.5 bg-black/75 border border-black p-[1px]">
+              <div className="h-full w-[64%] bg-sky-400" />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Top-Left Docked KPlayer Mini-Player HUD (toggled by L3 + R3) */}
       {trainerOpen && (
-        <div className="absolute top-3.5 left-3.5 z-10">
+        <div className="absolute top-3 left-3 z-10">
           <GameTrainerHud
             theme={theme}
             audio={audio}
@@ -541,12 +679,21 @@ export function GameTrainerDemoStage({
         </div>
       )}
 
-      {/* Unobtrusive Demo Controls Bar at Bottom-Right */}
-      <div className="absolute bottom-3.5 right-3.5 z-10 flex items-center gap-2">
+      {/* Demo Controls Bar at Bottom-Right */}
+      <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setScene((s) => (s === 'es' ? 'game' : 'es'))}
+          className="px-2.5 py-1.5 rounded-lg bg-black/80 hover:bg-zinc-900 border border-white/15 text-[10px] font-bold text-slate-200 flex items-center gap-1.5 cursor-pointer shadow-lg"
+          title="Alternar cena entre EmulationStation e Jogo"
+        >
+          {scene === 'es' ? <Gamepad2 className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
+          {scene === 'es' ? 'Ver no Jogo' : 'Ver no ES'}
+        </button>
         {!trainerOpen && (
-          <div className="px-2.5 py-1.5 rounded bg-black/80 border border-white/15 text-[10.5px] font-mono text-zinc-200 flex items-center gap-2 shadow-lg">
+          <div className="px-2.5 py-1.5 rounded-lg bg-black/80 border border-white/15 text-[10px] text-zinc-200 flex items-center gap-1.5 shadow-lg">
             <Volume2 className="w-3.5 h-3.5" style={{ color: theme.accent }} />
-            <span className="max-w-[175px] truncate">
+            <span className="max-w-[140px] truncate">
               {audio.isPlaying ? audio.title : 'Pausado'} ({volumePct}%)
             </span>
           </div>
@@ -554,23 +701,23 @@ export function GameTrainerDemoStage({
         <button
           type="button"
           onClick={onToggleTrainer}
-          className="px-2.5 py-1.5 rounded font-mono text-[10.5px] font-extrabold shadow-lg cursor-pointer hover:brightness-110 transition-all"
+          className="px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold shadow-lg cursor-pointer hover:brightness-110 transition-all"
           style={{
             backgroundColor: trainerOpen ? 'rgba(15, 20, 30, 0.92)' : theme.accent,
             color: trainerOpen ? '#f8fafc' : '#0a0c10',
             border: `1px solid ${theme.accent}`,
           }}
         >
-          {trainerOpen ? 'L3+R3 Fechar' : 'L3+R3 Abrir Trainer'}
+          {trainerOpen ? 'L3+R3 Ocultar' : 'L3+R3 Mini-Player'}
         </button>
         <button
           type="button"
           onClick={onExitDemo}
-          className="px-2.5 py-1.5 rounded bg-black/85 hover:bg-zinc-900 border border-white/20 text-[10.5px] font-bold text-zinc-200 flex items-center gap-1 cursor-pointer shadow-lg"
+          className="px-2.5 py-1.5 rounded-lg bg-black/85 hover:bg-zinc-900 border border-white/20 text-[10px] font-bold text-zinc-200 flex items-center gap-1 cursor-pointer shadow-lg"
           title="Voltar para o KPlayer"
         >
           <X className="w-3.5 h-3.5" />
-          Sair Demo
+          Voltar
         </button>
       </div>
     </div>

@@ -139,14 +139,15 @@ static KpOverlayShared *kp_get_shm(void) {
   kp_lock();
   if (!g_shm_tried) {
     const char *path = getenv("KPLAYER_OVERLAY_SHM");
-    if (path && path[0]) {
-      int fd = open(path, O_RDWR | O_CLOEXEC);
-      if (fd >= 0) {
-        void *m = mmap(NULL, sizeof(KpOverlayShared), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        close(fd);
-        if (m != MAP_FAILED) {
-          g_shm = (KpOverlayShared *)m;
-        }
+    if (!path || !path[0]) {
+      path = KP_OV_DEFAULT_SHM_PATH;
+    }
+    int fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd >= 0) {
+      void *m = mmap(NULL, sizeof(KpOverlayShared), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      close(fd);
+      if (m != MAP_FAILED) {
+        g_shm = (KpOverlayShared *)m;
       }
     }
     __atomic_store_n(&g_shm_tried, 1, __ATOMIC_RELEASE);
@@ -174,7 +175,7 @@ static bool kp_refresh_rgba_if_needed(const KpOverlayShared *shm) {
 }
 
 static void kp_compute_card_rect(int sw, int sh, int *rx, int *ry, int *rw, int *rh) {
-  /* Classic GTA Cheat Trainer placement: vertical floating panel docked at top-left */
+  /* KPlayer Mini-Player placement: compact vertical panel docked at top-left */
   int margin_x = sw >= 480 ? 16 : 8;
   int margin_y = sh >= 360 ? 16 : 8;
   int target_w = (sw * 46) / 100;

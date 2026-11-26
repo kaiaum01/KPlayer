@@ -43,7 +43,7 @@ export function R36SControls({
           <button
             type="button"
             onClick={() => onPress('L2')}
-            title="L2 (Voltar música no Trainer / PageUp)"
+            title="L2 (Voltar música no Mini-Player / PageUp)"
             className={`${btnCls} px-2.5 py-1.5 rounded-lg bg-[#1c202a] hover:bg-[#2d3240] text-xs text-zinc-300 border border-white/10`}
           >
             L2
@@ -51,7 +51,7 @@ export function R36SControls({
           <button
             type="button"
             onClick={() => onPress('L3')}
-            title="L3 (Clique analógico esquerdo — use L3+R3 para abrir o Trainer)"
+            title="L3 (Clique analógico esquerdo — use L3+R3 para abrir o Mini-Player)"
             className={`${btnCls} px-2.5 py-1 rounded-full bg-[#1a1e28] hover:bg-[#2d3240] text-[10px] text-emerald-300 border border-emerald-500/30`}
           >
             L3
@@ -99,7 +99,7 @@ export function R36SControls({
         </div>
       </div>
 
-      {/* Center: SELECT / START + L3+R3 Trainer Combo */}
+      {/* Center: SELECT / START + L3+R3 Mini-Player Combo */}
       <div className="flex flex-col items-center gap-2">
         <span className="text-[10px] font-semibold tracking-[0.22em] text-zinc-500 uppercase">
           R36S • PortMaster
@@ -125,10 +125,10 @@ export function R36SControls({
         <button
           type="button"
           onClick={() => onPress('L3_R3')}
-          title="L3 + R3 (Abrir/Fechar Mini-Player Trainer no Jogo / F8)"
+          title="L3 + R3 (Abrir/Fechar Mini-Player KPlayer no ES/Jogo / F8)"
           className={`${btnCls} px-3 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-[10px] font-mono tracking-wider text-emerald-300 border border-emerald-400/40`}
         >
-          L3 + R3 · TRAINER (F8)
+          L3 + R3 · MINI-PLAYER (F8)
         </button>
         <span className="text-[9.5px] text-zinc-500 hidden sm:inline">
           Setas • Enter(B) • Backspace(A) • Espaço(X) • M(Y) • F8(L3+R3)
@@ -189,7 +189,7 @@ export function R36SControls({
           <button
             type="button"
             onClick={() => onPress('R2')}
-            title="R2 (Pular música no Trainer / PageDown)"
+            title="R2 (Pular música no Mini-Player / PageDown)"
             className={`${btnCls} px-2.5 py-1.5 rounded-lg bg-[#1c202a] hover:bg-[#2d3240] text-xs text-zinc-300 border border-white/10`}
           >
             R2
@@ -197,7 +197,7 @@ export function R36SControls({
           <button
             type="button"
             onClick={() => onPress('R3')}
-            title="R3 (Clique analógico direito — use L3+R3 para abrir o Trainer)"
+            title="R3 (Clique analógico direito — use L3+R3 para abrir o Mini-Player)"
             className={`${btnCls} px-2.5 py-1 rounded-full bg-[#1a1e28] hover:bg-[#2d3240] text-[10px] text-emerald-300 border border-emerald-500/30`}
           >
             R3

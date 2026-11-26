@@ -1,18 +1,23 @@
-# KPlayer v2.1.5 — Edição R36S (Mini-Player Estilo GTA Trainer `L3 + R3` & Áudio em Jogos)
+# KPlayer v2.1.6 — Edição R36S (Áudio em 2º Plano no EmulationStation & Mini-Player Visual KPlayer `L3 + R3`)
 
 Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita em **C + SDL2 + libVLC ARM64**, adaptativa à resolução do dispositivo.
 
 ---
 
-## Novidades da v2.1.5 (R36S Nativo)
+## Novidades da v2.1.6 (R36S Nativo)
 
-- **Mini-Player no Jogo Estilo GTA Trainer (`L3 + R3`) (`Teste prévio`):**
-  - **Visual de Mod Menu / Cheat Trainer no Canto Superior Esquerdo:** Painel vertical translúcido (`libkp_overlay.so` sobre KMS/DRM, OpenGL ES 2.0 e SDL2, com fallback `/dev/fb0`) com banner colorido do tema (`KPLAYER TRAINER`), contador de opções (`1/5`), subcabeçalho preto com a faixa/estação atual e barra branca de seleção de alto contraste.
-  - **Ativação por `L3 + R3` (clique nos dois analógicos):** Fica 100% invisível durante a jogatina sem atrapalhar nenhum botão do jogo; aperte **`L3 + R3`** juntos para abrir ou fechar instantaneamente.
-  - **Controles do Menu Trainer:** **`↑`/`↓`** navega pelas 5 ações (`Tocar / Pausar`, `Próxima Música/Rádio`, `Voltar Música/Rádio`, `Volume do Áudio`, `Fechar Trainer`), **`←`/`→`** ajusta o volume (`10%–100%`) ou troca a faixa, **`B`/`START`** confirma a linha destacada, **`R2`/`L2`** avança/volta faixa direto de qualquer linha e **`A`** ou **`L3 + R3`** fecha voltando ao jogo.
-  - **Demonstração na Preview Web:** Botão **`Demo Trainer (L3+R3)`** na barra superior e botões **`L3`/`R3`** no controle virtual para testar o menu sobre um jogo retrô estilo GTA ao vivo.
-- **Áudio em Jogos + Leitor de PDF (`PdfCraft R36S`) Preservados:**
-  - Opção **`Áudio em jogos (Teste prévio)`** em **`SELECT → Opções`** rodando diretamente via `./kplayer --bg-audio` com `libvlc.so.5` embarcada, fila completa da pasta e leitura de controle imune ao `gptokeyb` (`EVIOCGKEY`/`SDL_GAMECONTROLLERCONFIG`).
+- **Áudio em 2º Plano Fora do KPlayer (EmulationStation & Jogos):**
+  - **Ativação e desativação exclusivas dentro do app KPlayer:** ligue ou desligue em **`SELECT → Opções → Áudio em 2º plano (ES/Jogos)`**.
+  - Ao sair do KPlayer com a opção ativada, o lançador **`KPlayer.sh`** inicia o serviço nativo em segundo plano (`./kplayer --bg-audio`), mantendo sua música ou rádio online tocando enquanto você navega no **EmulationStation** e abre seus jogos.
+  - Ao reabrir o KPlayer, o serviço em segundo plano para de forma limpa; ao desativar a opção no KPlayer, tudo volta ao padrão do console.
+- **Silenciamento Automático da Música de Fundo do EmulationStation:**
+  - Para impedir que a BGM do EmulationStation toque junto com o KPlayer, o `bg_audio.py` desativa temporariamente `audio.bgmusic`/`BackgroundMusic` em `es_settings.cfg` (com backup reversível), para players de BGM externos (`ogg123`/`mpg123`/`bgm.py`) e silencia fluxos de áudio do `emulationstation` no PulseAudio/PipeWire — **sem jamais alterar nenhum `gamelist.xml`**.
+  - Assim que você desativa o áudio em 2º plano dentro do KPlayer, a música original do EmulationStation é restaurada automaticamente.
+- **Mini-Player Flutuante (`L3 + R3`) com o Design do KPlayer:**
+  - Painel arredondado no canto superior esquerdo (`libkp_overlay.so` + fallback `/dev/fb0`) com gradiente do tema ativo, emblema de disco de vinil **`K`** (`K PLAYER · MINI-PLAYER`), card **`TOCANDO AGORA`** com mini-equalizador e 5 cards navegáveis com barra lateral de foco (`Tocar / Pausar`, `Próxima Música/Rádio`, `Voltar Música/Rádio`, `Volume do Áudio`, `Ocultar Menu`).
+  - **Controles:** **`L3 + R3`** abre/oculta; **`↑`/`↓`** navega; **`←`/`→`** ajusta volume (`10%–100%`) ou troca faixa; **`B`/`START`** confirma; **`R2`/`L2`** avança/volta faixa direto; **`A`** oculta.
+  - **Demonstração na Preview Web:** Botão **`Demo Mini-Player (L3+R3)`** exibindo o Mini-Player ao vivo sobre o **EmulationStation** (com BGM silenciada) e sobre um **Jogo em execução**.
+- **Base Estável R36S Preservada:**
   - Leitor nativo de **`.pdf`** no Gerenciador de Arquivos compatível com **`pdfcraft-core.aarch64`** (`kaiaum01/PdfReader-R36s`), Editor de Texto, 7-Zip ARM64 (`7zzs`) com senha, 10 Visualizadores, 14 Temas, Rádio Online, IPTV + EPG, Notícias, Placar da Bola e Clima Open-Meteo.
 
 ---
@@ -25,6 +30,6 @@ Central de mídia portátil nativa para **R36S (dArkOS / PortMaster)** escrita e
 3. O KPlayer baixa o pacote da pasta `updates/` (ou GitHub Releases), valida o checksum SHA-256, mantém o lançador fixo **`KPlayer.sh`** atualizado internamente sem mexer em nenhum `gamelist.xml`, preserva favoritos, histórico, listas IPTV/Rádio, clima, tema e idioma, e reinicia automaticamente.
 
 ### Instalação Manual — R36S (dArkOS / PortMaster)
-1. Baixe **`KPlayer-v2.1.5-R36S.zip`** nos anexos desta release.
+1. Baixe **`KPlayer-v2.1.6-R36S.zip`** nos anexos desta release.
 2. Extraia e copie **`KPlayer.sh`** e a pasta **`kplayer/`** para `/roms/ports/` (ou `/roms2/ports/` no SD2).
 3. Abra **Ports → KPlayer** no R36S. As artes em alta resolução do disco K ficam em `kplayer/scraper/`.

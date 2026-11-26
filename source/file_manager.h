@@ -2781,19 +2781,19 @@ static void draw_file_manager(void) {
     label(ename, 106, my + 42, 13, textc, 428);
     bool will_bg = bg_audio_preview && active && (playing_audio || playing_radio);
     label(will_bg
-              ? "Teste prévio: aperte L3 + R3 no jogo para abrir o Trainer de Música."
+              ? "2º plano ativo: aperte L3 + R3 no jogo para abrir o Mini-Player KPlayer."
               : (bg_audio_preview
-                     ? "Teste prévio ativo: aperte L3 + R3 no jogo para abrir o Trainer."
+                     ? "2º plano ativo: aperte L3 + R3 para abrir o Mini-Player KPlayer."
                      : "Fecha o KPlayer com segurança para liberar tela e áudio no R36S."),
           106, my + 64, 11, will_bg ? (SDL_Color){74, 222, 128, 255} : muted, 428);
     const char *sh_labels[3] = {
-        will_bg ? "Executar (.sh) com Trainer L3 + R3"
+        will_bg ? "Executar (.sh) com Mini-Player L3 + R3"
                 : "Executar script (.sh) no console",
         "Abrir no Editor de Texto",
         "Cancelar"
     };
     const char *bin_labels[2] = {
-        will_bg ? "Executar com Trainer L3 + R3"
+        will_bg ? "Executar com Mini-Player L3 + R3"
                 : "Executar programa / EmulationStation",
         "Cancelar"
     };

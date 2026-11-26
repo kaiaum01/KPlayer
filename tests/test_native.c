@@ -880,7 +880,7 @@ int main(void) {
     fm_pdf_clear_render();
     fm_view = FM_VIEW_BROWSE;
 
-    /* v2.1.5 Native --bg-audio JSON queue + L3+R3 GTA Trainer In-Game Mini-Player state machine */
+    /* v2.1.6 Native --bg-audio JSON queue + L3+R3 KPlayer Mini-Player state machine */
     FmBgTrack mp_tracks[3] = {
         {"/roms/bgmusic/track1.mp3", "Faixa Um", false},
         {"/roms/bgmusic/track2.mp3", "Faixa Dois", false},
@@ -896,13 +896,13 @@ int main(void) {
     assert(mp_st.selected_row == 0);
     assert(mp_st.accent_r == 0x22 && mp_st.accent_g == 0xd3 && mp_st.accent_b == 0xee);
     assert(mp_st.tracks[2].is_radio && !strcmp(mp_st.tracks[2].title, "Radio Ilha"));
-    /* While GTA Trainer is closed, normal gameplay inputs must be completely ignored */
+    /* While Mini-Player is closed, normal gameplay/ES inputs must be completely ignored */
     assert(bg_mp_handle_action(&mp_st, BG_ACT_R2) == BG_RES_NONE);
     assert(bg_mp_handle_action(&mp_st, BG_ACT_L2) == BG_RES_NONE);
     assert(bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) == BG_RES_NONE);
     assert(bg_mp_handle_action(&mp_st, BG_ACT_CONFIRM) == BG_RES_NONE);
     assert(mp_st.current_index == 1 && !mp_st.overlay_open);
-    /* L3+R3 opens GTA Trainer menu at row 0 */
+    /* L3+R3 opens KPlayer Mini-Player menu at row 0 */
     unsigned int r_open = bg_mp_handle_action(&mp_st, BG_ACT_L3_R3);
     assert((r_open & BG_RES_OPEN_OVERLAY) && mp_st.overlay_open && mp_st.selected_row == 0);
     /* Confirm on row 0 toggles play/pause */
@@ -928,7 +928,7 @@ int main(void) {
            mp_st.volume_pct == 65);
     assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_LEFT) & BG_RES_VOLUME_CHANGED) &&
            mp_st.volume_pct == 55);
-    /* Navigate to row 4 (FECHAR TRAINER) and CONFIRM closes overlay */
+    /* Navigate to row 4 (OCULTAR MENU) and CONFIRM closes overlay */
     assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) & BG_RES_REDRAW) &&
            mp_st.selected_row == 4);
     assert((bg_mp_handle_action(&mp_st, BG_ACT_CONFIRM) & BG_RES_CLOSE_OVERLAY) &&
@@ -944,7 +944,7 @@ int main(void) {
     assert((bg_mp_handle_action(&mp_st, BG_ACT_CLOSE) & BG_RES_CLOSE_OVERLAY) &&
            !mp_st.overlay_open);
 
-    /* R36S SDL_GAMECONTROLLERCONFIG parser (L3/R3 sticks + D-Pad) & GTA Trainer RGBA renderer */
+    /* R36S SDL_GAMECONTROLLERCONFIG parser (L3/R3 sticks + D-Pad) & KPlayer Mini-Player RGBA renderer */
     {
       const char *r36s_cfg =
           "190000004b4800000010000000010000,GO-Super Gamepad,a:b0,b:b1,x:b2,y:b3,"
@@ -974,12 +974,13 @@ int main(void) {
       uint32_t *rgba = (uint32_t *)calloc((size_t)KP_OV_CARD_W * KP_OV_CARD_H, sizeof(uint32_t));
       assert(rgba != NULL);
       kp_ov_render_rgba(&ov, rgba);
-      /* Top border & banner pixel must have accent color and opaque alpha */
-      assert(rgba[0] == kp_ov_rgba(0x22, 0xd3, 0xee, 255));
-      assert(rgba[5 * KP_OV_CARD_W + 5] == kp_ov_rgba(0x22, 0xd3, 0xee, 255));
-      /* Selected GTA Trainer row 1 interior must render high-contrast white bar */
-      int sel_y = 74 + 1 * 26 + 2;
-      assert(rgba[sel_y * KP_OV_CARD_W + 20] == kp_ov_rgba(244, 247, 252, 252));
+      /* Rounded outer corner (0,0) must be fully transparent */
+      assert(rgba[0] == 0);
+      /* Top KPlayer accent line inside header must have exact theme accent color */
+      assert(rgba[1 * KP_OV_CARD_W + 20] == kp_ov_rgba(0x22, 0xd3, 0xee, 255));
+      /* Selected KPlayer row 1 left vertical focus bar must render in exact theme accent */
+      int sel_y = 83 + 1 * 25 + 6;
+      assert(rgba[sel_y * KP_OV_CARD_W + 11] == kp_ov_rgba(0x22, 0xd3, 0xee, 255));
       free(rgba);
     }
 

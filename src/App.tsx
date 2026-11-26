@@ -70,12 +70,12 @@ import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_179539140
 import scraperMarqueeImg from './assets/images/kplayer_marquee_transparent_v208.png';
 import scraperFanartImg from './assets/images/kplayer_fanart_disc_v208_1795391408989.jpg';
 
-const APP_VERSION = '2.1.5';
+const APP_VERSION = '2.1.6';
 const DEFAULT_CHANGELOG_NOTES: string[] = [
-  'Novo Mini-Player estilo GTA Trainer no jogo: menu vertical no topo esquerdo da tela que abre e fecha apertando L3 + R3 (clique dos dois analógicos).',
-  'Navegação completa no Trainer: ↑/↓ escolhe opção, B ativa, ←/→ ajusta volume, L2/R2 troca de faixa instantâneo e A ou L3+R3 fecha sem atrapalhar o jogo.',
-  'Overlay nativo GLES2/EGL/SDL2 (libkp_overlay.so) + fallback /dev/fb0 com leitura direta de hardware imune ao gptokeyb no R36S.',
-  'Demonstração interativa do Mini-Player Trainer direto na preview + base limpa preservando Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip.',
+  'Áudio em 2º plano agora funciona fora do KPlayer (no EmulationStation e nos jogos) — ativação e desativação exclusivas dentro do app KPlayer (SELECT → Opções).',
+  'Silenciamento automático e reversível da música de fundo do EmulationStation enquanto o KPlayer estiver ativo em 2º plano (sem alterar nenhum gamelist.xml).',
+  'Mini-Player flutuante (L3 + R3) redesenhado com a identidade visual do KPlayer: cantos arredondados, emblema de vinil K, card Tocando Agora e foco no tema ativo.',
+  'Demonstração interativa na preview mostrando o Mini-Player sobre o EmulationStation e sobre um jogo, preservando Leitor de PDF (PdfCraft R36S), Editor de Texto e 7-Zip.',
 ];
 
 const TRAINER_DEMO_FALLBACK_TRACKS = [
@@ -2204,9 +2204,9 @@ export default function App() {
                   }
             }
             className="px-2.5 py-1 rounded-md text-xs font-extrabold hover:brightness-110 transition-all cursor-pointer whitespace-nowrap"
-            title="Demonstração interativa do Mini-Player estilo GTA Trainer no jogo (L3 + R3 / F8)"
+            title="Demonstração interativa do Mini-Player KPlayer no EmulationStation e no jogo (L3 + R3 / F8)"
           >
-            {trainerDemoActive ? '✕ Fechar Demo Trainer' : 'Demo Trainer (L3+R3)'}
+            {trainerDemoActive ? '✕ Fechar Demo' : 'Demo Mini-Player (L3+R3)'}
           </button>
           <button
             type="button"
@@ -2479,7 +2479,7 @@ export default function App() {
                       }}
                       className="mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider"
                     >
-                      v2.1.5 • R36S
+                      v2.1.6 • R36S
                     </div>
                   </div>
 
@@ -4615,8 +4615,8 @@ export default function App() {
                     const next = !prev;
                     notify(
                       next
-                        ? 'Teste prévio ativo: L3 + R3 abre o Trainer de Música no jogo'
-                        : 'Áudio em jogos (Teste prévio) desativado'
+                        ? 'Áudio em 2º plano (ES/Jogos) ativo: música do EmulationStation silenciada • L3 + R3 abre o Mini-Player'
+                        : 'Áudio em 2º plano desativado • Música do EmulationStation restaurada'
                     );
                     return next;
                   });
@@ -4911,7 +4911,7 @@ export default function App() {
                   Pacote Compilado ARM64 • R36S
                 </div>
                 <h2 className="text-xl font-extrabold mt-0.5">
-                  KPlayer v2.1.5 — Edição R36S
+                  KPlayer v2.1.6 — Edição R36S
                 </h2>
               </div>
               <button
@@ -4927,7 +4927,7 @@ export default function App() {
               <div className="w-[144px] shrink-0 rounded-xl overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_center,rgba(29,185,84,0.18),rgba(10,12,16,0.96))] p-2 flex items-center justify-center shadow-lg">
                 <img
                   src={scraperCoverImg}
-                  alt="Capa transparente KPlayer v2.1.5 para R36S dArkOS"
+                  alt="Capa transparente KPlayer v2.1.6 para R36S dArkOS"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain"
                 />
@@ -4936,13 +4936,13 @@ export default function App() {
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Arquivo</span>
                   <span className="font-semibold text-zinc-100 truncate">
-                    {r36sInfo?.filename ?? 'KPlayer-v2.1.5-R36S.zip'}
+                    {r36sInfo?.filename ?? 'KPlayer-v2.1.6-R36S.zip'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-zinc-400">Lançador .sh</span>
                   <span className="font-medium text-[#1db954] truncate">
-                    KPlayer.sh (v2.1.5 estável)
+                    KPlayer.sh (v2.1.6 estável)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -5006,7 +5006,7 @@ export default function App() {
             <div className="mt-3 text-xs text-zinc-300 space-y-1.5">
               <div className="font-bold text-zinc-100">Como instalar no R36S (dArkOS / PortMaster):</div>
               <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.5-R36S.zip</code>.</li>
+                <li>Baixe e extraia <code className="text-zinc-100">KPlayer-v2.1.6-R36S.zip</code>.</li>
                 <li>
                   Copie <code className="text-zinc-100">KPlayer.sh</code> e a pasta{' '}
                   <code className="text-zinc-100">kplayer/</code> para{' '}
@@ -5019,22 +5019,22 @@ export default function App() {
                 </li>
               </ol>
               <p className="text-[11px] text-zinc-400 pt-1">
-                Inclui binário ARM64 nativo v2.1.5 + libkp_overlay.so com o novo Mini-Player estilo GTA Trainer acionado por L3 + R3 no meio do jogo, Leitor de PDF compatível com PdfCraft R36S, Editor de Texto, M3U8/rádios e 7-Zip com senha.
+                Inclui binário ARM64 nativo v2.1.6 + libkp_overlay.so com Áudio em 2º plano no EmulationStation e jogos (silenciando a BGM do ES automaticamente), Mini-Player L3 + R3 no design do KPlayer, Leitor de PDF (PdfCraft R36S), Editor de Texto, M3U8/rádios e 7-Zip.
               </p>
             </div>
 
             <div className="mt-4 flex items-center gap-2.5">
               <a
                 href="/api/r36s/download"
-                download="KPlayer-v2.1.5-R36S.zip"
+                download="KPlayer-v2.1.6-R36S.zip"
                 style={{ backgroundColor: theme.accent, color: theme.bg }}
                 className="flex-1 py-2.5 px-4 rounded-xl text-center text-sm font-extrabold hover:brightness-110 transition-all"
               >
-                ⬇ Baixar KPlayer-v2.1.5-R36S.zip
+                ⬇ Baixar KPlayer-v2.1.6-R36S.zip
               </a>
               <a
                 href="/api/r36s/sha256"
-                download="KPlayer-v2.1.5-R36S.zip.sha256"
+                download="KPlayer-v2.1.6-R36S.zip.sha256"
                 className="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 .sha256

@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="KPlayer v2.1.5 — Portable Media Center for R36S" width="100%" />
+  <img src="docs/images/banner.svg" alt="KPlayer v2.1.6 — Portable Media Center for R36S" width="100%" />
 </p>
 
-<h1 align="center">KPlayer v2.1.5</h1>
+<h1 align="center">KPlayer v2.1.6</h1>
 
 <p align="center">
   <strong>Native Portable Media Center for R36S (dArkOS / PortMaster — C + SDL2 + libVLC ARM64)</strong><br />
-  Music &amp; Videos (.LRC) · File Manager + PDF (PdfCraft) + Editor + .sh + 7-Zip · Background Audio Preview · 10 Visualizers · 14 Themes · Radio · IPTV + EPG · News · Weather · Placar
+  Music &amp; Videos (.LRC) · File Manager + PDF (PdfCraft) + Editor + .sh + 7-Zip · Background Audio (ES &amp; Games) · 10 Visualizers · 14 Themes · Radio · IPTV + EPG · News · Weather · Placar
 </p>
 
 <p align="center">
@@ -17,18 +17,21 @@
   <a href="docs/BUILD.md">Build Guide</a> ·
   <a href="TERMS.md">Terms &amp; Transparency</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="releases/RELEASE_NOTES.md">v2.1.5 Release Notes</a> ·
+  <a href="releases/RELEASE_NOTES.md">v2.1.6 Release Notes</a> ·
   <a href="THIRD_PARTY.md">Licenses</a>
 </p>
 
 ---
 
-## What's New in v2.1.5 (R36S Native)
+## What's New in v2.1.6 (R36S Native)
 
-- **GTA Trainer-Style In-Game Mini-Player (`L3 + R3`) & Background Audio (`Teste prévio`):**
-  - Redesigned in-game overlay modeled after classic GTA Cheat Trainers: top-left vertical menu with solid theme-accent banner (`KPLAYER TRAINER`), cursor counter (`1/5`), track/station sub-header, and high-contrast white highlight bar over KMS/DRM, OpenGL ES 2.0, and SDL2 games (`libkp_overlay.so` + `/dev/fb0` fallback).
-  - Activated by pressing **`L3 + R3`** together (both analog stick clicks; `F8` on keyboard), reading hardware state via `EVIOCGKEY`/`SDL_GAMECONTROLLERCONFIG` to bypass `gptokeyb`. Navigate with **`↑`/`↓`**, adjust volume with **`←`/`→`**, confirm with **`B`/`START`**, instant track skip with **`R2`/`L2`**, and close with **`A`** or **`L3 + R3`**.
-  - Runs natively via `./kplayer --bg-audio` with bundled `libvlc.so.5` (toggleable in **`SELECT → Opções → Áudio em jogos (Teste prévio)`**), plus a live interactive **`Demo Trainer (L3+R3)`** simulator on the Web Preview.
+- **Background Audio Outside KPlayer (EmulationStation & Games) — Controlled Exclusively Inside KPlayer:**
+  - Toggle exclusively inside KPlayer via **`SELECT → Opções → Áudio em 2º plano (ES/Jogos)`**; when enabled, exiting KPlayer spawns a detached native daemon (`./kplayer --bg-audio`) so your music or online radio stays active while browsing EmulationStation and playing games.
+  - **Automatic & Reversible EmulationStation BGM Silencer:** Prevents EmulationStation's own background music from clashing by reversibly disabling `audio.bgmusic`/`BackgroundMusic` in `es_settings.cfg`, stopping external ES BGM players (`ogg123`/`mpg123`/`bgm.py`), and muting `emulationstation` PulseAudio/PipeWire streams (never modifying `gamelist.xml`). Disabling the option inside KPlayer restores everything automatically.
+- **KPlayer-Styled Floating Mini-Player (`L3 + R3`):**
+  - Redesigned overlay matching KPlayer's exact rounded theme-tinted aesthetic (`libkp_overlay.so` + `/dev/fb0` fallback): vinyl disc **`K`** emblem (`K PLAYER · MINI-PLAYER`), rounded **`TOCANDO AGORA`** card with mini-equalizer, and 5 rounded action cards with theme-accent focus bar.
+  - Activated by pressing **`L3 + R3`** together (`F8` on keyboard), bypassing `gptokeyb` via `EVIOCGKEY`/`SDL_GAMECONTROLLERCONFIG`. Navigate with **`↑`/`↓`**, adjust volume with **`←`/`→`**, confirm with **`B`/`START`**, instant track skip with **`R2`/`L2`**, and hide with **`A`** or **`L3 + R3`**.
+  - Includes a live interactive **`Demo Mini-Player (L3+R3)`** simulator on the Web Preview with both **EmulationStation** and **In-Game** scenes.
 - **Built-in PDF Reader Compatible with `PdfCraft R36S` (`github.com/kaiaum01/PdfReader-R36s`):**
   - Open **`.pdf`** files directly inside the File Manager (`Arquivos`).
   - Speaks the native `serve` JSON IPC protocol of **`pdfcraft-core.aarch64`** (including password-protected PDFs via the on-screen keyboard), offers external launch into **`PdfCraft.sh`** when installed in `/roms(2)/ports/`, and includes automatic `pdftoppm`/`mutool`/pure-Python text fallbacks (`L1`/`R1` pages, `X` zoom, `Y` text/document toggle, `A` back).
@@ -72,7 +75,7 @@
 
 ## Installation on R36S (dArkOS / PortMaster)
 
-1. Download **`KPlayer-v2.1.5-R36S.zip`** from **[Releases](../../releases)**. *(Do not install the GitHub source archive.)*
+1. Download **`KPlayer-v2.1.6-R36S.zip`** from **[Releases](../../releases)**. *(Do not install the GitHub source archive.)*
 2. Extract it and copy **`KPlayer.sh`** and the **`kplayer/`** directory to `/roms/ports/` (or `/roms2/ports/` on SD2).
 3. Add your media to the dedicated folders (fast boot — ROMs/BIOS/saves are never scanned):
 
