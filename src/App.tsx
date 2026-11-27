@@ -2956,7 +2956,7 @@ export default function App() {
                               1. Conteúdo adulto exclusivo para maiores de 18 anos
                             </div>
                             <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
-                              Ao desbloquear, você declara ter 18 anos ou mais e concorda em exibir a aba +18 junto ao serviço de IPTV. Esta seção vem bloqueada por padrão e pode ser bloqueada novamente a qualquer momento em Opções.
+                              Ao desbloquear, você declara ter 18 anos ou mais e concorda em exibir a aba +18 junto ao serviço de IPTV (com escolha entre PornHub e XVideos). Esta seção vem bloqueada por padrão e pode ser bloqueada novamente a qualquer momento nas Opções Gerais ou nas Opções do IPTV.
                             </p>
                           </div>
 
@@ -2965,10 +2965,10 @@ export default function App() {
                             className="pt-2"
                           >
                             <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
-                              2. API externa (Derfirm/pornhub-api) e Termos de Uso
+                              2. APIs externas (Derfirm/pornhub-api e xvideos_api) e Termos de Uso
                             </div>
                             <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
-                              Os vídeos são consultados via API pública externa compatível com Derfirm/pornhub-api. O K PLAYER atua apenas como reprodutor, não hospeda conteúdo próprio e não possui afiliação com provedores de terceiros.
+                              Os vídeos são consultados via APIs públicas externas compatíveis com Derfirm/pornhub-api e xvideos_api. O K PLAYER atua apenas como reprodutor, não hospeda conteúdo próprio e não possui afiliação com provedores de terceiros.
                             </p>
                           </div>
                         </div>

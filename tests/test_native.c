@@ -684,6 +684,39 @@ int main(void) {
   assert(mode == 10 && stream_notice_target == 18);
   key(SDLK_RETURN, false);
   assert(mode == 2 && adult_section_unlocked && iptv_source_count() == 5);
+  /* Verify Seção +18 (28) is also exposed directly inside IPTV Options (OPT_SEC_IPTV) */
+  bool found_28_in_iptv = false;
+  for (int i = 0; i < OPT_IPTV_COUNT; i++) {
+    if (opt_iptv_ids[i] == 28) found_28_in_iptv = true;
+  }
+  assert(found_28_in_iptv);
+  opt_enter_section(OPT_SEC_IPTV);
+  assert(opt_section == OPT_SEC_IPTV);
+  draw_options();
+  /* Verify +18 tab opens PornHub / XVideos chooser and maps slugs accurately */
+  mode = 8;
+  iptv_source = 4;
+  iptv_view = IPTV_VIEW_CATS;
+  iptv_adult_provider = 0;
+  iptv_adult_prov_sel = 0;
+  draw_iptv();
+  iptv_key(SDLK_DOWN);
+  assert(iptv_adult_prov_sel == 1 && iptv_adult_provider == 0);
+  iptv_key(SDLK_UP);
+  assert(iptv_adult_prov_sel == 0 && iptv_adult_provider == 0);
+  iptv_adult_provider = 1;
+  assert(!strcmp(iptv_source_slug(4), "adult18"));
+  iptv_key(SDLK_BACKSPACE);
+  assert(iptv_adult_provider == 0 && mode == 8);
+  iptv_adult_provider = 2;
+  assert(!strcmp(iptv_source_slug(4), "xvideos"));
+  iptv_key(SDLK_BACKSPACE);
+  assert(iptv_adult_provider == 0 && mode == 8);
+  mode = 2;
+  opt_enter_section(OPT_SEC_ROOT);
+  opt_cursor = 7;
+  opt_sync_option_id();
+  assert(option == 28);
   /* Toggling again immediately locks +18 and hides 5th tab */
   key(SDLK_RIGHT, false);
   assert(mode == 2 && !adult_section_unlocked && iptv_source_count() == 4);

@@ -49,6 +49,8 @@ static int iptv_ep_count = 0, iptv_ep_cap = 0;
 static int iptv_ep_selected = 0, iptv_ep_offset = 0;
 
 static int iptv_source = 0; /* 0=Canais, 1=Filmes, 2=Séries, 3=Usuário, 4=+18 (quando desbloqueado) */
+static int iptv_adult_provider = 0; /* 0=escolher provedor, 1=PornHub, 2=XVideos */
+static int iptv_adult_prov_sel = 0; /* 0=PornHub, 1=XVideos */
 static int iptv_view = IPTV_VIEW_CATS;
 static char iptv_active_cat_id[160] = "";
 static char iptv_active_cat_name[160] = "";
@@ -247,7 +249,7 @@ static const char *iptv_source_slug(int src) {
     case 1: return "filmes";
     case 2: return "series";
     case 3: return "usuario";
-    case 4: return "adult18";
+    case 4: return iptv_adult_provider == 2 ? "xvideos" : "adult18";
     default: return "canais";
   }
 }
@@ -267,7 +269,10 @@ static const char *iptv_source_subtitle(int src) {
     case 1: return IPTV_FILMES_URL;
     case 2: return IPTV_FILMES_URL;
     case 3: return tr("Pasta iptv_usuario/ + Teclado");
-    case 4: return "Derfirm/pornhub-api (Restrito +18)";
+    case 4:
+      if (iptv_adult_provider == 1) return "PornHub • Derfirm/pornhub-api";
+      if (iptv_adult_provider == 2) return "XVideos • xvideos_api";
+      return "Escolha: PornHub ou XVideos (+18)";
     default: return IPTV_CANAIS_URL;
   }
 }
@@ -607,14 +612,23 @@ static void iptv_reload(void) {
 static void iptv_open(void) {
   int max_src = iptv_source_count() - 1;
   if (iptv_source < 0 || iptv_source > max_src) iptv_source = 0;
+  if (iptv_source == 4) iptv_adult_provider = 0;
   iptv_reload();
-  if (!iptv_cat_count || iptv_source == 3 || iptv_source == 4) iptv_fetch_categories_start(false);
+  if (iptv_source != 4 && (!iptv_cat_count || iptv_source == 3))
+    iptv_fetch_categories_start(false);
   mode = 8;
 }
 
 static void iptv_switch_source(int delta) {
   int n = iptv_source_count();
   iptv_source = (iptv_source + delta + n) % n;
+  if (iptv_source == 4) {
+    iptv_adult_provider = 0;
+    iptv_view = IPTV_VIEW_CATS;
+    iptv_count = iptv_selected = iptv_offset = 0;
+    iptv_cat_count = iptv_cat_selected = iptv_cat_offset = 0;
+    return;
+  }
   iptv_reload();
   iptv_fetch_categories_start(false);
 }
@@ -647,7 +661,10 @@ static void iptv_step_channel(int delta) {
     iptv_play_channel(&iptv_episodes[iptv_ep_selected]);
   } else if (iptv_count > 0) {
     iptv_selected = (iptv_selected + (delta < 0 ? iptv_count - 1 : 1)) % iptv_count;
-    iptv_play_channel(&iptv_channels[iptv_selected]);
+    if (!strncmp(iptv_channels[iptv_selected].url, "kplayer-adult://", 16))
+      iptv_resolve_adult_start(&iptv_channels[iptv_selected]);
+    else
+      iptv_play_channel(&iptv_channels[iptv_selected]);
   }
 }
 
@@ -778,9 +795,11 @@ static void iptv_apply_search_submit(void) {
   iptv_selected = iptv_offset = 0;
   iptv_ep_selected = iptv_ep_offset = 0;
   if (iptv_source == 4 && iptv_search_query[0]) {
+    if (iptv_adult_provider == 0) iptv_adult_provider = iptv_adult_prov_sel + 1;
     char qid[128], qlabel[128];
     snprintf(qid, sizeof(qid), "search:%.63s", iptv_search_query);
-    snprintf(qlabel, sizeof(qlabel), "Busca +18: %.63s", iptv_search_query);
+    snprintf(qlabel, sizeof(qlabel), "%s: %.63s",
+             iptv_adult_provider == 2 ? "XVideos" : "PornHub", iptv_search_query);
     iptv_fetch_items_start(qid, qlabel, true);
     return;
   }
@@ -869,6 +888,26 @@ static void iptv_key(SDL_Keycode k) {
   }
 
   if (iptv_view == IPTV_VIEW_CATS) {
+    if (iptv_source == 4 && iptv_adult_provider == 0) {
+      if (k == SDLK_UP || k == SDLK_DOWN) {
+        iptv_adult_prov_sel = (iptv_adult_prov_sel + 1) % 2;
+      } else if (k == SDLK_RETURN) {
+        iptv_adult_provider = iptv_adult_prov_sel + 1;
+        iptv_reload();
+        iptv_fetch_categories_start(false);
+      } else if (k == SDLK_q) {
+        iptv_open_search_kb();
+      } else if (k == SDLK_LEFT && !radio_play_is_busy()) {
+        iptv_clear_search();
+        iptv_switch_source(-1);
+      } else if ((k == SDLK_RIGHT || k == SDLK_SPACE) && !radio_play_is_busy()) {
+        iptv_clear_search();
+        iptv_switch_source(1);
+      } else if (k == SDLK_BACKSPACE && !radio_play_is_busy()) {
+        mode = 3;
+      }
+      return;
+    }
     int total = iptv_cat_total_rows();
     if (k == SDLK_UP && total > 0)
       iptv_cat_selected = (iptv_cat_selected + total - 1) % total;
@@ -896,7 +935,12 @@ static void iptv_key(SDL_Keycode k) {
     } else if (k == SDLK_m && !radio_play_is_busy()) {
       iptv_fetch_categories_start(true);
     } else if (k == SDLK_BACKSPACE && !radio_play_is_busy()) {
-      mode = 3;
+      if (iptv_source == 4 && iptv_adult_provider > 0) {
+        iptv_adult_provider = 0;
+        iptv_cat_count = iptv_cat_selected = iptv_cat_offset = 0;
+      } else {
+        mode = 3;
+      }
     }
     return;
   }
@@ -1141,9 +1185,34 @@ static void draw_iptv(void) {
   }
 
   if (iptv_view == IPTV_VIEW_CATS) {
+    if (iptv_source == 4 && iptv_adult_provider == 0) {
+      label("Escolha o catálogo +18 (B para entrar)", 18, 86, 14, muted, 460);
+      static const char *prov_names[2] = {"PornHub", "XVideos"};
+      static const char *prov_subs[2] = {
+          "API Derfirm/pornhub-api • Categorias, Destaques e Busca",
+          "API xvideos_api • Destaques, Melhores, Tags e Busca",
+      };
+      static const char *prov_badges[2] = {"PORNHUB", "XVIDEOS"};
+      for (int p = 0; p < 2; p++) {
+        int cy = 128 + p * 116;
+        bool focus = (iptv_adult_prov_sel == p);
+        card(24, cy, 592, 98, 14, focus, panel);
+        rounded(44, cy + 20, 96, 26, 10, focus ? accent : elevated);
+        centered(prov_badges[p], 44, cy + 26, 96, 11, focus ? bg : muted);
+        label(prov_names[p], 156, cy + 18, 22, focus ? accent : textc, 360);
+        label(prov_subs[p], 156, cy + 50, 12, muted, 440);
+        label(focus ? "B  Entrar >" : "Selecionar", 500, cy + 38, 12, focus ? accent : dim, 100);
+      }
+      label("Você pode bloquear a Seção +18 a qualquer momento em SELECT → Opções do IPTV.",
+            24, 384, 11, dim, 592);
+      footer_hints(NULL, 0);
+      return;
+    }
     label(iptv_source == 3 ? tr("Coloque .m3u/.m3u8 em iptv_usuario/")
-                           : tr("Escolha a categoria"),
-          18, 84, 14, muted, 330);
+                           : (iptv_source == 4 ? (iptv_adult_provider == 2 ? "XVideos • Escolha a categoria (A volta)"
+                                                                           : "PornHub • Escolha a categoria (A volta)")
+                                               : tr("Escolha a categoria")),
+          18, 84, 14, muted, 340);
     rounded(366, 80, 254, 24, 10, iptv_search_query[0] ? alpha(accent, 42) : elevated);
     char sbtn[88];
     if (iptv_search_query[0]) snprintf(sbtn, sizeof(sbtn), "Busca: %.18s (L1/R1)", iptv_search_query);

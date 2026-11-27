@@ -436,21 +436,37 @@ class Adult18FetchTest(unittest.TestCase):
 
         self.assertTrue(f.is_allowed_adult_url("https://www.pornhub.com/webmasters/categories"))
         self.assertTrue(f.is_allowed_adult_url("https://cv-h.phncdn.com/hls/videos/test.m3u8"))
+        self.assertTrue(f.is_allowed_adult_url("https://www.xvideos.com/tags"))
+        self.assertTrue(f.is_allowed_adult_url("https://hls-cdn77.xvideos-cdn.com/videos/hls/test.m3u8"))
+        self.assertTrue(f.is_allowed_adult_url("https://thumb-cdn77.xnxx-cdn.com/thumb.jpg"))
         self.assertFalse(f.is_allowed_adult_url("http://www.pornhub.com/webmasters/categories"))
+        self.assertFalse(f.is_allowed_adult_url("http://www.xvideos.com/tags"))
         self.assertFalse(f.is_allowed_adult_url("https://127.0.0.1/admin"))
         self.assertFalse(f.is_allowed_adult_url("https://evil.example.com/pornhub.com"))
+        self.assertFalse(f.is_allowed_adult_url("https://evil.example.com/xvideos.com"))
         self.assertFalse(f.is_allowed_adult_url("file:///etc/passwd"))
 
     def test_stream_picker_and_mocked_catalog(self) -> None:
         f = self.iptv_fetch
+        nested_html = (
+            'var flashvars_1 = {"mediaDefinitions":[{"format":"hls","quality":"480",'
+            '"videoUrl":"https://ee-h.phncdn.com/hls/480.m3u8"},{"format":"mp4","quality":[720,480],'
+            '"videoUrl":"https://www.pornhub.com/video/get_media?s=abc"}],"next":1};'
+        )
+        extracted = f._extract_json_array_after(nested_html, '"mediaDefinitions"')
+        parsed_defs = json.loads(extracted)
+        self.assertEqual(len(parsed_defs), 2)
+        self.assertEqual(f._pick_best_adult_stream(parsed_defs), "https://ee-h.phncdn.com/hls/480.m3u8")
+
         picked = f._pick_best_adult_stream(
             [
-                {"format": "mp4", "quality": "1080", "videoUrl": "https://cv-h.phncdn.com/1080.mp4"},
-                {"format": "mp4", "quality": "480", "videoUrl": "https://cv-h.phncdn.com/480.mp4"},
+                {"format": "mp4", "quality": "1080", "videoUrl": "https://ev.phncdn.com/1080.mp4"},
+                {"format": "mp4", "quality": "480", "videoUrl": "https://ev.phncdn.com/480.mp4"},
+                {"format": "mp4", "quality": [], "videoUrl": "https://www.pornhub.com/video/get_media?s=xyz"},
                 {"format": "mp4", "quality": "720", "videoUrl": "https://evil.example/720.mp4"},
             ]
         )
-        self.assertEqual(picked, "https://cv-h.phncdn.com/480.mp4")
+        self.assertEqual(picked, "https://ev.phncdn.com/480.mp4")
 
         mock_cats = json.dumps(
             {
@@ -488,7 +504,53 @@ class Adult18FetchTest(unittest.TestCase):
                 self.assertTrue(f.cmd_list("adult18", "cat:brazilian", items_out, refresh=True))
             m3u_text = items_out.read_text(encoding="utf-8")
             self.assertIn("Sample Video", m3u_text)
-            self.assertIn("kplayer-adult://ph1234567890", m3u_text)
+            self.assertIn("kplayer-adult://pornhub/ph1234567890", m3u_text)
+
+    def test_xvideos_catalog_parser_and_resolver(self) -> None:
+        f = self.iptv_fetch
+        mock_tags_html = (
+            '<li><a href="/tags/blonde"><b>blonde</b> <span class="navbadge">120,000</span></a></li>'
+            '<li><a href="/tags/anal"><b>anal</b> <span class="navbadge">250,000</span></a></li>'
+        )
+        mock_list_html = (
+            '<div id="video-thumb-omeakuv3672" class="thumb-block video">'
+            '<img data-src="https://thumb-cdn77.xvideos-cdn.com/t1.jpg" alt="Alt Title" />'
+            '<div class="title" title="XVideos Sample &amp; Demo">XVideos Sample</div>'
+            '<span class="duration">14 min</span>'
+            '<span class="views-count">1.2M</span>'
+            '<span class="video-hd-mark">1080p</span>'
+            '</div>'
+        )
+        mock_video_html = (
+            "<script>"
+            "html5player.setVideoTitle('XVideos Sample');"
+            "html5player.setVideoUrlLow('https://mp4-cdn77.xvideos-cdn.com/low.mp4');"
+            "html5player.setVideoUrlHigh('https://mp4-cdn77.xvideos-cdn.com/high.mp4');"
+            "html5player.setVideoHLS('https://hls-cdn77.xvideos-cdn.com/hls.m3u8');"
+            "</script>"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            cat_out = Path(tmp) / "xv_cats.tsv"
+            items_out = Path(tmp) / "xv_items.m3u8"
+            res_out = Path(tmp) / "xv_stream.txt"
+            with mock.patch.object(f, "_adult_http_get", return_value=mock_tags_html):
+                self.assertTrue(f.cmd_categories("xvideos", cat_out, refresh=True))
+            cat_lines = cat_out.read_text(encoding="utf-8").splitlines()
+            self.assertTrue(any(line.startswith("xv:home\t") for line in cat_lines))
+            self.assertTrue(any(line.startswith("xv:tag:blonde\t") for line in cat_lines))
+
+            with mock.patch.object(f, "_adult_http_get", return_value=mock_list_html):
+                self.assertTrue(f.cmd_list("xvideos", "xv:best", items_out, refresh=True))
+            m3u_text = items_out.read_text(encoding="utf-8")
+            self.assertIn("XVideos Sample & Demo", m3u_text)
+            self.assertIn("kplayer-adult://xvideos/omeakuv3672", m3u_text)
+
+            with mock.patch.object(f, "_adult_http_get", return_value=mock_video_html):
+                self.assertTrue(f.cmd_resolve_adult("xvideos/omeakuv3672", res_out))
+            self.assertEqual(
+                res_out.read_text(encoding="utf-8").strip(),
+                "https://hls-cdn77.xvideos-cdn.com/hls.m3u8",
+            )
 
 
 if __name__ == "__main__":

@@ -135,11 +135,11 @@ static const char *terms_text[TERMS_COUNT] = {
     "fontes livres. As licenças estão na pasta licencas e o código-fonte "
     "acompanha o pacote. Sem afiliação com VideoLAN, PortMaster ou SofaScore.",
     "A Seção +18 vem BLOQUEADA por padrão e só pode ser desbloqueada nas "
-    "Opções por pessoas maiores de 18 anos após aceitar o aviso prévio. Quando "
-    "desbloqueada, exibe uma aba +18 no serviço de IPTV consultando a API "
-    "pública externa compatível com Derfirm/pornhub-api. O K PLAYER não "
-    "hospeda, modera nem se responsabiliza por conteúdo de terceiros; você "
-    "pode bloquear novamente a qualquer momento nas Opções."};
+    "Opções Gerais ou nas Opções do IPTV por maiores de 18 anos após aceitar "
+    "o aviso prévio. Quando desbloqueada, exibe a aba +18 no IPTV com escolha "
+    "entre PornHub (Derfirm/pornhub-api) e XVideos (xvideos_api). O K PLAYER "
+    "não hospeda, modera nem se responsabiliza por conteúdo de terceiros; "
+    "você pode bloquear novamente a qualquer momento."};
 static void draw_terms(void) {
   backdrop();
   draw_header(tr("Termos de uso"));
@@ -170,8 +170,8 @@ static void draw_stream_notice(void) {
             36, 148, 568, 13, 20, 4, textc);
 
     rect(36, 240, 568, 1, alpha(textc, 24));
-    label("2. API externa (Derfirm/pornhub-api) e Termos", 36, 252, 14, accent, 568);
-    wrapped("Os vídeos são consultados via API pública externa compatível com Derfirm/pornhub-api. O K PLAYER é apenas um reprodutor, não hospeda conteúdo próprio e não tem afiliação com terceiros.",
+    label("2. APIs externas (PornHub e XVideos) e Termos", 36, 252, 14, accent, 568);
+    wrapped("Ao entrar na aba +18 você escolhe entre PornHub (Derfirm/pornhub-api) ou XVideos (xvideos_api). O K PLAYER é apenas um reprodutor, não hospeda conteúdo próprio e não tem afiliação com terceiros.",
             36, 276, 568, 13, 20, 4, textc);
 
     rounded(36, 372, 272, 36, 12, accent);

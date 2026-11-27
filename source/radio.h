@@ -599,6 +599,24 @@ static void *radio_play_worker(void *unused) {
   libvlc_media_t *media = libvlc_media_new_location(engine, station.url);
   bool success = false;
   if (media) {
+    if (p_libvlc_media_add_option) {
+      const char *adult_ref = NULL;
+      if (strstr(station.url, ".phncdn.com/") || strstr(station.url, ".pornhub.com/")) {
+        adult_ref = ":http-referrer=https://www.pornhub.com/";
+      } else if (strstr(station.url, ".xvideos-cdn.com/") ||
+                 strstr(station.url, ".xvideos.com/") ||
+                 strstr(station.url, ".xnxx-cdn.com/")) {
+        adult_ref = ":http-referrer=https://www.xvideos.com/";
+      }
+      if (adult_ref) {
+        p_libvlc_media_add_option(media, adult_ref);
+        p_libvlc_media_add_option(
+            media,
+            ":http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+        p_libvlc_media_add_option(media, ":network-caching=2500");
+      }
+    }
     libvlc_media_player_stop(player);
     libvlc_media_player_set_media(player, media);
     libvlc_media_release(media);

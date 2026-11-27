@@ -492,7 +492,9 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
         },
         {
           id: 'iptv-tab',
-          label: 'Alternar aba (Canais / Filmes / Séries / Usuário)',
+          label: adultSectionUnlocked
+            ? 'Alternar aba (Canais / Filmes / Séries / Usuário / +18)'
+            : 'Alternar aba (Canais / Filmes / Séries / Usuário)',
           value: 'Trocar',
           onSelect: () => {
             onClose();
@@ -516,6 +518,13 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
             onClose();
             onIptvAddUrl?.();
           },
+        },
+        {
+          id: 'iptv-adult-18',
+          label: tr('Seção +18', language),
+          value: adultSectionUnlocked ? tr('Desbloqueado', language) : tr('Bloqueado', language),
+          badge: adultSectionUnlocked ? '+18' : undefined,
+          onSelect: onToggleAdultSection,
         },
         {
           id: 'iptv-terms',

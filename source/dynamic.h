@@ -313,6 +313,7 @@ static __typeof__(libvlc_media_new_path) *p_libvlc_media_new_path;
 #define libvlc_media_new_path p_libvlc_media_new_path
 static __typeof__(libvlc_media_new_location) *p_libvlc_media_new_location;
 #define libvlc_media_new_location p_libvlc_media_new_location
+static __typeof__(libvlc_media_add_option) *p_libvlc_media_add_option;
 static __typeof__(libvlc_media_player_get_length)
     *p_libvlc_media_player_get_length;
 #define libvlc_media_player_get_length p_libvlc_media_player_get_length
@@ -425,6 +426,8 @@ static int load_vlc(void) {
     fprintf(stderr, "Símbolo ausente: libvlc_media_new_location\n");
     return 0;
   }
+  *(void **)(&p_libvlc_media_add_option) =
+      dlsym(handle, "libvlc_media_add_option");
   *(void **)(&p_libvlc_media_player_get_length) =
       dlsym(handle, "libvlc_media_player_get_length");
   if (!p_libvlc_media_player_get_length) {

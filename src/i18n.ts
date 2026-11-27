@@ -311,11 +311,11 @@ export const TERMS_PAGES: Array<{ title: string; body: [string, string, string] 
     ],
   },
   {
-    title: 'Seção +18 (Opcional — API Externa)',
+    title: 'Seção +18 (Opcional — APIs Externas)',
     body: [
-      'A Seção +18 vem BLOQUEADA por padrão e é destinada exclusivamente a maiores de 18 anos. O desbloqueio só ocorre nas Opções após leitura e aceite explícito do Aviso Prévio. Quando desbloqueada, uma aba +18 é exibida junto ao serviço de IPTV consultando a API pública externa compatível com Derfirm/pornhub-api. O K PLAYER não hospeda, armazena nem modera conteúdo de terceiros; você pode bloquear a seção novamente a qualquer momento nas Opções.',
-      'The +18 Section is LOCKED by default and strictly intended for adults aged 18 and older. Unlocking happens only in Settings after explicitly accepting the Prior Notice. When unlocked, a +18 tab appears alongside IPTV querying the public external API compatible with Derfirm/pornhub-api. K PLAYER does not host, store or moderate third-party content; you may lock the section again at any time in Settings.',
-      'La Sección +18 viene BLOQUEADA de forma predeterminada y está destinada exclusivamente a mayores de 18 años. El desbloqueo solo ocurre en Ajustes tras aceptar explícitamente el Aviso Previo. Al desbloquearla, aparece una pestaña +18 junto a IPTV consultando la API pública externa compatible con Derfirm/pornhub-api. K PLAYER no aloja ni modera contenido de terceros; puedes volver a bloquearla en cualquier momento en Ajustes.',
+      'A Seção +18 vem BLOQUEADA por padrão e é destinada exclusivamente a maiores de 18 anos. O desbloqueio só ocorre nas Opções Gerais ou nas Opções do IPTV após leitura e aceite explícito do Aviso Prévio. Quando desbloqueada, uma aba +18 é exibida no IPTV permitindo escolher entre PornHub (Derfirm/pornhub-api) e XVideos (xvideos_api). O K PLAYER não hospeda, armazena nem modera conteúdo de terceiros; você pode bloquear a seção novamente a qualquer momento nas Opções.',
+      'The +18 Section is LOCKED by default and strictly intended for adults aged 18 and older. Unlocking happens only in General Settings or IPTV Options after explicitly accepting the Prior Notice. When unlocked, a +18 tab appears inside IPTV letting you choose between PornHub (Derfirm/pornhub-api) and XVideos (xvideos_api). K PLAYER does not host, store or moderate third-party content; you may lock the section again at any time in Settings.',
+      'La Sección +18 viene BLOQUEADA de forma predeterminada y está destinada exclusivamente a mayores de 18 años. El desbloqueo solo ocurre en Ajustes Generales o en Opciones de IPTV tras aceptar explícitamente el Aviso Previo. Al desbloquearla, aparece una pestaña +18 en IPTV para elegir entre PornHub (Derfirm/pornhub-api) y XVideos (xvideos_api). K PLAYER no aloja ni modera contenido de terceros; puedes volver a bloquearla en cualquier momento en Ajustes.',
     ],
   },
 ];

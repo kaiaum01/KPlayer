@@ -1239,8 +1239,8 @@ static const int opt_music_ids[] = {12, 16, 7, 13, 4, 14, 0, 25, 15, -98};
 #define OPT_MUSIC_COUNT 10
 
 /* TV / IPTV contextual options ONLY */
-static const int opt_iptv_ids[] = {50, 51, 52, 53, 54, 6, -98};
-#define OPT_IPTV_COUNT 7
+static const int opt_iptv_ids[] = {50, 51, 52, 53, 54, 28, 6, -98};
+#define OPT_IPTV_COUNT ((int)(sizeof(opt_iptv_ids) / sizeof(opt_iptv_ids[0])))
 
 /* Radio contextual options ONLY */
 static const int opt_radio_ids[] = {60, 61, 62, 25, 15, 6, -98};
@@ -2047,6 +2047,7 @@ static void change_option(int dir) {
       open_stream_notice(18, 2);
     } else {
       adult_section_unlocked = false;
+      iptv_adult_provider = 0;
       if (iptv_source == 4) iptv_source = 0;
       save_settings();
       notify("Seção +18 bloqueada e oculta do IPTV");

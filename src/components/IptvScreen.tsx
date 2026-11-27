@@ -59,8 +59,28 @@ const BASE_SOURCES: Array<{ key: IptvSourceKey; label: string; subtitle: string 
 const ADULT_SOURCE: { key: IptvSourceKey; label: string; subtitle: string } = {
   key: 'adult18',
   label: '+18',
-  subtitle: 'Derfirm/pornhub-api (Restrito +18)',
+  subtitle: 'PornHub & XVideos (Restrito +18)',
 };
+
+const ADULT_PROVIDERS: Array<{
+  key: 'pornhub' | 'xvideos';
+  name: string;
+  apiLabel: string;
+  description: string;
+}> = [
+  {
+    key: 'pornhub',
+    name: 'PornHub',
+    apiLabel: 'Derfirm/pornhub-api',
+    description: 'Categorias, destaques semanais/mensais e busca de vídeos',
+  },
+  {
+    key: 'xvideos',
+    name: 'XVideos',
+    apiLabel: 'xvideos_api',
+    description: 'Destaques, melhores do mês, tags populares e busca de vídeos',
+  },
+];
 
 const VIRTUAL_KB_ROWS: string[][] = [
   ['https://', 'http://', '.m3u8', '.m3u', '.txt', '/', ':', '.', '-', '_'],
@@ -99,12 +119,20 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
     [adultSectionUnlocked]
   );
   const [sourceIdx, setSourceIdx] = useState<number>(0);
+  const [adultProvider, setAdultProvider] = useState<'pornhub' | 'xvideos' | null>(null);
+  const [adultProvSelected, setAdultProvSelected] = useState<number>(0);
+
   useEffect(() => {
     if (!adultSectionUnlocked && sourceIdx >= BASE_SOURCES.length) {
       setSourceIdx(0);
+      setAdultProvider(null);
     }
   }, [adultSectionUnlocked, sourceIdx]);
+
   const activeSource = sources[sourceIdx] ?? sources[0];
+  const isAdultChooser = activeSource.key === 'adult18' && adultProvider === null;
+  const effectiveSource: IptvSourceKey =
+    activeSource.key === 'adult18' && adultProvider === 'xvideos' ? 'xvideos' : activeSource.key;
 
   const [view, setView] = useState<IptvView>('categories');
 
@@ -207,6 +235,17 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
     }
   }, []);
 
+  const selectAdultProvider = useCallback((prov: 'pornhub' | 'xvideos') => {
+    setAdultProvider(prov);
+    setAdultProvSelected(prov === 'xvideos' ? 1 : 0);
+    setView('categories');
+    setCatSelected(0);
+    setActiveCategory(null);
+    setActiveSeries(null);
+    setItemQuery('');
+    setCatSearchQuery('');
+  }, []);
+
   useEffect(() => {
     setView('categories');
     setCatSelected(0);
@@ -214,12 +253,28 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
     setActiveSeries(null);
     setItemQuery('');
     setCatSearchQuery('');
-    loadCategories(activeSource.key, activeSource.key === 'usuario');
-  }, [activeSource.key, loadCategories]);
+    setAdultProvider(null);
+  }, [activeSource.key]);
+
+  useEffect(() => {
+    if (activeSource.key === 'adult18' && adultProvider === null) {
+      setCategories([]);
+      setTotalSourceCount(0);
+      setCatLoading(false);
+      return;
+    }
+    setView('categories');
+    setCatSelected(0);
+    setActiveCategory(null);
+    setActiveSeries(null);
+    setItemQuery('');
+    setCatSearchQuery('');
+    loadCategories(effectiveSource, effectiveSource === 'usuario');
+  }, [activeSource.key, adultProvider, effectiveSource, loadCategories]);
 
   const openCategory = useCallback(
     async (cat: IptvCategory, force = false, initialQuery = '') => {
-      const cacheKey = `${activeSource.key}:${cat.id}`;
+      const cacheKey = `${effectiveSource}:${cat.id}`;
       setActiveCategory(cat);
       setItemSelected(0);
       setItemQuery(initialQuery);
@@ -236,7 +291,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
       setItemsLoading(true);
       try {
         const r = await fetch(
-          `/api/iptv/items?source=${activeSource.key}&category=${encodeURIComponent(cat.id)}${force ? '&refresh=1' : ''}`
+          `/api/iptv/items?source=${effectiveSource}&category=${encodeURIComponent(cat.id)}${force ? '&refresh=1' : ''}`
         );
         const d = (await r.json()) as { items?: IptvChannel[] };
         const list = Array.isArray(d.items) ? d.items : [];
@@ -248,7 +303,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         setItemsLoading(false);
       }
     },
-    [activeSource.key]
+    [effectiveSource]
   );
 
   const openSeriesEpisodes = useCallback(async (show: IptvChannel, force = false) => {
@@ -321,15 +376,37 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         return;
       }
       if (item.url.startsWith('kplayer-adult://')) {
-        const videoId = item.url.slice('kplayer-adult://'.length).trim();
+        const rawSpec = item.url.slice('kplayer-adult://'.length).trim();
+        let provider: 'pornhub' | 'xvideos' = adultProvider === 'xvideos' ? 'xvideos' : 'pornhub';
+        let videoId = rawSpec;
+        if (rawSpec.startsWith('xvideos/') || rawSpec.startsWith('xvideos:')) {
+          provider = 'xvideos';
+          videoId = rawSpec.slice('xvideos/'.length).trim();
+        } else if (rawSpec.startsWith('pornhub/') || rawSpec.startsWith('pornhub:')) {
+          provider = 'pornhub';
+          videoId = rawSpec.slice('pornhub/'.length).trim();
+        }
         if (!/^[a-zA-Z0-9_-]{4,40}$/.test(videoId) || adultResolving) return;
         setAdultResolving(true);
-        notify('Carregando vídeo +18...');
+        notify(provider === 'xvideos' ? 'Carregando vídeo XVideos (+18)...' : 'Carregando vídeo PornHub (+18)...');
         try {
-          const r = await fetch(`/api/iptv/adult/resolve?id=${encodeURIComponent(videoId)}`);
-          const d = (await r.json()) as { ok?: boolean; streamUrl?: string; embedUrl?: string };
+          const r = await fetch(
+            `/api/iptv/adult/resolve?provider=${provider}&id=${encodeURIComponent(videoId)}`
+          );
+          const d = (await r.json()) as {
+            ok?: boolean;
+            streamUrl?: string;
+            fallbackUrls?: string[];
+            embedUrl?: string;
+          };
           if (d.streamUrl && /^https?:\/\//i.test(d.streamUrl)) {
-            onPlayItem({ ...item, url: d.streamUrl }, '+18');
+            const fallbackUrls = Array.isArray(d.fallbackUrls)
+              ? d.fallbackUrls.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u))
+              : [];
+            onPlayItem(
+              { ...item, url: d.streamUrl, fallbackUrls },
+              provider === 'xvideos' ? '+18 · XVideos' : '+18 · PornHub'
+            );
           } else if (d.embedUrl && d.embedUrl.startsWith('https://www.pornhub.com/embed/')) {
             setAdultEmbedModal({ title: item.name, embedUrl: d.embedUrl });
           } else {
@@ -344,7 +421,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
       }
       onPlayItem(item, tr(activeSource.label, language));
     },
-    [activeSource.label, adultResolving, language, notify, onPlayItem, openSeriesEpisodes]
+    [activeSource.label, adultProvider, adultResolving, language, notify, onPlayItem, openSeriesEpisodes]
   );
 
   // User IPTV URL save via keyboard
@@ -436,8 +513,14 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
     ref,
     () => ({
       focusSearch: () => {
+        if (isAdultChooser) {
+          notify('Escolha PornHub ou XVideos primeiro');
+          return;
+        }
         if (view === 'items') {
           window.setTimeout(() => searchInputRef.current?.focus(), 60);
+        } else if (activeSource.key === 'adult18') {
+          window.setTimeout(() => catSearchInputRef.current?.focus(), 60);
         } else {
           const allCat = categories.find((c) => c.id === 'all') ?? categories[0];
           if (allCat) {
@@ -453,13 +536,14 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         setSourceIdx((s) => (s + 1) % sources.length);
       },
       refreshCurrent: () => {
+        if (isAdultChooser) return;
         if (view === 'episodes' && activeSeries) {
           void openSeriesEpisodes(activeSeries, true);
         } else if (view === 'items' && activeCategory) {
           void openCategory(activeCategory, true, itemQuery);
         } else {
           itemsCacheRef.current.clear();
-          void loadCategories(activeSource.key, true);
+          void loadCategories(effectiveSource, true);
         }
       },
       openAddUrl: () => {
@@ -487,8 +571,26 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         }
 
         if (view === 'categories') {
+          if (isAdultChooser) {
+            if (btn === 'A') {
+              onBackHome();
+            } else if (btn === 'LEFT') {
+              setSourceIdx((s) => (s + sources.length - 1) % sources.length);
+            } else if (btn === 'RIGHT') {
+              setSourceIdx((s) => (s + 1) % sources.length);
+            } else if (btn === 'UP' || btn === 'DOWN') {
+              setAdultProvSelected((i) => (i === 0 ? 1 : 0));
+            } else if (btn === 'B') {
+              selectAdultProvider(adultProvSelected === 1 ? 'xvideos' : 'pornhub');
+            }
+            return;
+          }
           if (btn === 'A') {
-            onBackHome();
+            if (activeSource.key === 'adult18' && adultProvider !== null) {
+              setAdultProvider(null);
+            } else {
+              onBackHome();
+            }
           } else if (btn === 'LEFT') {
             setSourceIdx((s) => (s + sources.length - 1) % sources.length);
           } else if (btn === 'RIGHT') {
@@ -501,7 +603,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
             openCategory(categories[catSelected], false);
           } else if (btn === 'Y') {
             itemsCacheRef.current.clear();
-            loadCategories(activeSource.key, true);
+            loadCategories(effectiveSource, true);
           }
           return;
         }
@@ -554,11 +656,17 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
     }),
     [
       adultEmbedModal,
+      adultProvider,
+      adultProvSelected,
+      isAdultChooser,
+      effectiveSource,
       epgModalChannel,
       showKbModal,
       view,
       categories,
       catSelected,
+      catSearchQuery,
+      itemQuery,
       sources.length,
       activeSource.key,
       filteredItems,
@@ -570,9 +678,11 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
       seasonFilter,
       activeSeries,
       language,
+      notify,
       onBackHome,
       openCategory,
       loadCategories,
+      selectAdultProvider,
       activateItem,
       onPlayItem,
       openSeriesEpisodes,
@@ -601,16 +711,24 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         <div className="flex flex-col leading-tight min-w-0">
           <div className="flex items-baseline gap-2">
             <span style={{ color: theme.text }} className="text-[17px] @min-[520px]:text-[19px] font-extrabold truncate">
-              {tr(activeSource.label, language)}
+              {activeSource.key === 'adult18' && adultProvider
+                ? `+18 · ${adultProvider === 'xvideos' ? 'XVideos' : 'PornHub'}`
+                : tr(activeSource.label, language)}
             </span>
-            {totalSourceCount > 0 && (
+            {!isAdultChooser && totalSourceCount > 0 && (
               <span style={{ color: theme.accent }} className="text-[11px] font-bold shrink-0">
                 {totalSourceCount.toLocaleString('pt-BR')}
               </span>
             )}
           </div>
           <span style={{ color: theme.dim }} className="text-[9.5px] truncate mt-0.5 hidden @min-[480px]:block">
-            {activeSource.subtitle}
+            {activeSource.key === 'adult18'
+              ? adultProvider === 'xvideos'
+                ? 'xvideos_api (Restrito +18)'
+                : adultProvider === 'pornhub'
+                ? 'Derfirm/pornhub-api (Restrito +18)'
+                : 'Escolha o provedor: PornHub ou XVideos'
+              : activeSource.subtitle}
           </span>
         </div>
 
@@ -638,191 +756,302 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         </div>
       </div>
 
-      {/* ==================== STEP 1: CATEGORIES VIEW ==================== */}
+      {/* ==================== STEP 1: CATEGORIES VIEW (or +18 PROVIDER CHOOSER) ==================== */}
       {view === 'categories' && (
         <div className="relative z-10 flex-1 min-h-0 px-4 pt-2 pb-3 flex flex-col">
-          {/* User IPTV actions bar (Keyboard URL + Local folder upload) */}
-          {activeSource.key === 'usuario' ? (
-            <div className="mb-2 space-y-1.5 shrink-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setKbError(null);
-                    setShowKbModal(true);
-                  }}
-                  style={{
-                    ...modernPillStyle(theme, true),
-                    height: 30,
-                    paddingLeft: 12,
-                    paddingRight: 12,
-                  }}
-                  className="text-[11px] font-extrabold cursor-pointer shrink-0"
-                >
-                  + {tr('Adicionar URL (Teclado)', language)}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fileUploadRef.current?.click()}
-                  style={{
-                    ...modernCardStyle(theme, false, 10),
-                    height: 30,
-                    paddingLeft: 12,
-                    paddingRight: 12,
-                    color: theme.text,
-                  }}
-                  className="text-[11px] font-bold cursor-pointer shrink-0"
-                >
-                  + {tr('Arquivo (.m3u)', language)}
-                </button>
-                <div style={{ color: theme.muted }} className="text-[10px] truncate flex-1 text-right hidden @min-[560px]:block">
-                  Pasta: ports/kplayer/iptv_usuario/
+          {isAdultChooser ? (
+            <div className="flex-1 min-h-0 flex flex-col justify-center max-w-[660px] w-full mx-auto gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div style={{ color: theme.text }} className="text-[16px] font-extrabold">
+                    Escolha o catálogo +18
+                  </div>
+                  <div style={{ color: theme.muted }} className="text-[11.5px] mt-0.5">
+                    Selecione PornHub ou XVideos para navegar nas categorias e pesquisar vídeos
+                  </div>
                 </div>
+                <span
+                  style={{
+                    color: theme.accent,
+                    backgroundColor: rgbToRgba(theme.accent, 0.14),
+                    border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
+                  }}
+                  className="text-[10.5px] font-extrabold px-2.5 py-1 rounded-md shrink-0"
+                >
+                  +18
+                </span>
               </div>
 
-              {userPlaylists.length > 0 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                  {userPlaylists.map((pl) => (
-                    <div
-                      key={`${pl.kind}:${pl.target}`}
+              <div className="grid grid-cols-1 @min-[480px]:grid-cols-2 gap-3">
+                {ADULT_PROVIDERS.map((prov, idx) => {
+                  const focus = idx === adultProvSelected;
+                  return (
+                    <button
+                      key={prov.key}
+                      type="button"
+                      onMouseEnter={() => setAdultProvSelected(idx)}
+                      onClick={() => selectAdultProvider(prov.key)}
                       style={{
-                        backgroundColor: rgbToRgba(theme.elevated, 0.9),
-                        border: `1px solid ${themeHairline(theme)}`,
+                        ...modernCardStyle(theme, focus, 14),
+                        minHeight: 118,
+                      }}
+                      className="w-full p-4 flex flex-col justify-between text-left cursor-pointer transition-all"
+                    >
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <span
+                          style={{ color: focus ? theme.accent : theme.text }}
+                          className="text-[18px] font-extrabold tracking-tight"
+                        >
+                          {prov.name}
+                        </span>
+                        <span
+                          style={{
+                            color: focus ? theme.bg : theme.accent,
+                            backgroundColor: focus ? theme.accent : rgbToRgba(theme.accent, 0.15),
+                          }}
+                          className="text-[10.5px] font-extrabold px-2.5 py-0.5 rounded-md shrink-0"
+                        >
+                          Entrar
+                        </span>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        <div style={{ color: theme.muted }} className="text-[11.5px] leading-snug">
+                          {prov.description}
+                        </div>
+                        <div style={{ color: theme.dim }} className="text-[10px] font-semibold">
+                          API: {prov.apiLabel}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* User IPTV actions bar (Keyboard URL + Local folder upload) */}
+              {activeSource.key === 'usuario' ? (
+                <div className="mb-2 space-y-1.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setKbError(null);
+                        setShowKbModal(true);
+                      }}
+                      style={{
+                        ...modernPillStyle(theme, true),
+                        height: 30,
+                        paddingLeft: 12,
+                        paddingRight: 12,
+                      }}
+                      className="text-[11px] font-extrabold cursor-pointer shrink-0"
+                    >
+                      + {tr('Adicionar URL (Teclado)', language)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileUploadRef.current?.click()}
+                      style={{
+                        ...modernCardStyle(theme, false, 10),
+                        height: 30,
+                        paddingLeft: 12,
+                        paddingRight: 12,
                         color: theme.text,
                       }}
-                      className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] shrink-0"
+                      className="text-[11px] font-bold cursor-pointer shrink-0"
                     >
-                      <span style={{ color: theme.accent }} className="font-bold uppercase text-[9px]">
-                        {pl.kind === 'url' ? 'URL' : 'M3U'}
-                      </span>
-                      <span className="max-w-[140px] truncate">{pl.name}</span>
+                      + {tr('Arquivo (.m3u)', language)}
+                    </button>
+                    <div style={{ color: theme.muted }} className="text-[10px] truncate flex-1 text-right hidden @min-[560px]:block">
+                      Pasta: ports/kplayer/iptv_usuario/
+                    </div>
+                  </div>
+
+                  {userPlaylists.length > 0 && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                      {userPlaylists.map((pl) => (
+                        <div
+                          key={`${pl.kind}:${pl.target}`}
+                          style={{
+                            backgroundColor: rgbToRgba(theme.elevated, 0.9),
+                            border: `1px solid ${themeHairline(theme)}`,
+                            color: theme.text,
+                          }}
+                          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] shrink-0"
+                        >
+                          <span style={{ color: theme.accent }} className="font-bold uppercase text-[9px]">
+                            {pl.kind === 'url' ? 'URL' : 'M3U'}
+                          </span>
+                          <span className="max-w-[140px] truncate">{pl.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveUserPlaylist(pl)}
+                            style={{ color: theme.muted }}
+                            className="hover:opacity-100 opacity-70 font-bold cursor-pointer pl-0.5"
+                            title="Remover"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {activeSource.key === 'adult18' && adultProvider && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleRemoveUserPlaylist(pl)}
-                        style={{ color: theme.muted }}
-                        className="hover:opacity-100 opacity-70 font-bold cursor-pointer pl-0.5"
-                        title="Remover"
+                        onClick={() => setAdultProvider(null)}
+                        style={{
+                          backgroundColor: rgbToRgba(theme.elevated, 0.9),
+                          color: theme.text,
+                          border: `1px solid ${themeHairline(theme)}`,
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[11.5px] font-bold cursor-pointer shrink-0"
                       >
-                        ×
+                        ← Provedores (+18)
+                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {ADULT_PROVIDERS.map((prov) => (
+                          <button
+                            key={prov.key}
+                            type="button"
+                            onClick={() => selectAdultProvider(prov.key)}
+                            style={{
+                              ...modernPillStyle(theme, adultProvider === prov.key),
+                              height: 24,
+                              paddingLeft: 10,
+                              paddingRight: 10,
+                            }}
+                            className="text-[11px] font-bold cursor-pointer"
+                          >
+                            {prov.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const q = catSearchQuery.trim();
+                      if (activeSource.key === 'adult18' && q) {
+                        const provLabel = adultProvider === 'xvideos' ? 'XVideos' : 'PornHub';
+                        void openCategory(
+                          { id: `search:${q}`, name: `Busca ${provLabel}: ${q}`, count: 30, section: `Busca ${provLabel}` },
+                          true,
+                          ''
+                        );
+                        return;
+                      }
+                      const allCat = categories.find((c) => c.id === 'all') ?? categories[0];
+                      if (allCat) void openCategory(allCat, false, q);
+                    }}
+                    className="flex flex-wrap items-center justify-between mb-2 shrink-0 gap-2"
+                  >
+                    <span style={{ color: theme.muted }} className="text-[13px] font-bold truncate">
+                      {tr('Escolha a categoria', language)} ({categories.length})
+                    </span>
+                    <div className="flex items-center gap-1.5 w-full @min-[480px]:w-auto">
+                      <input
+                        ref={catSearchInputRef}
+                        type="text"
+                        value={catSearchQuery}
+                        onChange={(e) => setCatSearchQuery(e.target.value)}
+                        placeholder={
+                          activeSource.key === 'adult18'
+                            ? adultProvider === 'xvideos'
+                              ? 'Pesquisar vídeos no XVideos...'
+                              : 'Pesquisar vídeos no PornHub...'
+                            : activeSource.key === 'series'
+                            ? 'Pesquisar série digitando...'
+                            : activeSource.key === 'filmes'
+                            ? 'Pesquisar filme digitando...'
+                            : 'Pesquisar canal de TV digitando...'
+                        }
+                        style={{
+                          backgroundColor: rgbToRgba(theme.elevated, 0.95),
+                          color: theme.text,
+                          border: `1px solid ${catSearchQuery ? theme.accent : themeHairline(theme)}`,
+                        }}
+                        className="flex-1 @min-[480px]:w-[220px] @min-[760px]:w-[260px] px-3 py-1.5 rounded-lg text-[12.5px] outline-none"
+                      />
+                      <button
+                        type="submit"
+                        style={{ ...modernPillStyle(theme, true), height: 32, paddingLeft: 12, paddingRight: 12 }}
+                        className="text-[11.5px] font-extrabold cursor-pointer shrink-0"
+                      >
+                        Buscar
                       </button>
                     </div>
-                  ))}
+                  </form>
+                </>
+              )}
+
+              {catLoading ? (
+                <div className="flex-1 flex flex-col items-center justify-center">
+                  <div style={{ color: theme.accent }} className="text-[16px] font-bold">
+                    {tr('Carregando categorias...', language)}
+                  </div>
+                </div>
+              ) : categories.length === 0 || (activeSource.key === 'usuario' && totalSourceCount === 0) ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+                  <div style={{ color: theme.text }} className="text-[16px] font-bold">
+                    {activeSource.key === 'usuario'
+                      ? 'Nenhuma lista do usuário carregada'
+                      : tr('Nenhum item encontrado', language)}
+                  </div>
+                  <div style={{ color: theme.muted }} className="text-[12px] mt-1.5 max-w-[440px]">
+                    {activeSource.key === 'usuario'
+                      ? 'Use "+ Adicionar URL (Teclado)" acima ou coloque arquivos .m3u / .m3u8 na pasta ports/kplayer/iptv_usuario/.'
+                      : tr('Pressione Y para atualizar', language)}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 grid grid-cols-1 @min-[480px]:grid-cols-2 @min-[860px]:grid-cols-3 gap-2 content-start">
+                  {categories.map((cat, idx) => {
+                    const focus = idx === catSelected;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onMouseEnter={() => setCatSelected(idx)}
+                        onClick={() => openCategory(cat, false)}
+                        style={{
+                          ...modernCardStyle(theme, focus, 11),
+                          height: 50,
+                        }}
+                        className="w-full px-3.5 flex items-center justify-between text-left cursor-pointer transition-all"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div
+                            style={{ color: focus ? theme.accent : theme.text }}
+                            className="text-[14.5px] font-extrabold truncate"
+                          >
+                            {cat.name}
+                          </div>
+                          <div style={{ color: theme.muted }} className="text-[10.5px] truncate">
+                            {cat.section}
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            color: focus ? theme.bg : theme.accent,
+                            backgroundColor: focus ? theme.accent : rgbToRgba(theme.accent, 0.14),
+                          }}
+                          className="text-[12px] font-extrabold px-2.5 py-0.5 rounded-md shrink-0"
+                        >
+                          {cat.count.toLocaleString('pt-BR')}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
-            </div>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const q = catSearchQuery.trim();
-                if (activeSource.key === 'adult18' && q) {
-                  void openCategory(
-                    { id: `search:${q}`, name: `Busca +18: ${q}`, count: 30, section: 'Busca +18' },
-                    true,
-                    ''
-                  );
-                  return;
-                }
-                const allCat = categories.find((c) => c.id === 'all') ?? categories[0];
-                if (allCat) void openCategory(allCat, false, q);
-              }}
-              className="flex flex-wrap items-center justify-between mb-2 shrink-0 gap-2"
-            >
-              <span style={{ color: theme.muted }} className="text-[13px] font-bold truncate">
-                {tr('Escolha a categoria', language)} ({categories.length})
-              </span>
-              <div className="flex items-center gap-1.5 w-full @min-[480px]:w-auto">
-                <input
-                  ref={catSearchInputRef}
-                  type="text"
-                  value={catSearchQuery}
-                  onChange={(e) => setCatSearchQuery(e.target.value)}
-                  placeholder={
-                    activeSource.key === 'adult18'
-                      ? 'Pesquisar vídeos +18 na API...'
-                      : activeSource.key === 'series'
-                      ? 'Pesquisar série digitando...'
-                      : activeSource.key === 'filmes'
-                      ? 'Pesquisar filme digitando...'
-                      : 'Pesquisar canal de TV digitando...'
-                  }
-                  style={{
-                    backgroundColor: rgbToRgba(theme.elevated, 0.95),
-                    color: theme.text,
-                    border: `1px solid ${catSearchQuery ? theme.accent : themeHairline(theme)}`,
-                  }}
-                  className="flex-1 @min-[480px]:w-[220px] @min-[760px]:w-[260px] px-3 py-1.5 rounded-lg text-[12.5px] outline-none"
-                />
-                <button
-                  type="submit"
-                  style={{ ...modernPillStyle(theme, true), height: 32, paddingLeft: 12, paddingRight: 12 }}
-                  className="text-[11.5px] font-extrabold cursor-pointer shrink-0"
-                >
-                  Buscar
-                </button>
-              </div>
-            </form>
-          )}
-
-          {catLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center">
-              <div style={{ color: theme.accent }} className="text-[16px] font-bold">
-                {tr('Carregando categorias...', language)}
-              </div>
-            </div>
-          ) : categories.length === 0 || (activeSource.key === 'usuario' && totalSourceCount === 0) ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-              <div style={{ color: theme.text }} className="text-[16px] font-bold">
-                {activeSource.key === 'usuario'
-                  ? 'Nenhuma lista do usuário carregada'
-                  : tr('Nenhum item encontrado', language)}
-              </div>
-              <div style={{ color: theme.muted }} className="text-[12px] mt-1.5 max-w-[440px]">
-                {activeSource.key === 'usuario'
-                  ? 'Use "+ Adicionar URL (Teclado)" acima ou coloque arquivos .m3u / .m3u8 na pasta ports/kplayer/iptv_usuario/.'
-                  : tr('Pressione Y para atualizar', language)}
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 min-h-0 overflow-y-auto kp-scroll pr-1 grid grid-cols-1 @min-[480px]:grid-cols-2 @min-[860px]:grid-cols-3 gap-2 content-start">
-              {categories.map((cat, idx) => {
-                const focus = idx === catSelected;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onMouseEnter={() => setCatSelected(idx)}
-                    onClick={() => openCategory(cat, false)}
-                    style={{
-                      ...modernCardStyle(theme, focus, 11),
-                      height: 50,
-                    }}
-                    className="w-full px-3.5 flex items-center justify-between text-left cursor-pointer transition-all"
-                  >
-                    <div className="min-w-0 pr-2">
-                      <div
-                        style={{ color: focus ? theme.accent : theme.text }}
-                        className="text-[14.5px] font-extrabold truncate"
-                      >
-                        {cat.name}
-                      </div>
-                      <div style={{ color: theme.muted }} className="text-[10.5px] truncate">
-                        {cat.section}
-                      </div>
-                    </div>
-                    <span
-                      style={{
-                        color: focus ? theme.bg : theme.accent,
-                        backgroundColor: focus ? theme.accent : rgbToRgba(theme.accent, 0.14),
-                      }}
-                      className="text-[12px] font-extrabold px-2.5 py-0.5 rounded-md shrink-0"
-                    >
-                      {cat.count.toLocaleString('pt-BR')}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            </>
           )}
         </div>
       )}
@@ -863,7 +1092,9 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                   setVisibleChunk(120);
                 }}
                 placeholder={
-                  activeSource.key === 'series'
+                  activeSource.key === 'adult18'
+                    ? 'Filtrar vídeos +18...'
+                    : activeSource.key === 'series'
                     ? 'Digite o nome da série...'
                     : activeSource.key === 'filmes'
                     ? 'Digite o nome do filme...'
