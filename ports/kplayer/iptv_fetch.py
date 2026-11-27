@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import hashlib
 import ipaddress
+import json
 import os
 import re
 import sys
@@ -38,7 +39,15 @@ EPG_BR_URLS = (
     "https://www.open-epg.com/files/brazil1.xml.gz",
 )
 FILMES_BASE = "https://filmes-saimo.pages.dev/"
-UA = "KPlayer-R36S/2.1.0"
+PORNHUB_API_BASE = "https://www.pornhub.com/webmasters"
+ADULT_VIDEO_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{4,40}$")
+ADULT_CAT_SLUG_RE = re.compile(r"^[a-zA-Z0-9_-]{1,60}$")
+ADULT_ALLOWED_HOST_SUFFIXES = ("pornhub.com", "phncdn.com")
+UA = "KPlayer-R36S/2.1.7"
+BROWSER_UA = (
+    "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 
 CACHE_DIR = Path("iptv/.cache")
 USER_DIR = Path("iptv_usuario")
@@ -70,6 +79,261 @@ def is_safe_url(raw: str) -> bool:
             return False
     except ValueError:
         pass
+    return True
+
+
+def is_valid_adult_video_id(video_id: str) -> bool:
+    return bool(video_id and ADULT_VIDEO_ID_RE.fullmatch(video_id.strip()))
+
+
+def is_allowed_adult_url(raw: str) -> bool:
+    if not is_safe_url(raw):
+        return False
+    parsed = urllib.parse.urlparse(raw.strip())
+    if parsed.scheme != "https":
+        return False
+    host = (parsed.hostname or "").lower()
+    return any(host == suf or host.endswith("." + suf) for suf in ADULT_ALLOWED_HOST_SUFFIXES)
+
+
+def _adult_http_get(url: str, timeout: int = 16, max_bytes: int = 4 * 1024 * 1024) -> str:
+    if not is_allowed_adult_url(url):
+        raise ValueError("Host não permitido para API +18")
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": BROWSER_UA,
+            "Accept": "application/json, text/html;q=0.9, */*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+            "Cookie": "age_verified=1; accessAgeDisclaimerPH=1",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        final_url = resp.geturl()
+        if final_url and not is_allowed_adult_url(final_url):
+            raise ValueError("Redirecionamento fora do domínio permitido")
+        return resp.read(max_bytes).decode("utf-8", errors="replace")
+
+
+def _adult_api_json(endpoint: str, params: dict[str, str] | None = None, cache_key: str = "", ttl: int = 900, refresh: bool = False) -> dict:
+    query = urllib.parse.urlencode(params or {})
+    url = f"{PORNHUB_API_BASE}/{endpoint.lstrip('/')}" + (f"?{query}" if query else "")
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = CACHE_DIR / re.sub(r"[^a-zA-Z0-9._-]", "_", cache_key) if cache_key else None
+    if cache_path and not refresh and cache_path.is_file():
+        try:
+            if time.time() - cache_path.stat().st_mtime < ttl and cache_path.stat().st_size > 2:
+                return json.loads(cache_path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            pass
+    try:
+        text = _adult_http_get(url)
+        data = json.loads(text)
+        if cache_path and isinstance(data, dict):
+            tmp = cache_path.with_suffix(".tmp")
+            tmp.write_text(text, encoding="utf-8")
+            os.replace(tmp, cache_path)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        if cache_path and cache_path.is_file():
+            try:
+                return json.loads(cache_path.read_text(encoding="utf-8", errors="replace"))
+            except Exception:
+                pass
+        raise
+
+
+def load_adult_categories(refresh: bool = False) -> list[tuple[str, str, int]]:
+    rows: list[tuple[str, str, int]] = [
+        ("ord:mostviewed:weekly", "Mais vistos (Semana)", 30),
+        ("ord:mostviewed:monthly", "Mais vistos (Mês)", 30),
+        ("ord:newest:weekly", "Mais recentes", 30),
+        ("ord:rating:weekly", "Melhor avaliados", 30),
+        ("ord:mostviewed:all", "Populares (Geral)", 30),
+    ]
+    try:
+        data = _adult_api_json("categories", cache_key="adult18_categories.json", ttl=3600, refresh=refresh)
+        cats = data.get("categories") or []
+        seen: set[str] = set()
+        parsed_cats: list[tuple[str, str]] = []
+        for item in cats:
+            if not isinstance(item, dict):
+                continue
+            raw_cat = str(item.get("category") or "").strip()
+            if not raw_cat:
+                continue
+            slug = re.sub(r"[^a-zA-Z0-9_-]", "-", raw_cat.lower()).strip("-")
+            if not slug or slug in seen or not ADULT_CAT_SLUG_RE.fullmatch(slug):
+                continue
+            seen.add(slug)
+            label = sanitize_title(raw_cat.replace("-", " ").title())
+            parsed_cats.append((f"cat:{slug}", label))
+        parsed_cats.sort(key=lambda pair: pair[1].lower())
+        for cid, cname in parsed_cats:
+            rows.append((cid, cname, 30))
+    except Exception:
+        pass
+    return rows
+
+
+def load_adult_items(cat_id: str, refresh: bool = False) -> list[dict[str, str]]:
+    params: dict[str, str] = {"thumbsize": "medium", "page": "1"}
+    group_label = "+18"
+    if cat_id.startswith("ord:"):
+        parts = cat_id.split(":")
+        ordering = parts[1] if len(parts) > 1 and parts[1] in ("mostviewed", "newest", "rating", "featured") else "mostviewed"
+        period = parts[2] if len(parts) > 2 and parts[2] in ("weekly", "monthly", "all") else "weekly"
+        params["ordering"] = ordering
+        params["period"] = period
+        group_label = f"+18 • {ordering}"
+    elif cat_id.startswith("cat:"):
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "", cat_id[4:])[:60]
+        if slug:
+            params["category"] = slug
+            group_label = sanitize_title(slug.replace("-", " ").title())
+        params["ordering"] = "mostviewed"
+        params["period"] = "weekly"
+    elif cat_id.startswith("search:"):
+        query = sanitize_title(cat_id[7:])[:80]
+        if query:
+            params["search"] = query
+            group_label = f"Busca • {query}"
+        params["ordering"] = "mostviewed"
+    else:
+        params["ordering"] = "mostviewed"
+        params["period"] = "weekly"
+
+    ckey = "adult18_list_" + hashlib.sha1(cat_id.encode("utf-8", errors="ignore")).hexdigest()[:12] + ".json"
+    data = _adult_api_json("search", params=params, cache_key=ckey, ttl=600, refresh=refresh)
+    videos = data.get("videos") or []
+    entries: list[dict[str, str]] = []
+    for v in videos:
+        if not isinstance(v, dict):
+            continue
+        vid = str(v.get("video_id") or "").strip()
+        if not is_valid_adult_video_id(vid):
+            continue
+        title = sanitize_title(str(v.get("title") or f"Vídeo {vid}"))
+        thumb = str(v.get("default_thumb") or v.get("thumb") or "").strip()
+        if thumb and not is_safe_url(thumb):
+            thumb = ""
+        dur = sanitize_title(str(v.get("duration") or ""))
+        views = v.get("views")
+        rating = v.get("rating")
+        meta_parts: list[str] = []
+        if dur:
+            meta_parts.append(dur)
+        if views is not None:
+            meta_parts.append(f"{views} views")
+        if rating is not None:
+            try:
+                meta_parts.append(f"{round(float(rating))}%")
+            except (TypeError, ValueError):
+                pass
+        entries.append(
+            {
+                "name": title,
+                "url": f"kplayer-adult://{vid}",
+                "logo": thumb,
+                "group": group_label,
+                "id": " • ".join(meta_parts) if meta_parts else "+18",
+            }
+        )
+    return entries
+
+
+def _pick_best_adult_stream(media_defs: list[dict]) -> str:
+    candidates: list[tuple[int, str]] = []
+    for item in media_defs:
+        if not isinstance(item, dict):
+            continue
+        u = str(item.get("videoUrl") or "").strip()
+        if not u or not is_allowed_adult_url(u):
+            continue
+        fmt = str(item.get("format") or "").lower()
+        q_raw = item.get("quality")
+        q_num = 0
+        if isinstance(q_raw, (int, float)):
+            q_num = int(q_raw)
+        elif isinstance(q_raw, str) and q_raw.isdigit():
+            q_num = int(q_raw)
+        elif isinstance(q_raw, list) and q_raw:
+            try:
+                q_num = int(str(q_raw[0]))
+            except ValueError:
+                q_num = 480
+        # Prefer 720p/480p direct mp4 or hls for smooth playback on RK3326
+        score = 0
+        if fmt == "mp4" or ".mp4" in u.lower():
+            score += 200
+        elif fmt == "hls" or ".m3u8" in u.lower():
+            score += 180
+        if 360 <= q_num <= 720:
+            score += q_num // 10
+        elif q_num > 720:
+            score += 40
+        candidates.append((score, u))
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda pair: -pair[0])
+    return candidates[0][1]
+
+
+def resolve_adult_stream_url(video_id: str) -> str:
+    vid = (video_id or "").strip()
+    if not is_valid_adult_video_id(vid):
+        raise ValueError("video_id inválido")
+
+    # 1. Confirm video metadata via Derfirm/pornhub-api Webmasters video_by_id endpoint
+    page_url = f"https://www.pornhub.com/view_video.php?viewkey={urllib.parse.quote(vid)}"
+    try:
+        meta = _adult_api_json("video_by_id", params={"id": vid}, cache_key="", ttl=0, refresh=True)
+        v_obj = meta.get("video") if isinstance(meta, dict) else None
+        if isinstance(v_obj, dict):
+            cand_url = str(v_obj.get("url") or "").strip()
+            if cand_url and is_allowed_adult_url(cand_url):
+                page_url = cand_url
+    except Exception:
+        pass
+
+    # 2. Fetch validated pornhub.com video page and extract mediaDefinitions
+    html = _adult_http_get(page_url, timeout=18, max_bytes=3 * 1024 * 1024)
+    m = re.search(r'"mediaDefinitions"\s*:\s*(\[[\s\S]*?\])\s*,\s*"', html)
+    if not m:
+        m = re.search(r'"mediaDefinitions"\s*:\s*(\[.*?\])', html, re.S)
+    if not m:
+        return ""
+
+    raw_defs = json.loads(m.group(1))
+    if not isinstance(raw_defs, list):
+        return ""
+
+    expanded: list[dict] = []
+    for entry in raw_defs:
+        if not isinstance(entry, dict):
+            continue
+        vurl = str(entry.get("videoUrl") or "").strip()
+        if not vurl:
+            continue
+        if "get_media" in vurl and is_allowed_adult_url(vurl):
+            try:
+                sub = json.loads(_adult_http_get(vurl, timeout=12, max_bytes=512 * 1024))
+                if isinstance(sub, list):
+                    expanded.extend([x for x in sub if isinstance(x, dict)])
+                    continue
+            except Exception:
+                pass
+        expanded.append(entry)
+
+    return _pick_best_adult_stream(expanded)
+
+
+def cmd_resolve_adult(video_id: str, out_path: Path) -> bool:
+    url = resolve_adult_stream_url(video_id)
+    if not url or not is_allowed_adult_url(url):
+        write_atomic(out_path, "")
+        return False
+    write_atomic(out_path, url + "\n")
     return True
 
 
@@ -699,6 +963,8 @@ def cmd_categories(source: str, out_path: Path, refresh: bool = False) -> bool:
             cnt = m_cnt if kind == "f" else s_cnt
             if cnt > 0:
                 rows.append((f"az:{ltr}", f"{prefix} • {ltr}", cnt))
+    elif source == "adult18":
+        rows = load_adult_categories(refresh=refresh)
     else:
         return False
 
@@ -890,6 +1156,8 @@ def cmd_list(source: str, cat_id: str, out_path: Path, refresh: bool = False) ->
                         pass
             collected.sort(key=lambda x: x["name"].lower())
             entries = collected
+    elif source == "adult18":
+        entries = load_adult_items(cat_id, refresh=refresh)
     else:
         return False
 
@@ -1096,9 +1364,10 @@ def main() -> int:
     if not args:
         sys.stderr.write(
             "Usage:\n"
-            "  iptv_fetch.py categories <canais|filmes|series|usuario> <out_tsv> [--refresh]\n"
-            "  iptv_fetch.py list <canais|filmes|series|usuario> <cat_id> <out_m3u8> [--refresh]\n"
+            "  iptv_fetch.py categories <canais|filmes|series|usuario|adult18> <out_tsv> [--refresh]\n"
+            "  iptv_fetch.py list <canais|filmes|series|usuario|adult18> <cat_id> <out_m3u8> [--refresh]\n"
             "  iptv_fetch.py episodes <letter> <shard> <title> <out_m3u8> [--refresh]\n"
+            "  iptv_fetch.py resolve-adult <video_id> <out_txt>\n"
             "  iptv_fetch.py epg <channel_name> <tvg_id> <out_tsv> [--refresh]\n"
             "  iptv_fetch.py user-add-url <url> [name]\n"
         )
@@ -1112,6 +1381,8 @@ def main() -> int:
             return 0 if cmd_list(args[1], args[2], Path(args[3]), refresh=refresh) else 1
         if cmd == "episodes" and len(args) == 5:
             return 0 if cmd_episodes(args[1], args[2], args[3], Path(args[4]), refresh=refresh) else 1
+        if cmd == "resolve-adult" and len(args) == 3:
+            return 0 if cmd_resolve_adult(args[1], Path(args[2])) else 1
         if cmd == "epg" and len(args) == 4:
             return 0 if cmd_epg(args[1], args[2], Path(args[3]), refresh=refresh) else 1
         if cmd == "user-add-url" and len(args) in (2, 3):

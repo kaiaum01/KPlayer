@@ -268,15 +268,22 @@ const DICT: Record<string, [string, string]> = {
   'Auto (Adaptativo)': ['Auto (Adaptive)', 'Auto (Adaptativo)'],
   'Preencher tela': ['Fill screen', 'Llenar pantalla'],
   'Clássico 4:3': ['Classic 4:3', 'Clásico 4:3'],
+  'Seção +18': ['+18 Section', 'Sección +18'],
+  'Bloqueado': ['Locked', 'Bloqueado'],
+  'Desbloqueado': ['Unlocked', 'Desbloqueado'],
+  'Seção +18 (Opcional — API Externa)': [
+    '+18 Section (Optional — External API)',
+    'Sección +18 (Opcional — API Externa)',
+  ],
 };
 
 export const TERMS_PAGES: Array<{ title: string; body: [string, string, string] }> = [
   {
     title: 'Sobre o aplicativo',
     body: [
-      'K PLAYER v2.1.0 é um reprodutor independente para suas músicas, vídeos, rádios e listas IPTV. O aplicativo não hospeda, armazena nem distribui conteúdo próprio. Use mídias que você tenha direito de acessar. A compatibilidade e o desempenho dependem do arquivo, dos codecs e do aparelho.',
-      'K PLAYER v2.1.0 is an independent player for your music, videos, online radio and IPTV playlists. The application does not host, store or distribute its own media content. Use media you have the right to access. Compatibility and performance depend on the file, codecs and device.',
-      'K PLAYER v2.1.0 es un reproductor independiente para tu música, vídeos, radio y listas IPTV. La aplicación no aloja, almacena ni distribuye contenido propio. Usa medios a los que tengas derecho de acceso. La compatibilidad y el rendimiento dependen del archivo, los códecs y el dispositivo.',
+      'K PLAYER v2.1.7 é um reprodutor independente para suas músicas, vídeos, rádios e listas IPTV. O aplicativo não hospeda, armazena nem distribui conteúdo próprio. Use mídias que você tenha direito de acessar. A compatibilidade e o desempenho dependem do arquivo, dos codecs e do aparelho.',
+      'K PLAYER v2.1.7 is an independent player for your music, videos, online radio and IPTV playlists. The application does not host, store or distribute its own media content. Use media you have the right to access. Compatibility and performance depend on the file, codecs and device.',
+      'K PLAYER v2.1.7 es un reproductor independiente para tu música, vídeos, radio y listas IPTV. La aplicación no aloja, almacena ni distribuye contenido propio. Usa medios a los que tengas derecho de acceso. La compatibilidad y el rendimiento dependen del archivo, los códecs y el dispositivo.',
     ],
   },
   {
@@ -300,7 +307,15 @@ export const TERMS_PAGES: Array<{ title: string; body: [string, string, string] 
     body: [
       'Este software é fornecido sem garantia, nos limites das licenças aplicáveis (GPL-2.0-or-later). O K PLAYER para R36S utiliza VLC/libVLC, SDL2, stb e fontes livres. As licenças completas acompanham o pacote em licencas/ e THIRD_PARTY.md. Projeto independente, sem afiliação com VideoLAN, PortMaster ou SofaScore.',
       'This software is provided without warranty to the extent stated in its applicable licenses (GPL-2.0-or-later). K PLAYER for R36S uses VLC/libVLC, SDL2, stb and open fonts. Complete licenses accompany the package in licencas/ and THIRD_PARTY.md. Independent project, not affiliated with VideoLAN, PortMaster or SofaScore.',
-      'Este software se proporciona sin garantía en los términos de sus licencias aplicables (GPL-2.0-or-later). K PLAYER para R36S utiliza VLC/libVLC, SDL2, stb y fuentes libres. Las licencias completas acompañan el paquete en licencas/ y THIRD_PARTY.md. Proyecto independiente, sin afiliación con VideoLAN, PortMaster o SofaScore.',
+      'Este software se proporciona sin garantía en los términos de sus licencias aplicables (GPL-2.0-or-later). K PLAYER para R36S utiliza VLC/libVLC, SDL2, stb y fuentes libres. Las licencias completas acompañan el paquete en licencas/ y THIRD_PARTY.md. Proyecto independiente, sin afiliação com VideoLAN, PortMaster o SofaScore.',
+    ],
+  },
+  {
+    title: 'Seção +18 (Opcional — API Externa)',
+    body: [
+      'A Seção +18 vem BLOQUEADA por padrão e é destinada exclusivamente a maiores de 18 anos. O desbloqueio só ocorre nas Opções após leitura e aceite explícito do Aviso Prévio. Quando desbloqueada, uma aba +18 é exibida junto ao serviço de IPTV consultando a API pública externa compatível com Derfirm/pornhub-api. O K PLAYER não hospeda, armazena nem modera conteúdo de terceiros; você pode bloquear a seção novamente a qualquer momento nas Opções.',
+      'The +18 Section is LOCKED by default and strictly intended for adults aged 18 and older. Unlocking happens only in Settings after explicitly accepting the Prior Notice. When unlocked, a +18 tab appears alongside IPTV querying the public external API compatible with Derfirm/pornhub-api. K PLAYER does not host, store or moderate third-party content; you may lock the section again at any time in Settings.',
+      'La Sección +18 viene BLOQUEADA de forma predeterminada y está destinada exclusivamente a mayores de 18 años. El desbloqueo solo ocurre en Ajustes tras aceptar explícitamente el Aviso Previo. Al desbloquearla, aparece una pestaña +18 junto a IPTV consultando la API pública externa compatible con Derfirm/pornhub-api. K PLAYER no aloja ni modera contenido de terceros; puedes volver a bloquearla en cualquier momento en Ajustes.',
     ],
   },
 ];

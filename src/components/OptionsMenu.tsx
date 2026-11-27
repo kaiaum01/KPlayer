@@ -94,12 +94,14 @@ export interface OptionsMenuProps {
   screensaverShowLyrics: boolean;
   uiSfxEnabled: boolean;
   bgAudioPreview: boolean;
+  adultSectionUnlocked: boolean;
   onSetThemeIndex: (idx: number) => void;
   onSetLanguage: (lang: LanguageCode) => void;
   onSetDisplayMode: (mode: 'auto' | 'r36s' | 'square' | 'wide') => void;
   onToggleHomeLayout: () => void;
   onToggleUiSfx: () => void;
   onToggleBgAudioPreview: () => void;
+  onToggleAdultSection: () => void;
   onCycleScreensaverTimeout: () => void;
   onCycleScreensaverViz: () => void;
   onToggleScreensaverClock: () => void;
@@ -199,12 +201,14 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     screensaverShowLyrics,
     uiSfxEnabled,
     bgAudioPreview,
+    adultSectionUnlocked,
     onSetThemeIndex,
     onSetLanguage,
     onSetDisplayMode,
     onToggleHomeLayout,
     onToggleUiSfx,
     onToggleBgAudioPreview,
+    onToggleAdultSection,
     onCycleScreensaverTimeout,
     onCycleScreensaverViz,
     onToggleScreensaverClock,
@@ -639,6 +643,14 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           onSelect: onOpenCommandsTutorial,
         },
         {
+          id: 'adult-18',
+          label: tr('Seção +18', language),
+          value: tr(adultSectionUnlocked ? 'Desbloqueado' : 'Bloqueado', language),
+          badge: adultSectionUnlocked ? '+18' : undefined,
+          selected: adultSectionUnlocked,
+          onSelect: onToggleAdultSection,
+        },
+        {
           id: 'ui-sfx',
           label: tr('Sons das teclas', language),
           value: tr(uiSfxEnabled ? 'Ativada' : 'Desativada', language),
@@ -989,7 +1001,11 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     onToggleScreensaverLyrics,
     onStartScreensaverNow,
     uiSfxEnabled,
+    bgAudioPreview,
+    adultSectionUnlocked,
     onToggleUiSfx,
+    onToggleBgAudioPreview,
+    onToggleAdultSection,
     goBack,
   ]);
 

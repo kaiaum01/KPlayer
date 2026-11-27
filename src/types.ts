@@ -59,7 +59,7 @@ export interface RadioStation {
   isUser?: boolean;
 }
 
-export type IptvSourceKey = 'canais' | 'filmes' | 'series' | 'usuario';
+export type IptvSourceKey = 'canais' | 'filmes' | 'series' | 'usuario' | 'adult18';
 
 export interface IptvCategory {
   id: string;

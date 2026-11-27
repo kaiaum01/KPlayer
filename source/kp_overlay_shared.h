@@ -17,7 +17,7 @@
 #include <time.h>
 
 #define KP_OV_MAGIC 0x4B504D50u /* "KPMP" */
-#define KP_OV_VERSION 2u
+#define KP_OV_VERSION 3u
 #define KP_OV_CARD_W 296
 #define KP_OV_CARD_H 240
 #define KP_OV_ROW_COUNT 5
@@ -40,6 +40,9 @@ typedef struct {
   volatile uint8_t accent_b;
   uint8_t reserved0;
   volatile int64_t last_draw_ms;
+  volatile int64_t last_hook_ms;
+  volatile uint32_t hook_pid;
+  uint32_t reserved1;
   char title[160];
 } KpOverlayShared;
 

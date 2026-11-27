@@ -452,6 +452,7 @@ static bool playlist_file(const char *s) {
 static bool home_layout_inverted = false;
 static bool bg_audio_preview = false;
 static bool system_miniplayer_installed = false;
+static bool adult_section_unlocked = false;
 static bool tutorial_done = false;
 static bool tutorial_from_options = false;
 static char seen_version[32] = "";
@@ -1214,10 +1215,10 @@ static int opt_scroll = 0;
 /* General Root order (strict A-Z, then penultimate [A] Verificar atualizacoes, then last Sair):
  * 18=Adaptacao de tela, 22=Clima e Localizacao, 5=Idioma,
  * 24=Layout da tela inicial, 27=Mini-Player no Sistema Inteiro,
- * 25=Protetor de tela, 20=Rever comandos, 26=Sons das teclas,
+ * 25=Protetor de tela, 20=Rever comandos, 28=Secao +18, 26=Sons das teclas,
  * 9=Tema, 6=Termos de uso, 15=Timer de sono,
  * 19=[A] Verificar atualizacoes (penultimate), 8=Sair (last). */
-static const int opt_root_ids[] = {18, 22, 5, 24, 27, 25, 20, 26, 9, 6, 15, 19, 8};
+static const int opt_root_ids[] = {18, 22, 5, 24, 27, 25, 20, 28, 26, 9, 6, 15, 19, 8};
 #define OPT_ROOT_COUNT ((int)(sizeof(opt_root_ids) / sizeof(opt_root_ids[0])))
 
 static const int opt_weather_ids[] = {30, 31, 32, 11, 33, -99};
@@ -1481,6 +1482,7 @@ static const char *opt_label_for(int id) {
   case 25: return "Protetor de tela";
   case 26: return "Sons das teclas";
   case 27: return "Mini-Player no Sistema Inteiro";
+  case 28: return "Seção +18";
   case 30: return "Abrir aplicativo de Clima";
   case 31: return "Usar localização do meu IP";
   case 32: return "Pesquisar cidade manualmente";
@@ -1617,6 +1619,10 @@ static void opt_value_for(int id, char *value, size_t cap) {
   case 27:
     snprintf(value, cap, "%s",
              system_miniplayer_installed ? "Injetado (R36S)" : "Desativado");
+    break;
+  case 28:
+    snprintf(value, cap, "%s",
+             adult_section_unlocked ? "Desbloqueado" : "Bloqueado");
     break;
   case 30:
     snprintf(value, cap, "Open-Meteo ›");
@@ -2036,6 +2042,16 @@ static void change_option(int dir) {
     }
     break;
   }
+  case 28:
+    if (!adult_section_unlocked) {
+      open_stream_notice(18, 2);
+    } else {
+      adult_section_unlocked = false;
+      if (iptv_source == 4) iptv_source = 0;
+      save_settings();
+      notify("Seção +18 bloqueada e oculta do IPTV");
+    }
+    break;
   case 30:
     weather_open(2);
     break;
@@ -2232,14 +2248,21 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (mode == 10) {
     if (k == SDLK_RETURN && !repeat) {
-      stream_notice_accepted = true;
-      if (stream_notice_target == 7)
-        radio_open();
-      else
-        iptv_open();
+      if (stream_notice_target == 18) {
+        adult_section_unlocked = true;
+        save_settings();
+        mode = stream_notice_return;
+        notify("Seção +18 desbloqueada no serviço de IPTV");
+      } else {
+        stream_notice_accepted = true;
+        if (stream_notice_target == 7)
+          radio_open();
+        else
+          iptv_open();
+      }
     } else if (k == SDLK_m && !repeat) {
       open_terms(10);
-      terms_page = 1;
+      terms_page = (stream_notice_target == 18) ? 4 : 1;
     } else if (k == SDLK_BACKSPACE && !repeat) {
       mode = stream_notice_return;
     }
@@ -2290,17 +2313,17 @@ static void key(SDL_Keycode k, bool repeat) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
-          option == 24 || option == 26 || option == 27 || option == 52 ||
-          option == 61 || option == 70 || option == 71 || option == 72 ||
-          option == 73)
+          option == 24 || option == 26 || option == 27 || option == 28 ||
+          option == 52 || option == 61 || option == 70 || option == 71 ||
+          option == 72 || option == 73)
         change_option(-1);
     } else if (k == SDLK_RIGHT) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
-          option == 24 || option == 26 || option == 27 || option == 52 ||
-          option == 61 || option == 70 || option == 71 || option == 72 ||
-          option == 73)
+          option == 24 || option == 26 || option == 27 || option == 28 ||
+          option == 52 || option == 61 || option == 70 || option == 71 ||
+          option == 72 || option == 73)
         change_option(1);
     } else if (k == SDLK_RETURN && !repeat) {
       change_option(1);
@@ -2546,14 +2569,14 @@ static void save_settings(void) {
           "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\n"
           "location %d\nrepeat %d\nshuffle %d\ndisplay %d\n"
           "home_inv %d\ntutorial %d\nss_sec %d\nss_viz %d\nss_clock %d\nss_lyrics %d\n"
-          "seen_ver %s\nui_sfx %d\nbg_audio %d\n",
+          "seen_ver %s\nui_sfx %d\nbg_audio %d\nadult_18 %d\n",
           fit, loop_video, rate, theme_index,
           network_location_enabled ? 1 : 0, repeat_mode,
           shuffle_enabled ? 1 : 0, display_mode,
           home_layout_inverted ? 1 : 0, tutorial_done ? 1 : 0,
           ss_timeout_idx, ss_viz_style, ss_show_clock ? 1 : 0, ss_show_lyrics ? 1 : 0,
           seen_version[0] ? seen_version : "-", ui_sfx_enabled ? 1 : 0,
-          bg_audio_preview ? 1 : 0);
+          bg_audio_preview ? 1 : 0, adult_section_unlocked ? 1 : 0);
   if (fclose(f) == 0)
     rename("settings.tmp", "settings.cfg");
 }
@@ -2569,7 +2592,7 @@ static void load_settings(void) {
                                 saved_tutorial = 0, saved_ss_sec = 1,
                                 saved_ss_viz = 0, saved_ss_clock = 1,
                                 saved_ss_lyrics = 1, saved_ui_sfx = 1,
-                                saved_bg_audio = 0;
+                                saved_bg_audio = 0, saved_adult_18 = 0;
   float r;
   bool valid = false;
   if (fgets(line, sizeof(line), f)) {
@@ -2589,6 +2612,7 @@ static void load_settings(void) {
       if (valid && fscanf(f, "\nseen_ver %31s", saved_seen) != 1) saved_seen[0] = 0;
       if (valid && fscanf(f, "\nui_sfx %d", &saved_ui_sfx) != 1) saved_ui_sfx = 1;
       if (valid && fscanf(f, "\nbg_audio %d", &saved_bg_audio) != 1) saved_bg_audio = 0;
+      if (valid && fscanf(f, "\nadult_18 %d", &saved_adult_18) != 1) saved_adult_18 = 0;
     } else
       valid = sscanf(line, "%d %d %d %f", &legacy_setting, &ft, &loop, &r) == 4;
   }
@@ -2608,6 +2632,7 @@ static void load_settings(void) {
     ss_show_lyrics = saved_ss_lyrics != 0;
     ui_sfx_enabled = saved_ui_sfx != 0;
     bg_audio_preview = saved_bg_audio == 1;
+    adult_section_unlocked = saved_adult_18 == 1;
     if (saved_seen[0] && strcmp(saved_seen, "-") != 0)
       snprintf(seen_version, sizeof(seen_version), "%.31s", saved_seen);
     else

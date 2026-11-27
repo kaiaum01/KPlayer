@@ -124,6 +124,251 @@ function isSafeExternalUrl(raw: string): boolean {
   }
 }
 
+const PORNHUB_API_BASE = 'https://www.pornhub.com/webmasters';
+const ADULT_VIDEO_ID_RE = /^[a-zA-Z0-9_-]{4,40}$/;
+const ADULT_CAT_SLUG_RE = /^[a-zA-Z0-9_-]{1,60}$/;
+const ADULT_BROWSER_UA =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+function isAllowedAdultUrl(raw: string): boolean {
+  if (!isSafeExternalUrl(raw)) return false;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host === 'pornhub.com' ||
+      host.endsWith('.pornhub.com') ||
+      host === 'phncdn.com' ||
+      host.endsWith('.phncdn.com')
+    );
+  } catch {
+    return false;
+  }
+}
+
+const adultCatsCache: { ts: number; data: { source: string; sourceUrl: string; totalCount: number; categories: Array<{ id: string; name: string; count: number; section: string }> } | null } = {
+  ts: 0,
+  data: null,
+};
+const adultItemsCache = new Map<string, { ts: number; items: IptvChannel[] }>();
+
+async function fetchAdultText(url: string, timeoutMs = 14000): Promise<string> {
+  if (!isAllowedAdultUrl(url)) {
+    throw new Error('Host not allowed');
+  }
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, {
+      signal: ac.signal,
+      headers: {
+        'User-Agent': ADULT_BROWSER_UA,
+        Accept: 'application/json, text/html;q=0.9, */*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        Cookie: 'age_verified=1; accessAgeDisclaimerPH=1',
+      },
+    });
+    if (resp.url && !isAllowedAdultUrl(resp.url)) {
+      throw new Error('Disallowed redirect host');
+    }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getAdultCategories(force = false) {
+  if (!force && adultCatsCache.data && Date.now() - adultCatsCache.ts < 30 * 60 * 1000) {
+    return adultCatsCache.data;
+  }
+  const categories: Array<{ id: string; name: string; count: number; section: string }> = [
+    { id: 'ord:mostviewed:weekly', name: 'Mais vistos (Semana)', count: 30, section: 'Destaques +18' },
+    { id: 'ord:mostviewed:monthly', name: 'Mais vistos (Mês)', count: 30, section: 'Destaques +18' },
+    { id: 'ord:newest:weekly', name: 'Mais recentes', count: 30, section: 'Destaques +18' },
+    { id: 'ord:rating:weekly', name: 'Melhor avaliados', count: 30, section: 'Destaques +18' },
+    { id: 'ord:mostviewed:all', name: 'Populares (Geral)', count: 30, section: 'Destaques +18' },
+  ];
+  try {
+    const raw = await fetchAdultText(`${PORNHUB_API_BASE}/categories`);
+    const parsed = JSON.parse(raw) as { categories?: Array<{ category?: string }> };
+    const seen = new Set<string>();
+    const apiCats: Array<{ id: string; name: string; count: number; section: string }> = [];
+    for (const row of parsed.categories ?? []) {
+      const rawCat = String(row?.category ?? '').trim();
+      if (!rawCat) continue;
+      const slug = rawCat
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '-')
+        .replace(/^-+|-+$/g, '');
+      if (!slug || seen.has(slug) || !ADULT_CAT_SLUG_RE.test(slug)) continue;
+      seen.add(slug);
+      const label = rawCat
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, (m) => m.toUpperCase());
+      apiCats.push({ id: `cat:${slug}`, name: label, count: 30, section: 'Categorias (Derfirm/pornhub-api)' });
+    }
+    apiCats.sort((a, b) => a.name.localeCompare(b.name));
+    categories.push(...apiCats);
+  } catch {
+    // Keep built-in ordering shelves even if categories endpoint fails temporarily
+  }
+  const payload = {
+    source: 'adult18',
+    sourceUrl: 'https://github.com/Derfirm/pornhub-api',
+    totalCount: categories.length,
+    categories,
+  };
+  adultCatsCache.ts = Date.now();
+  adultCatsCache.data = payload;
+  return payload;
+}
+
+async function getAdultItems(category: string, searchQ: string, force = false): Promise<IptvChannel[]> {
+  const cleanQ = searchQ.replace(/[\r\n\t]/g, ' ').trim().slice(0, 80);
+  const cacheKey = `${category}::${cleanQ.toLowerCase()}`;
+  const cached = adultItemsCache.get(cacheKey);
+  if (!force && cached && Date.now() - cached.ts < 10 * 60 * 1000) {
+    return cached.items;
+  }
+
+  const params = new URLSearchParams({ thumbsize: 'medium', page: '1' });
+  let groupLabel = '+18';
+  if (cleanQ) {
+    params.set('search', cleanQ);
+    params.set('ordering', 'mostviewed');
+    groupLabel = `Busca • ${cleanQ}`;
+  } else if (category.startsWith('search:')) {
+    const qPart = category.slice(7).trim().slice(0, 80);
+    if (qPart) {
+      params.set('search', qPart);
+      groupLabel = `Busca • ${qPart}`;
+    }
+    params.set('ordering', 'mostviewed');
+  } else if (category.startsWith('ord:')) {
+    const [, ordRaw, perRaw] = category.split(':');
+    const ord = ['mostviewed', 'newest', 'rating', 'featured'].includes(ordRaw) ? ordRaw : 'mostviewed';
+    const per = ['weekly', 'monthly', 'all'].includes(perRaw) ? perRaw : 'weekly';
+    params.set('ordering', ord);
+    params.set('period', per);
+    groupLabel = `+18 • ${ord}`;
+  } else if (category.startsWith('cat:')) {
+    const slug = category.slice(4).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+    if (slug) {
+      params.set('category', slug);
+      groupLabel = slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+    }
+    params.set('ordering', 'mostviewed');
+    params.set('period', 'weekly');
+  } else {
+    params.set('ordering', 'mostviewed');
+    params.set('period', 'weekly');
+  }
+
+  const raw = await fetchAdultText(`${PORNHUB_API_BASE}/search?${params.toString()}`);
+  const parsed = JSON.parse(raw) as {
+    videos?: Array<{
+      video_id?: string;
+      title?: string;
+      duration?: string;
+      views?: number | string;
+      rating?: number | string;
+      default_thumb?: string;
+      thumb?: string;
+    }>;
+  };
+  const items: IptvChannel[] = [];
+  for (const v of parsed.videos ?? []) {
+    const vid = String(v?.video_id ?? '').trim();
+    if (!ADULT_VIDEO_ID_RE.test(vid)) continue;
+    const title = String(v?.title ?? `Vídeo ${vid}`).replace(/[\r\n\t]/g, ' ').trim();
+    const rawLogo = String(v?.default_thumb ?? v?.thumb ?? '').trim();
+    const logo = rawLogo && isSafeExternalUrl(rawLogo) ? rawLogo : '';
+    const meta: string[] = [];
+    if (v?.duration) meta.push(String(v.duration).trim());
+    if (v?.views !== undefined && v?.views !== null) meta.push(`${v.views} views`);
+    if (v?.rating !== undefined && v?.rating !== null && Number.isFinite(Number(v.rating))) {
+      meta.push(`${Math.round(Number(v.rating))}%`);
+    }
+    items.push({
+      name: title,
+      url: `kplayer-adult://${vid}`,
+      mediaType: 'movie',
+      logo,
+      group: groupLabel,
+      id: meta.join(' • ') || '+18',
+    });
+  }
+  adultItemsCache.set(cacheKey, { ts: Date.now(), items });
+  return items;
+}
+
+async function resolveAdultStream(videoId: string): Promise<{ streamUrl: string; embedUrl: string; title?: string }> {
+  const vid = videoId.trim();
+  if (!ADULT_VIDEO_ID_RE.test(vid)) {
+    throw new Error('Invalid video id');
+  }
+  const embedUrl = `https://www.pornhub.com/embed/${encodeURIComponent(vid)}`;
+  let pageUrl = `https://www.pornhub.com/view_video.php?viewkey=${encodeURIComponent(vid)}`;
+  let title = '';
+  try {
+    const metaRaw = await fetchAdultText(`${PORNHUB_API_BASE}/video_by_id?id=${encodeURIComponent(vid)}`, 10000);
+    const meta = JSON.parse(metaRaw) as { video?: { url?: string; title?: string } };
+    if (meta?.video?.title) title = String(meta.video.title).trim();
+    const cand = String(meta?.video?.url ?? '').trim();
+    if (cand && isAllowedAdultUrl(cand)) pageUrl = cand;
+  } catch {
+    // Continue with canonical viewkey URL
+  }
+
+  let streamUrl = '';
+  try {
+    const html = await fetchAdultText(pageUrl, 14000);
+    const match =
+      html.match(/"mediaDefinitions"\s*:\s*(\[[\s\S]*?\])\s*,\s*"/) ??
+      html.match(/"mediaDefinitions"\s*:\s*(\[[\s\S]*?\])/);
+    if (match) {
+      const rawDefs = JSON.parse(match[1]) as Array<{ videoUrl?: string; format?: string; quality?: unknown }>;
+      const expanded: Array<{ videoUrl?: string; format?: string; quality?: unknown }> = [];
+      for (const entry of Array.isArray(rawDefs) ? rawDefs : []) {
+        const vu = String(entry?.videoUrl ?? '').trim();
+        if (!vu) continue;
+        if (vu.includes('get_media') && isAllowedAdultUrl(vu)) {
+          try {
+            const sub = JSON.parse(await fetchAdultText(vu, 10000));
+            if (Array.isArray(sub)) {
+              expanded.push(...sub);
+              continue;
+            }
+          } catch {
+            // Ignore indirect failure
+          }
+        }
+        expanded.push(entry);
+      }
+      const scored: Array<{ score: number; url: string }> = [];
+      for (const item of expanded) {
+        const u = String(item?.videoUrl ?? '').trim();
+        if (!u || !isAllowedAdultUrl(u)) continue;
+        const fmt = String(item?.format ?? '').toLowerCase();
+        const qNum = Number(Array.isArray(item?.quality) ? item.quality[0] : item?.quality) || 0;
+        let score = 0;
+        if (fmt === 'mp4' || u.toLowerCase().includes('.mp4')) score += 200;
+        else if (fmt === 'hls' || u.toLowerCase().includes('.m3u8')) score += 180;
+        if (qNum >= 360 && qNum <= 720) score += Math.floor(qNum / 10);
+        else if (qNum > 720) score += 40;
+        scored.push({ score, url: u });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      if (scored[0]) streamUrl = scored[0].url;
+    }
+  } catch {
+    // Fallback to embedUrl if page parse fails
+  }
+  return { streamUrl, embedUrl, title: title || undefined };
+}
+
 function parsePlsOrM3u(filename: string, content: string): RadioStation[] {
   const baseName = filename.replace(/\.(pls|m3u8?|asx)$/i, '').replace(/_/g, ' ');
   const lines = content.split(/\r?\n/);
@@ -2183,11 +2428,18 @@ async function createServer() {
   app.get('/api/iptv/categories', async (req, res) => {
     const rawSource = String(req.query.source ?? 'canais');
     const source =
-      rawSource === 'filmes' || rawSource === 'series' || rawSource === 'usuario'
+      rawSource === 'filmes' ||
+      rawSource === 'series' ||
+      rawSource === 'usuario' ||
+      rawSource === 'adult18'
         ? rawSource
         : 'canais';
     const force = req.query.refresh === '1';
     try {
+      if (source === 'adult18') {
+        const payload = await getAdultCategories(force);
+        return res.json(payload);
+      }
       const payload = await getIptvCategories(source, force);
       if (source === 'canais' || source === 'usuario') {
         // Warm XMLTV EPG index in background so live channel items resolve instantly
@@ -2197,7 +2449,12 @@ async function createServer() {
     } catch {
       return res.status(502).json({
         source,
-        sourceUrl: source === 'canais' ? SAIMO_CANAIS_BASE : SAIMO_FILMES_BASE,
+        sourceUrl:
+          source === 'adult18'
+            ? 'https://github.com/Derfirm/pornhub-api'
+            : source === 'canais'
+            ? SAIMO_CANAIS_BASE
+            : SAIMO_FILMES_BASE,
         totalCount: 0,
         categories: [],
         error: 'unavailable',
@@ -2238,13 +2495,21 @@ async function createServer() {
   app.get('/api/iptv/items', async (req, res) => {
     const rawSource = String(req.query.source ?? 'canais');
     const source =
-      rawSource === 'filmes' || rawSource === 'series' || rawSource === 'usuario'
+      rawSource === 'filmes' ||
+      rawSource === 'series' ||
+      rawSource === 'usuario' ||
+      rawSource === 'adult18'
         ? rawSource
         : 'canais';
     const category = String(req.query.category ?? 'all').slice(0, 160);
-    const q = String(req.query.q ?? '').trim().toLowerCase();
+    const rawQ = String(req.query.q ?? '').trim();
+    const q = rawQ.toLowerCase();
     const force = req.query.refresh === '1';
     try {
+      if (source === 'adult18') {
+        const items = await getAdultItems(category, rawQ, force);
+        return res.json({ source, category, total: items.length, items });
+      }
       let items = await getIptvCategoryItems(source, category, force);
       if (q) {
         items = items.filter(
@@ -2274,6 +2539,19 @@ async function createServer() {
       return res.json({ source, category, total: items.length, items });
     } catch {
       return res.status(502).json({ source, category, total: 0, items: [], error: 'unavailable' });
+    }
+  });
+
+  app.get('/api/iptv/adult/resolve', async (req, res) => {
+    const id = String(req.query.id ?? '').trim();
+    if (!ADULT_VIDEO_ID_RE.test(id)) {
+      return res.status(400).json({ error: 'ID de vídeo +18 inválido' });
+    }
+    try {
+      const resolved = await resolveAdultStream(id);
+      return res.json({ ok: true, id, ...resolved });
+    } catch {
+      return res.status(502).json({ ok: false, error: 'unavailable' });
     }
   });
 

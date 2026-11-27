@@ -359,7 +359,7 @@ int main(void) {
     language = lang;
     draw_welcome();
     assert(measure(tr("Y  Termos de uso"), 11) <= 168);
-    for (int page = 0; page < 3; page++) {
+    for (int page = 0; page < TERMS_COUNT; page++) {
       terms_page = page;
       assert(wrapped(tr(terms_text[page]), 38, 169, 560, 16, 26, 8, textc) > 0);
       draw_terms();
@@ -663,6 +663,30 @@ int main(void) {
   draw_tutorial();
   key(SDLK_BACKSPACE, false);
   assert(mode == 2 && opt_section == OPT_SEC_ROOT);
+  /* Verify Seção +18 (28): locked by default, requires Aviso Prévio +18, unlocks 5th IPTV tab */
+  assert(!adult_section_unlocked && iptv_source_count() == 4);
+  opt_cursor = 7;
+  opt_sync_option_id();
+  assert(option == 28);
+  key(SDLK_RETURN, false);
+  assert(mode == 10 && stream_notice_target == 18 && !adult_section_unlocked);
+  draw_stream_notice();
+  /* A cancels and keeps +18 locked */
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 2 && !adult_section_unlocked && iptv_source_count() == 4);
+  /* Open again, Y opens Terms page 5 (+18), A returns to notice, B confirms & unlocks */
+  key(SDLK_RIGHT, false);
+  assert(mode == 10 && stream_notice_target == 18);
+  key(SDLK_m, false);
+  assert(mode == 6 && terms_page == TERMS_COUNT - 1 && terms_return == 10);
+  draw_terms();
+  key(SDLK_BACKSPACE, false);
+  assert(mode == 10 && stream_notice_target == 18);
+  key(SDLK_RETURN, false);
+  assert(mode == 2 && adult_section_unlocked && iptv_source_count() == 5);
+  /* Toggling again immediately locks +18 and hides 5th tab */
+  key(SDLK_RIGHT, false);
+  assert(mode == 2 && !adult_section_unlocked && iptv_source_count() == 4);
   /* Verify penultimate is Verificar atualizacoes (19) and last is Sair (8) */
   assert(opt_root_ids[OPT_ROOT_COUNT - 2] == 19);
   assert(opt_root_ids[OPT_ROOT_COUNT - 1] == 8);

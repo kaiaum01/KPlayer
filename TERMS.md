@@ -47,6 +47,12 @@ Antes de entrar nas funções de **IPTV** ou **Rádio Online**, o KPlayer exibe 
 - Componentes de terceiros (VLC/libVLC, SDL2, stb e fontes) mantêm suas respectivas licenças listadas em [THIRD_PARTY.md](THIRD_PARTY.md).
 - KPlayer é um projeto independente, sem afiliação oficial com VideoLAN, PortMaster, Radio-Browser ou SofaScore.
 
+## 7. Seção +18 (Opcional e Bloqueada por Padrão)
+
+- A **Seção +18** vem **BLOQUEADA por padrão** em todas as instalações e só pode ser desbloqueada manualmente em **Opções → Seção +18** por usuários maiores de 18 anos após leitura e aceite explícito do **Aviso Prévio +18**.
+- Quando desbloqueada, uma aba **`+18`** passa a ser exibida junto ao serviço de **IPTV**, consultando a API pública externa compatível com **`Derfirm/pornhub-api`** (Pornhub Webmasters REST API).
+- O KPlayer não hospeda, não armazena, não modera e não possui afiliação com provedores de conteúdo adulto de terceiros. O usuário é o único responsável por habilitar ou bloquear o recurso (que pode ser bloqueado novamente a qualquer momento nas Opções).
+
 ---
 
 # Terms of Use & Transparency — KPlayer v2.0.3
@@ -87,3 +93,9 @@ Before entering **IPTV** or **Online Radio**, KPlayer displays a **Transparency 
 - Users are solely responsible for local files and custom links they choose to load and should only access content they are authorized to play.
 - No personal media or user playlists are uploaded to project servers. Preferences, favorites, and user playlists stay local.
 - Original KPlayer code is licensed under **GPL-2.0-or-later** ([LICENSE](LICENSE)) without warranty. Third-party notices appear in [THIRD_PARTY.md](THIRD_PARTY.md). Independent project, unaffiliated with VideoLAN, PortMaster, Radio-Browser, or SofaScore.
+
+## 6. Optional +18 Section (Locked by Default)
+
+- The **+18 Section** is **LOCKED by default** and can only be unlocked manually under **Settings → +18 Section** by adults aged 18+ after explicitly accepting the **+18 Prior Notice**.
+- Once unlocked, a **`+18`** tab appears alongside **IPTV**, querying the public external API compatible with **`Derfirm/pornhub-api`** (Pornhub Webmasters REST API).
+- KPlayer does not host, store, moderate, or hold any affiliation with third-party adult content providers. Users are solely responsible for enabling or locking this option at any time in Settings.

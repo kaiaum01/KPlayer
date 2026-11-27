@@ -748,8 +748,14 @@ static void bg_mp_fill_shared(KpOverlayShared *dst, const BgMpState *st) {
 static KpOverlayShared *bg_mp_shm_open(const BgMpState *st) {
   const char *path = getenv("KPLAYER_OVERLAY_SHM");
   if (!path || !path[0]) return NULL;
-  int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+  int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0666);
+  if (fd < 0) {
+    (void)unlink(path);
+    fd = open(path, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
+  }
   if (fd < 0) return NULL;
+  /* Ensure non-root EmulationStation / game processes (e.g. user ark) have RW access even under root systemd umask */
+  (void)fchmod(fd, 0666);
   if (ftruncate(fd, (off_t)sizeof(KpOverlayShared)) != 0) {
     close(fd);
     return NULL;
@@ -872,21 +878,53 @@ static bool bg_fb_open(BgFbOverlay *fb) {
 
 static void bg_fb_render(BgFbOverlay *fb, const BgMpState *st) {
   if (!fb || !fb->map || !st) return;
+  if (fb->fd >= 0) {
+    struct fb_var_screeninfo live_v;
+    if (ioctl(fb->fd, FBIOGET_VSCREENINFO, &live_v) == 0 &&
+        live_v.xres == fb->vinfo.xres && live_v.yres == fb->vinfo.yres) {
+      fb->vinfo.xoffset = live_v.xoffset;
+      fb->vinfo.yoffset = live_v.yoffset;
+    }
+  }
   uint32_t *rgba = (uint32_t *)malloc((size_t)KP_OV_CARD_W * KP_OV_CARD_H * sizeof(uint32_t));
   if (!rgba) return;
   KpOverlayShared tmp;
   memset(&tmp, 0, sizeof(tmp));
   bg_mp_fill_shared(&tmp, st);
   kp_ov_render_rgba(&tmp, rgba);
+  size_t bpp = fb->vinfo.bits_per_pixel / 8;
   for (int yy = 0; yy < fb->box_h; yy++) {
     int sy = (yy * KP_OV_CARD_H) / fb->box_h;
     for (int xx = 0; xx < fb->box_w; xx++) {
       int sx = (xx * KP_OV_CARD_W) / fb->box_w;
       uint32_t px = rgba[(size_t)sy * KP_OV_CARD_W + (size_t)sx];
-      bg_fb_put_pixel(fb, fb->box_x + xx, fb->box_y + yy,
-                      (uint8_t)(px & 0xFFu),
-                      (uint8_t)((px >> 8) & 0xFFu),
-                      (uint8_t)((px >> 16) & 0xFFu));
+      uint8_t a = (uint8_t)((px >> 24) & 0xFFu);
+      if (a == 0) continue; /* Preserve rounded outer corners without painting black squares */
+      uint8_t r = (uint8_t)(px & 0xFFu);
+      uint8_t g = (uint8_t)((px >> 8) & 0xFFu);
+      uint8_t b = (uint8_t)((px >> 16) & 0xFFu);
+      if (a < 255 && fb->has_saved && fb->saved_pixels) {
+        uint8_t br = 12, bg_c = 15, bb = 20;
+        const uint8_t *sp = fb->saved_pixels + (size_t)yy * fb->saved_row_bytes + (size_t)xx * bpp;
+        if (fb->vinfo.bits_per_pixel == 32) {
+          uint32_t dpx = 0;
+          memcpy(&dpx, sp, 4);
+          br = (uint8_t)((dpx >> fb->vinfo.red.offset) & 0xFFu);
+          bg_c = (uint8_t)((dpx >> fb->vinfo.green.offset) & 0xFFu);
+          bb = (uint8_t)((dpx >> fb->vinfo.blue.offset) & 0xFFu);
+        } else if (fb->vinfo.bits_per_pixel == 16) {
+          uint16_t dpx = 0;
+          memcpy(&dpx, sp, 2);
+          br = (uint8_t)(((dpx >> 11) & 0x1Fu) << 3);
+          bg_c = (uint8_t)(((dpx >> 5) & 0x3Fu) << 2);
+          bb = (uint8_t)((dpx & 0x1Fu) << 3);
+        }
+        int inv = 255 - (int)a;
+        r = (uint8_t)(((int)r * a + (int)br * inv) / 255);
+        g = (uint8_t)(((int)g * a + (int)bg_c * inv) / 255);
+        b = (uint8_t)(((int)b * a + (int)bb * inv) / 255);
+      }
+      bg_fb_put_pixel(fb, fb->box_x + xx, fb->box_y + yy, r, g, b);
     }
   }
   free(rgba);
@@ -1509,12 +1547,18 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
       }
     }
 
-    /* Fallback to /dev/fb0 only if GLES/SDL overlay has not rendered a frame within 260ms */
-    if (st.overlay_open && fb_fallback_pending) {
+    /* Arbitrate GLES/SDL overlay vs /dev/fb0 fallback cleanly (never fight live GLES frames) */
+    bool gl_hook_alive = (shm && shm->last_hook_ms > 0 && (loop_now - shm->last_hook_ms) < 2000);
+    if (st.overlay_open && fb.map && shm && shm->last_draw_ms > fb_open_prev_draw_ms) {
+      /* GLES/SDL hook took over -> immediately release /dev/fb0 to prevent double-draw flicker */
+      bg_fb_close(&fb);
+      fb_fallback_pending = false;
+      fprintf(stderr, "bg_miniplayer: overlay GLES/SDL assumiu, /dev/fb0 liberado\n");
+    } else if (st.overlay_open && fb_fallback_pending) {
       if (shm && shm->last_draw_ms > fb_open_prev_draw_ms) {
         fb_fallback_pending = false;
         fprintf(stderr, "bg_miniplayer: overlay GLES/SDL ativo\n");
-      } else if (loop_now - fb_open_start_ms >= 260) {
+      } else if (!gl_hook_alive && (loop_now - fb_open_start_ms) >= 320) {
         fb_fallback_pending = false;
         if (game_pid > 1 && !game_stopped) {
           bg_mp_signal_game(game_pid, SIGSTOP);
@@ -1525,11 +1569,12 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
           fb_last_blit_ms = loop_now;
           fprintf(stderr, "bg_miniplayer: overlay fallback /dev/fb0 ativo\n");
         }
+      } else if (gl_hook_alive && (loop_now - fb_open_start_ms) >= 1200) {
+        /* Hook heartbeat is active so GLES/SDL owns the display; do not fight /dev/fb0 */
+        fb_fallback_pending = false;
       }
-    } else if (st.overlay_open && fb.map && system_mode && (loop_now - fb_last_blit_ms) >= 160) {
-      bg_fb_render(&fb, &st);
-      fb_last_blit_ms = loop_now;
     }
+    (void)fb_last_blit_ms;
 
     /* Auto-advance when a local track finishes */
     if (st.started && !st.paused && st.track_count > 0) {

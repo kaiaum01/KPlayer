@@ -106,15 +106,16 @@ static void draw_welcome(void) {
   centered(tr("Pressione B para continuar"), 20, 418, 600, 12,
            alpha(muted, hint_a));
 }
-#define TERMS_COUNT 4
+#define TERMS_COUNT 5
 static bool stream_notice_accepted = false;
-static int stream_notice_target = 8; /* 7 = radio, 8 = iptv */
+static int stream_notice_target = 8; /* 7 = radio, 8 = iptv, 18 = adult +18 unlock */
 static int stream_notice_return = 3;
 static const char *terms_titles[TERMS_COUNT] = {
     "Sobre o aplicativo",
     "Transparência: IPTV e Rádio",
     "Seus arquivos e preferências",
-    "Licenças e avisos"};
+    "Licenças e avisos",
+    "Seção +18 (Opcional — API Externa)"};
 static const char *terms_text[TERMS_COUNT] = {
     "K PLAYER é um reprodutor independente para suas músicas, vídeos, rádios e "
     "listas IPTV. O aplicativo não hospeda, armazena nem distribui conteúdo "
@@ -132,7 +133,13 @@ static const char *terms_text[TERMS_COUNT] = {
     "Este software é fornecido sem garantia, nos limites das licenças "
     "aplicáveis (GPL-2.0-or-later). O K PLAYER utiliza VLC/libVLC, SDL2, stb e "
     "fontes livres. As licenças estão na pasta licencas e o código-fonte "
-    "acompanha o pacote. Sem afiliação com VideoLAN, PortMaster ou SofaScore."};
+    "acompanha o pacote. Sem afiliação com VideoLAN, PortMaster ou SofaScore.",
+    "A Seção +18 vem BLOQUEADA por padrão e só pode ser desbloqueada nas "
+    "Opções por pessoas maiores de 18 anos após aceitar o aviso prévio. Quando "
+    "desbloqueada, exibe uma aba +18 no serviço de IPTV consultando a API "
+    "pública externa compatível com Derfirm/pornhub-api. O K PLAYER não "
+    "hospeda, modera nem se responsabiliza por conteúdo de terceiros; você "
+    "pode bloquear novamente a qualquer momento nas Opções."};
 static void draw_terms(void) {
   backdrop();
   draw_header(tr("Termos de uso"));
@@ -148,6 +155,40 @@ static void draw_terms(void) {
 }
 static void draw_stream_notice(void) {
   backdrop();
+  if (stream_notice_target == 18) {
+    draw_header("AVISO PRÉVIO +18");
+    label("Desbloquear Seção +18", 24, 56, 24, textc, 460);
+    const char *badge = "+18 RESTRITO";
+    int bw = (int)measure(badge, 11) + 22;
+    rounded(W - 24 - bw, 60, bw, 22, 11, alpha(accent, 42));
+    centered(badge, W - 24 - bw, 65, bw, 11, accent);
+    label("Leia atentamente antes de desbloquear no IPTV", 24, 86, 12, muted, 560);
+
+    panel_card(20, 108, 600, 316, 16);
+    label("1. Conteúdo adulto exclusivo para maiores de 18 anos", 36, 124, 14, accent, 568);
+    wrapped("Ao desbloquear, você declara ter 18 anos ou mais e concorda em exibir a aba +18 junto ao serviço de IPTV. Esta seção vem bloqueada por padrão e pode ser bloqueada novamente a qualquer momento em Opções.",
+            36, 148, 568, 13, 20, 4, textc);
+
+    rect(36, 240, 568, 1, alpha(textc, 24));
+    label("2. API externa (Derfirm/pornhub-api) e Termos", 36, 252, 14, accent, 568);
+    wrapped("Os vídeos são consultados via API pública externa compatível com Derfirm/pornhub-api. O K PLAYER é apenas um reprodutor, não hospeda conteúdo próprio e não tem afiliação com terceiros.",
+            36, 276, 568, 13, 20, 4, textc);
+
+    rounded(36, 372, 272, 36, 12, accent);
+    centered("B  Tenho +18 e aceito", 36, 383, 272, 13, bg);
+    rounded(320, 372, 164, 36, 12, elevated);
+    centered("Y  Ler Termos", 320, 383, 164, 13, textc);
+    rounded(494, 372, 110, 36, 12, elevated);
+    centered("A  Cancelar", 494, 383, 110, 13, muted);
+
+    const FooterHint hints[] = {
+        {"B", "Tenho +18 e desbloquear"},
+        {"Y", "Termos +18"},
+        {"A", "Manter bloqueado"}};
+    footer_hints(hints, 3);
+    return;
+  }
+
   draw_header(tr("TRANSPARÊNCIA"));
   label(tr("Aviso de Transparência"), 24, 56, 24, textc, 460);
   const char *badge = stream_notice_target == 8 ? "IPTV" : tr("Rádio Online");

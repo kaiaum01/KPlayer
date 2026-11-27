@@ -217,9 +217,12 @@ export default function App() {
   const [bgAudioPreview, setBgAudioPreview] = useState<boolean>(() =>
     loadStorage('kp_bg_audio_preview', false)
   );
+  const [adultSectionUnlocked, setAdultSectionUnlocked] = useState<boolean>(() =>
+    loadStorage('kp_adult_unlocked', false)
+  );
   const [gameAudioDucked, setGameAudioDucked] = useState<boolean>(false);
   const [bgAudioVolume, setBgAudioVolume] = useState<number>(55);
-  // Interactive GTA Cheat Trainer Preview Demo state (L3 + R3)
+  // Interactive Mini-Player Preview Demo state (L3 + R3)
   const [trainerDemoActive, setTrainerDemoActive] = useState<boolean>(false);
   const [trainerDemoOpen, setTrainerDemoOpen] = useState<boolean>(true);
   const [trainerDemoRow, setTrainerDemoRow] = useState<number>(0);
@@ -234,6 +237,13 @@ export default function App() {
       // Ignore storage quota errors
     }
   }, [bgAudioPreview]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('kp_adult_unlocked', JSON.stringify(adultSectionUnlocked));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [adultSectionUnlocked]);
   const [screensaverActive, setScreensaverActive] = useState<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
   const [weatherMoodSeed] = useState<number>(() => Math.floor(Math.random() * 100000));
@@ -309,7 +319,7 @@ export default function App() {
       return false;
     }
   });
-  const [pendingStreamTarget, setPendingStreamTarget] = useState<'radio' | 'iptv'>('iptv');
+  const [pendingStreamTarget, setPendingStreamTarget] = useState<'radio' | 'iptv' | 'adult18'>('iptv');
   const [noticeReturn, setNoticeReturn] = useState<ScreenMode>('home');
   const [dashFocus, setDashFocus] = useState(0);
 
@@ -1387,6 +1397,12 @@ export default function App() {
   );
 
   const acceptStreamNotice = useCallback(() => {
+    if (pendingStreamTarget === 'adult18') {
+      setAdultSectionUnlocked(true);
+      setScreen(noticeReturn);
+      notify('Seção +18 desbloqueada! A aba +18 agora aparece no serviço de IPTV.');
+      return;
+    }
     setStreamNoticeAccepted(true);
     try {
       sessionStorage.setItem('kp_stream_notice_ok', '1');
@@ -1394,7 +1410,7 @@ export default function App() {
       // ignore storage failure
     }
     setScreen(pendingStreamTarget);
-  }, [pendingStreamTarget]);
+  }, [noticeReturn, notify, pendingStreamTarget]);
 
   // Open dashboard card
   const openDashboardCard = useCallback(
@@ -1791,7 +1807,7 @@ export default function App() {
         else if (btn === 'A') setScreen(noticeReturn);
         else if (btn === 'Y') {
           setTermsReturn('notice');
-          setTermsPage(1);
+          setTermsPage(pendingStreamTarget === 'adult18' ? 4 : 1);
           setScreen('terms');
         }
         return;
@@ -2890,122 +2906,161 @@ export default function App() {
               </div>
             )}
 
-            {/* ==================== TRANSPARENCY NOTICE BEFORE IPTV / RADIO ==================== */}
-            {screen === 'notice' && (
-              <div className="w-full h-full relative overflow-hidden flex flex-col">
-                <ModernBackdrop theme={theme} />
-                <HeaderBar
-                  theme={theme}
-                  section={tr('TRANSPARÊNCIA', language)}
-                  location={locationLabel}
-                />
-                <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-[54px] flex flex-col w-full max-w-[820px] mx-auto">
-                  <div className="flex items-center justify-between gap-2 shrink-0">
-                    <div className="min-w-0">
-                      <h2 style={{ color: theme.text }} className="text-[19px] @min-[540px]:text-[22px] font-extrabold leading-tight truncate">
-                        {tr('Aviso de Transparência', language)}
-                      </h2>
-                      <div style={{ color: theme.muted }} className="text-[11px] @min-[540px]:text-[11.5px] mt-0.5 truncate">
-                        {tr('Antes de acessar Rádio Online ou IPTV', language)}
+            {/* ==================== TRANSPARENCY / +18 PRIOR NOTICE ==================== */}
+            {screen === 'notice' && (() => {
+              const isAdultNotice = pendingStreamTarget === 'adult18';
+              return (
+                <div className="w-full h-full relative overflow-hidden flex flex-col">
+                  <ModernBackdrop theme={theme} />
+                  <HeaderBar
+                    theme={theme}
+                    section={isAdultNotice ? 'AVISO PRÉVIO +18' : tr('TRANSPARÊNCIA', language)}
+                    location={locationLabel}
+                  />
+                  <div className="relative z-10 flex-1 min-h-0 px-4 @min-[540px]:px-6 pt-3 pb-[54px] flex flex-col w-full max-w-[820px] mx-auto">
+                    <div className="flex items-center justify-between gap-2 shrink-0">
+                      <div className="min-w-0">
+                        <h2 style={{ color: theme.text }} className="text-[19px] @min-[540px]:text-[22px] font-extrabold leading-tight truncate">
+                          {isAdultNotice ? 'Desbloquear Seção +18' : tr('Aviso de Transparência', language)}
+                        </h2>
+                        <div style={{ color: theme.muted }} className="text-[11px] @min-[540px]:text-[11.5px] mt-0.5 truncate">
+                          {isAdultNotice
+                            ? 'Leia atentamente o aviso prévio e os termos antes de desbloquear no IPTV'
+                            : tr('Antes de acessar Rádio Online ou IPTV', language)}
+                        </div>
                       </div>
+                      <span
+                        style={{
+                          backgroundColor: mixRgb(theme.elevated, theme.accent, 0.2),
+                          color: theme.accent,
+                          border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
+                        }}
+                        className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0"
+                      >
+                        {isAdultNotice
+                          ? '+18 RESTRITO'
+                          : pendingStreamTarget === 'iptv'
+                          ? 'IPTV'
+                          : tr('Rádio Online', language)}
+                      </span>
                     </div>
-                    <span
-                      style={{
-                        backgroundColor: mixRgb(theme.elevated, theme.accent, 0.2),
-                        color: theme.accent,
-                        border: `1px solid ${rgbToRgba(theme.accent, 0.35)}`,
-                      }}
-                      className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0"
+
+                    <div
+                      style={{ ...modernPanelStyle(theme, 14) }}
+                      className="mt-2.5 flex-1 min-h-0 p-4 flex flex-col justify-between gap-3 overflow-y-auto kp-scroll"
                     >
-                      {pendingStreamTarget === 'iptv' ? 'IPTV' : tr('Rádio Online', language)}
-                    </span>
-                  </div>
+                      {isAdultNotice ? (
+                        <div className="space-y-2.5">
+                          <div>
+                            <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
+                              1. Conteúdo adulto exclusivo para maiores de 18 anos
+                            </div>
+                            <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
+                              Ao desbloquear, você declara ter 18 anos ou mais e concorda em exibir a aba +18 junto ao serviço de IPTV. Esta seção vem bloqueada por padrão e pode ser bloqueada novamente a qualquer momento em Opções.
+                            </p>
+                          </div>
 
-                  <div
-                    style={{ ...modernPanelStyle(theme, 14) }}
-                    className="mt-2.5 flex-1 min-h-0 p-4 flex flex-col justify-between gap-3 overflow-y-auto kp-scroll"
-                  >
-                    <div className="space-y-2.5">
-                      <div>
-                        <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
-                          1. {tr('Fontes abertas e agregadores públicos', language)}
+                          <div
+                            style={{ borderTop: `1px solid ${rgbToRgba(theme.text, 0.08)}` }}
+                            className="pt-2"
+                          >
+                            <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
+                              2. API externa (Derfirm/pornhub-api) e Termos de Uso
+                            </div>
+                            <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
+                              Os vídeos são consultados via API pública externa compatível com Derfirm/pornhub-api. O K PLAYER atua apenas como reprodutor, não hospeda conteúdo próprio e não possui afiliação com provedores de terceiros.
+                            </p>
+                          </div>
                         </div>
-                        <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
-                          {tr(
-                            'Todos os dados de IPTV e Rádio são obtidos de agregadores públicos da internet e fontes abertas (como Radio-Browser e catálogos web públicos). O KPlayer é apenas um reprodutor e não hospeda nem transmite conteúdo próprio.',
-                            language
-                          )}
-                        </p>
-                      </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          <div>
+                            <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
+                              1. {tr('Fontes abertas e agregadores públicos', language)}
+                            </div>
+                            <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
+                              {tr(
+                                'Todos os dados de IPTV e Rádio são obtidos de agregadores públicos da internet e fontes abertas (como Radio-Browser e catálogos web públicos). O KPlayer é apenas um reprodutor e não hospeda nem transmite conteúdo próprio.',
+                                language
+                              )}
+                            </p>
+                          </div>
 
-                      <div
-                        style={{ borderTop: `1px solid ${rgbToRgba(theme.text, 0.08)}` }}
-                        className="pt-2"
-                      >
-                        <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
-                          2. {tr('Você tem direito de colocar seu próprio link', language)}
+                          <div
+                            style={{ borderTop: `1px solid ${rgbToRgba(theme.text, 0.08)}` }}
+                            className="pt-2"
+                          >
+                            <div style={{ color: theme.accent }} className="text-[12.5px] font-bold">
+                              2. {tr('Você tem direito de colocar seu próprio link', language)}
+                            </div>
+                            <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
+                              {tr(
+                                'Com total transparência, você pode inserir seus próprios links e listas .m3u/.m3u8 (pelo teclado virtual ou na pasta iptv_usuario/) e rádios .pls/.m3u (em radios_usuario/) a qualquer momento.',
+                                language
+                              )}
+                            </p>
+                          </div>
                         </div>
-                        <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
-                          {tr(
-                            'Com total transparência, você pode inserir seus próprios links e listas .m3u/.m3u8 (pelo teclado virtual ou na pasta iptv_usuario/) e rádios .pls/.m3u (em radios_usuario/) a qualquer momento.',
-                            language
-                          )}
-                        </p>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2 pt-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={acceptStreamNotice}
+                          style={{ backgroundColor: theme.accent, color: theme.bg }}
+                          className="flex-1 min-w-[160px] py-2 px-3 rounded-xl text-[12px] font-extrabold cursor-pointer hover:brightness-110 transition-all"
+                        >
+                          {isAdultNotice
+                            ? 'B • Tenho +18 e aceito (Desbloquear)'
+                            : `B • ${tr('Concordo e continuar', language)}`}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTermsReturn('notice');
+                            setTermsPage(isAdultNotice ? 4 : 1);
+                            setScreen('terms');
+                          }}
+                          style={{
+                            backgroundColor: theme.elevated,
+                            color: theme.text,
+                            border: `1px solid ${rgbToRgba(theme.text, 0.12)}`,
+                          }}
+                          className="py-2 px-3 rounded-xl text-[11.5px] font-bold cursor-pointer hover:brightness-110 transition-all"
+                        >
+                          Y • {isAdultNotice ? 'Ler Termos +18' : tr('Ler termos completos', language)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScreen(noticeReturn)}
+                          style={{
+                            backgroundColor: theme.elevated,
+                            color: theme.muted,
+                          }}
+                          className="py-2 px-3 rounded-xl text-[11.5px] font-bold cursor-pointer hover:brightness-110 transition-all"
+                        >
+                          A • {isAdultNotice ? 'Cancelar' : tr('Voltar', language)}
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={acceptStreamNotice}
-                        style={{ backgroundColor: theme.accent, color: theme.bg }}
-                        className="flex-1 min-w-[160px] py-2 px-3 rounded-xl text-[12px] font-extrabold cursor-pointer hover:brightness-110 transition-all"
-                      >
-                        B • {tr('Concordo e continuar', language)}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTermsReturn('notice');
-                          setTermsPage(1);
-                          setScreen('terms');
-                        }}
-                        style={{
-                          backgroundColor: theme.elevated,
-                          color: theme.text,
-                          border: `1px solid ${rgbToRgba(theme.text, 0.12)}`,
-                        }}
-                        className="py-2 px-3 rounded-xl text-[11.5px] font-bold cursor-pointer hover:brightness-110 transition-all"
-                      >
-                        Y • {tr('Ler termos completos', language)}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setScreen(noticeReturn)}
-                        style={{
-                          backgroundColor: theme.elevated,
-                          color: theme.muted,
-                        }}
-                        className="py-2 px-3 rounded-xl text-[11.5px] font-bold cursor-pointer hover:brightness-110 transition-all"
-                      >
-                        A • {tr('Voltar', language)}
-                      </button>
-                    </div>
                   </div>
+
+                  <FooterBar
+                    theme={theme}
+                    themeIndex={themeIndex}
+                    toast={toast}
+                    hints={[
+                      {
+                        key: 'B',
+                        label: isAdultNotice ? 'Tenho +18 e desbloquear' : tr('Concordo e continuar', language),
+                      },
+                      { key: 'Y', label: isAdultNotice ? 'Termos +18' : tr('Termos de uso', language) },
+                      { key: 'A', label: isAdultNotice ? 'Manter bloqueado' : tr('Voltar', language) },
+                    ]}
+                  />
                 </div>
-
-                <FooterBar
-                  theme={theme}
-                  themeIndex={themeIndex}
-                  toast={toast}
-                  hints={[
-                    { key: 'B', label: tr('Concordo e continuar', language) },
-                    { key: 'Y', label: tr('Termos de uso', language) },
-                    { key: 'A', label: tr('Voltar', language) },
-                  ]}
-                />
-              </div>
-            )}
+              );
+            })()}
 
             {/* ==================== DASHBOARD / HOME (v2.0.7: WEATHER-REACTIVE HERO + MINI PLAYER TOP + LARGE WEATHER BOTTOM) ==================== */}
             {screen === 'home' && (() => {
@@ -4380,6 +4435,7 @@ export default function App() {
                 locationLabel={locationLabel}
                 toast={toast}
                 notify={notify}
+                adultSectionUnlocked={adultSectionUnlocked}
                 onBackHome={() => setScreen('home')}
                 onPlayItem={playIptvItem}
               />
@@ -4588,6 +4644,7 @@ export default function App() {
                 screensaverShowLyrics={screensaverShowLyrics}
                 uiSfxEnabled={uiSfxEnabled}
                 bgAudioPreview={bgAudioPreview}
+                adultSectionUnlocked={adultSectionUnlocked}
                 onSetThemeIndex={setThemeIndex}
                 onSetLanguage={setLanguage}
                 onSetDisplayMode={setR36sDisplayMode}
@@ -4624,6 +4681,16 @@ export default function App() {
                       ? 'Mini-Player injetado no sistema inteiro! Música do EmulationStation desativada e ativa mesmo após reiniciar (L3 + R3)'
                       : 'Mini-Player removido do sistema e música do EmulationStation restaurada'
                   );
+                }}
+                onToggleAdultSection={() => {
+                  if (!adultSectionUnlocked) {
+                    setPendingStreamTarget('adult18');
+                    setNoticeReturn('options');
+                    setScreen('notice');
+                  } else {
+                    setAdultSectionUnlocked(false);
+                    notify('Seção +18 bloqueada e oculta do IPTV');
+                  }
                 }}
                 onCycleScreensaverTimeout={() => {
                   setScreensaverTimeoutSec((cur) => {

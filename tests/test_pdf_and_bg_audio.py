@@ -421,5 +421,75 @@ while time.monotonic() < deadline:
                 self.assertIn("PdfCraft serve IPC", text_res["text"])
 
 
+class Adult18FetchTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.iptv_fetch = _load_module("kp_iptv_fetch", "ports/kplayer/iptv_fetch.py")
+
+    def test_video_id_and_url_allowlist(self) -> None:
+        f = self.iptv_fetch
+        self.assertTrue(f.is_valid_adult_video_id("ph63a1b2c3d4e5f"))
+        self.assertTrue(f.is_valid_adult_video_id("65f1a2b3c4d5e"))
+        self.assertFalse(f.is_valid_adult_video_id("../etc/passwd"))
+        self.assertFalse(f.is_valid_adult_video_id("ab"))
+        self.assertFalse(f.is_valid_adult_video_id("id with space"))
+
+        self.assertTrue(f.is_allowed_adult_url("https://www.pornhub.com/webmasters/categories"))
+        self.assertTrue(f.is_allowed_adult_url("https://cv-h.phncdn.com/hls/videos/test.m3u8"))
+        self.assertFalse(f.is_allowed_adult_url("http://www.pornhub.com/webmasters/categories"))
+        self.assertFalse(f.is_allowed_adult_url("https://127.0.0.1/admin"))
+        self.assertFalse(f.is_allowed_adult_url("https://evil.example.com/pornhub.com"))
+        self.assertFalse(f.is_allowed_adult_url("file:///etc/passwd"))
+
+    def test_stream_picker_and_mocked_catalog(self) -> None:
+        f = self.iptv_fetch
+        picked = f._pick_best_adult_stream(
+            [
+                {"format": "mp4", "quality": "1080", "videoUrl": "https://cv-h.phncdn.com/1080.mp4"},
+                {"format": "mp4", "quality": "480", "videoUrl": "https://cv-h.phncdn.com/480.mp4"},
+                {"format": "mp4", "quality": "720", "videoUrl": "https://evil.example/720.mp4"},
+            ]
+        )
+        self.assertEqual(picked, "https://cv-h.phncdn.com/480.mp4")
+
+        mock_cats = json.dumps(
+            {
+                "categories": [
+                    {"id": "1", "category": "amateur"},
+                    {"id": "2", "category": "brazilian"},
+                ]
+            }
+        )
+        mock_videos = json.dumps(
+            {
+                "videos": [
+                    {
+                        "video_id": "ph1234567890",
+                        "title": "Sample Video",
+                        "duration": "12:34",
+                        "views": 54000,
+                        "rating": "92.5",
+                        "default_thumb": "https://ci.phncdn.com/thumb.jpg",
+                        "categories": [{"category": "brazilian"}],
+                    }
+                ]
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            cat_out = Path(tmp) / "cats.tsv"
+            items_out = Path(tmp) / "items.m3u8"
+            with mock.patch.object(f, "_adult_http_get", return_value=mock_cats):
+                self.assertTrue(f.cmd_categories("adult18", cat_out, refresh=True))
+            cat_lines = cat_out.read_text(encoding="utf-8").splitlines()
+            self.assertTrue(any(line.startswith("ord:mostviewed:weekly\t") for line in cat_lines))
+            self.assertTrue(any(line.startswith("cat:brazilian\t") for line in cat_lines))
+
+            with mock.patch.object(f, "_adult_http_get", return_value=mock_videos):
+                self.assertTrue(f.cmd_list("adult18", "cat:brazilian", items_out, refresh=True))
+            m3u_text = items_out.read_text(encoding="utf-8")
+            self.assertIn("Sample Video", m3u_text)
+            self.assertIn("kplayer-adult://ph1234567890", m3u_text)
+
+
 if __name__ == "__main__":
     unittest.main()

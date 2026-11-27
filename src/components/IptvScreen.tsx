@@ -44,16 +44,23 @@ interface IptvScreenProps {
   locationLabel: string;
   toast: string | null;
   notify: (msg: string) => void;
+  adultSectionUnlocked: boolean;
   onBackHome: () => void;
   onPlayItem: (item: IptvChannel, sourceLabel: string) => void;
 }
 
-const SOURCES: Array<{ key: IptvSourceKey; label: string; subtitle: string }> = [
+const BASE_SOURCES: Array<{ key: IptvSourceKey; label: string; subtitle: string }> = [
   { key: 'canais', label: 'Canais', subtitle: 'https://canais-saimo.pages.dev/' },
   { key: 'filmes', label: 'Filmes', subtitle: 'https://filmes-saimo.pages.dev/' },
   { key: 'series', label: 'Séries', subtitle: 'https://filmes-saimo.pages.dev/' },
   { key: 'usuario', label: 'Usuário', subtitle: 'ports/kplayer/iptv_usuario/ • Teclado' },
 ];
+
+const ADULT_SOURCE: { key: IptvSourceKey; label: string; subtitle: string } = {
+  key: 'adult18',
+  label: '+18',
+  subtitle: 'Derfirm/pornhub-api (Restrito +18)',
+};
 
 const VIRTUAL_KB_ROWS: string[][] = [
   ['https://', 'http://', '.m3u8', '.m3u', '.txt', '/', ':', '.', '-', '_'],
@@ -74,11 +81,30 @@ interface CategoriesPayload {
 }
 
 export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function IptvScreen(
-  { theme, themeIndex, language, locationLabel, toast, notify, onBackHome, onPlayItem },
+  {
+    theme,
+    themeIndex,
+    language,
+    locationLabel,
+    toast,
+    notify,
+    adultSectionUnlocked,
+    onBackHome,
+    onPlayItem,
+  },
   ref
 ) {
+  const sources = useMemo(
+    () => (adultSectionUnlocked ? [...BASE_SOURCES, ADULT_SOURCE] : BASE_SOURCES),
+    [adultSectionUnlocked]
+  );
   const [sourceIdx, setSourceIdx] = useState<number>(0);
-  const activeSource = SOURCES[sourceIdx] ?? SOURCES[0];
+  useEffect(() => {
+    if (!adultSectionUnlocked && sourceIdx >= BASE_SOURCES.length) {
+      setSourceIdx(0);
+    }
+  }, [adultSectionUnlocked, sourceIdx]);
+  const activeSource = sources[sourceIdx] ?? sources[0];
 
   const [view, setView] = useState<IptvView>('categories');
 
@@ -122,6 +148,10 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
   const [epgModalChannel, setEpgModalChannel] = useState<IptvChannel | null>(null);
   const [epgGuide, setEpgGuide] = useState<EpgChannelGuide | null>(null);
   const [epgLoading, setEpgLoading] = useState<boolean>(false);
+
+  // Safe in-app embed fallback for +18 videos when direct stream is blocked by browser CORS
+  const [adultEmbedModal, setAdultEmbedModal] = useState<{ title: string; embedUrl: string } | null>(null);
+  const [adultResolving, setAdultResolving] = useState<boolean>(false);
 
   const openEpgGuide = useCallback(async (ch: IptvChannel) => {
     setEpgModalChannel(ch);
@@ -280,7 +310,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
   }, [epSelected, filteredEpisodes.length]);
 
   const activateItem = useCallback(
-    (item: IptvChannel | undefined) => {
+    async (item: IptvChannel | undefined) => {
       if (!item) return;
       if (item.mediaType === 'series-show') {
         openSeriesEpisodes(item, false);
@@ -290,9 +320,31 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         notify(tr('Nenhum item encontrado', language));
         return;
       }
+      if (item.url.startsWith('kplayer-adult://')) {
+        const videoId = item.url.slice('kplayer-adult://'.length).trim();
+        if (!/^[a-zA-Z0-9_-]{4,40}$/.test(videoId) || adultResolving) return;
+        setAdultResolving(true);
+        notify('Carregando vídeo +18...');
+        try {
+          const r = await fetch(`/api/iptv/adult/resolve?id=${encodeURIComponent(videoId)}`);
+          const d = (await r.json()) as { ok?: boolean; streamUrl?: string; embedUrl?: string };
+          if (d.streamUrl && /^https?:\/\//i.test(d.streamUrl)) {
+            onPlayItem({ ...item, url: d.streamUrl }, '+18');
+          } else if (d.embedUrl && d.embedUrl.startsWith('https://www.pornhub.com/embed/')) {
+            setAdultEmbedModal({ title: item.name, embedUrl: d.embedUrl });
+          } else {
+            notify('Fluxo +18 indisponível no momento');
+          }
+        } catch {
+          notify('Falha ao resolver vídeo +18');
+        } finally {
+          setAdultResolving(false);
+        }
+        return;
+      }
       onPlayItem(item, tr(activeSource.label, language));
     },
-    [activeSource.label, language, notify, onPlayItem, openSeriesEpisodes]
+    [activeSource.label, adultResolving, language, notify, onPlayItem, openSeriesEpisodes]
   );
 
   // User IPTV URL save via keyboard
@@ -398,7 +450,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         }
       },
       cycleSource: () => {
-        setSourceIdx((s) => (s + 1) % SOURCES.length);
+        setSourceIdx((s) => (s + 1) % sources.length);
       },
       refreshCurrent: () => {
         if (view === 'episodes' && activeSeries) {
@@ -416,6 +468,10 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         setShowKbModal(true);
       },
       handleButton: (btn: R36SButton) => {
+        if (adultEmbedModal) {
+          if (btn === 'A') setAdultEmbedModal(null);
+          return;
+        }
         if (epgModalChannel) {
           if (btn === 'A') setEpgModalChannel(null);
           return;
@@ -426,7 +482,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         }
 
         if (btn === 'X') {
-          setSourceIdx((s) => (s + 1) % SOURCES.length);
+          setSourceIdx((s) => (s + 1) % sources.length);
           return;
         }
 
@@ -434,9 +490,9 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
           if (btn === 'A') {
             onBackHome();
           } else if (btn === 'LEFT') {
-            setSourceIdx((s) => (s + SOURCES.length - 1) % SOURCES.length);
+            setSourceIdx((s) => (s + sources.length - 1) % sources.length);
           } else if (btn === 'RIGHT') {
-            setSourceIdx((s) => (s + 1) % SOURCES.length);
+            setSourceIdx((s) => (s + 1) % sources.length);
           } else if (btn === 'UP' && categories.length > 0) {
             setCatSelected((i) => (i + categories.length - 1) % categories.length);
           } else if (btn === 'DOWN' && categories.length > 0) {
@@ -455,15 +511,15 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
           if (btn === 'A') {
             setView('categories');
           } else if (btn === 'LEFT') {
-            setSourceIdx((s) => (s + SOURCES.length - 1) % SOURCES.length);
+            setSourceIdx((s) => (s + sources.length - 1) % sources.length);
           } else if (btn === 'RIGHT') {
-            setSourceIdx((s) => (s + 1) % SOURCES.length);
+            setSourceIdx((s) => (s + 1) % sources.length);
           } else if (btn === 'UP' && len > 0) {
             setItemSelected((i) => (i + len - 1) % len);
           } else if (btn === 'DOWN' && len > 0) {
             setItemSelected((i) => (i + 1) % len);
           } else if (btn === 'B' && len > 0) {
-            activateItem(filteredItems[itemSelected]);
+            void activateItem(filteredItems[itemSelected]);
           } else if (btn === 'Y' && activeCategory) {
             openCategory(activeCategory, true);
           }
@@ -497,11 +553,13 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
       },
     }),
     [
+      adultEmbedModal,
       epgModalChannel,
       showKbModal,
       view,
       categories,
       catSelected,
+      sources.length,
       activeSource.key,
       filteredItems,
       itemSelected,
@@ -558,7 +616,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
 
         {/* 4 Source Tabs: Canais | Filmes | Séries | Usuário */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          {SOURCES.map((src, idx) => {
+          {sources.map((src, idx) => {
             const active = idx === sourceIdx;
             return (
               <button
@@ -657,6 +715,14 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
               onSubmit={(e) => {
                 e.preventDefault();
                 const q = catSearchQuery.trim();
+                if (activeSource.key === 'adult18' && q) {
+                  void openCategory(
+                    { id: `search:${q}`, name: `Busca +18: ${q}`, count: 30, section: 'Busca +18' },
+                    true,
+                    ''
+                  );
+                  return;
+                }
                 const allCat = categories.find((c) => c.id === 'all') ?? categories[0];
                 if (allCat) void openCategory(allCat, false, q);
               }}
@@ -672,7 +738,9 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                   value={catSearchQuery}
                   onChange={(e) => setCatSearchQuery(e.target.value)}
                   placeholder={
-                    activeSource.key === 'series'
+                    activeSource.key === 'adult18'
+                      ? 'Pesquisar vídeos +18 na API...'
+                      : activeSource.key === 'series'
                       ? 'Pesquisar série digitando...'
                       : activeSource.key === 'filmes'
                       ? 'Pesquisar filme digitando...'
@@ -1550,6 +1618,55 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
           </div>
         </div>
       )}
+
+      {/* ==================== +18 EMBED FALLBACK MODAL ==================== */}
+      {adultEmbedModal &&
+        adultEmbedModal.embedUrl.startsWith('https://www.pornhub.com/embed/') && (
+          <div
+            style={{ backgroundColor: 'rgba(6, 9, 13, 0.9)' }}
+            className="absolute inset-0 z-30 flex items-center justify-center p-3 sm:p-4"
+            onClick={() => setAdultEmbedModal(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ ...modernPanelStyle(theme, 14) }}
+              className="w-full max-w-[680px] max-h-[90%] flex flex-col overflow-hidden"
+            >
+              <div
+                className="px-3.5 py-2.5 flex items-center justify-between gap-2 shrink-0"
+                style={{ borderBottom: `1px solid ${themeHairline(theme)}` }}
+              >
+                <div className="min-w-0">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wide text-rose-400">
+                    +18 · Derfirm/pornhub-api
+                  </div>
+                  <div style={{ color: theme.text }} className="text-[13.5px] font-extrabold truncate">
+                    {adultEmbedModal.title}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdultEmbedModal(null)}
+                  style={{ ...modernPillStyle(theme, true), height: 26, paddingLeft: 10, paddingRight: 10 }}
+                  className="text-[10.5px] font-extrabold cursor-pointer shrink-0"
+                >
+                  A • {tr('Fechar', language)}
+                </button>
+              </div>
+              <div className="relative w-full aspect-video bg-black shrink-0">
+                <iframe
+                  src={adultEmbedModal.embedUrl}
+                  title={adultEmbedModal.title}
+                  sandbox="allow-scripts allow-same-origin allow-presentation"
+                  allow="autoplay; fullscreen"
+                  allowFullScreen
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full border-0"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
       <FooterBar
         theme={theme}

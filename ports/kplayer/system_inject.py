@@ -537,6 +537,18 @@ if [ -f "$LOCAL_CFG" ]; then
     ACTIVE_CFG="$LOCAL_CFG"
 fi
 
+# Keep /usr/local/lib/libkp_overlay.so in sync after KPlayer updates
+if [ -f "$GAMEDIR/libkp_overlay.so" ] && [ -w "/usr/local/lib" ]; then
+    if [ ! -f "/usr/local/lib/libkp_overlay.so" ] || [ "$GAMEDIR/libkp_overlay.so" -nt "/usr/local/lib/libkp_overlay.so" ]; then
+        cp -f "$GAMEDIR/libkp_overlay.so" "/usr/local/lib/libkp_overlay.so.new" 2>/dev/null \
+            && chmod 0755 "/usr/local/lib/libkp_overlay.so.new" 2>/dev/null \
+            && mv -f "/usr/local/lib/libkp_overlay.so.new" "/usr/local/lib/libkp_overlay.so" 2>/dev/null || true
+    fi
+fi
+
+# Clear any stale root-only SHM so bg_miniplayer recreates it with 0666 for EmulationStation (ark)
+rm -f "$SHM_PATH" 2>/dev/null || true
+
 export KPLAYER_GAMEDIR="$GAMEDIR"
 export LD_LIBRARY_PATH="$GAMEDIR/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
 export VLC_PLUGIN_PATH="/usr/lib/aarch64-linux-gnu/vlc/plugins"

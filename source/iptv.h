@@ -20,6 +20,7 @@
 #define IPTV_JOB_ITEMS 2
 #define IPTV_JOB_EPISODES 3
 #define IPTV_JOB_ADD_URL 4
+#define IPTV_JOB_RESOLVE_ADULT 5
 
 typedef struct {
   char name[160];
@@ -47,13 +48,14 @@ static IptvChannel *iptv_episodes = NULL;
 static int iptv_ep_count = 0, iptv_ep_cap = 0;
 static int iptv_ep_selected = 0, iptv_ep_offset = 0;
 
-static int iptv_source = 0; /* 0=Canais, 1=Filmes, 2=Séries, 3=Usuário */
+static int iptv_source = 0; /* 0=Canais, 1=Filmes, 2=Séries, 3=Usuário, 4=+18 (quando desbloqueado) */
 static int iptv_view = IPTV_VIEW_CATS;
 static char iptv_active_cat_id[160] = "";
 static char iptv_active_cat_name[160] = "";
 static char iptv_active_series_title[160] = "";
 static char iptv_active_series_letter[16] = "";
 static char iptv_active_series_shard[32] = "";
+static char iptv_adult_pending_name[160] = "";
 
 /* Virtual keyboard state for IPTV do Usuário URL entry */
 static char iptv_kb_url[512] = "https://";
@@ -236,11 +238,16 @@ static void iptv_copy_n(char *dst, size_t cap, const char *src, size_t n) {
   dst[n] = 0;
 }
 
+static int iptv_source_count(void) {
+  return adult_section_unlocked ? 5 : 4;
+}
+
 static const char *iptv_source_slug(int src) {
   switch (src) {
     case 1: return "filmes";
     case 2: return "series";
     case 3: return "usuario";
+    case 4: return "adult18";
     default: return "canais";
   }
 }
@@ -250,6 +257,7 @@ static const char *iptv_source_label(int src) {
     case 1: return tr("Filmes");
     case 2: return tr("Séries");
     case 3: return tr("Usuário");
+    case 4: return "+18";
     default: return tr("Canais");
   }
 }
@@ -259,6 +267,7 @@ static const char *iptv_source_subtitle(int src) {
     case 1: return IPTV_FILMES_URL;
     case 2: return IPTV_FILMES_URL;
     case 3: return tr("Pasta iptv_usuario/ + Teclado");
+    case 4: return "Derfirm/pornhub-api (Restrito +18)";
     default: return IPTV_CANAIS_URL;
   }
 }
@@ -330,7 +339,8 @@ static int iptv_read_list_dyn(const char *path, IptvChannel **arr, int *cap) {
     } else if (*p != '#' && *p) {
       size_t url_len = strlen(p);
       bool valid_scheme = !strncmp(p, "http://", 7) || !strncmp(p, "https://", 8) ||
-                          !strncmp(p, "kplayer-series://", 17);
+                          !strncmp(p, "kplayer-series://", 17) ||
+                          !strncmp(p, "kplayer-adult://", 16);
       if (valid_scheme && url_len < sizeof((*arr)[0].url) && !strpbrk(p, " \t")) {
         if (!iptv_ensure_channels_cap(arr, cap, count + 1)) break;
         IptvChannel *dst = &(*arr)[count];
@@ -466,6 +476,10 @@ static void *iptv_job_worker(void *raw) {
   } else if (spec->job == IPTV_JOB_ADD_URL) {
     argv[ac++] = "user-add-url";
     argv[ac++] = spec->arg1;
+  } else if (spec->job == IPTV_JOB_RESOLVE_ADULT) {
+    argv[ac++] = "resolve-adult";
+    argv[ac++] = spec->arg1;
+    argv[ac++] = spec->out_path;
   }
   argv[ac] = NULL;
 
@@ -567,6 +581,22 @@ static void iptv_fetch_episodes_start(const char *letter, const char *shard, con
   iptv_start_job(&spec);
 }
 
+static void iptv_resolve_adult_start(const IptvChannel *ch) {
+  if (!ch || strncmp(ch->url, "kplayer-adult://", 16) != 0) return;
+  const char *vid = ch->url + 16;
+  if (!vid[0]) return;
+  iptv_copy_str(iptv_adult_pending_name, sizeof(iptv_adult_pending_name), ch->name);
+  IptvJobSpec spec;
+  memset(&spec, 0, sizeof(spec));
+  spec.job = IPTV_JOB_RESOLVE_ADULT;
+  spec.source = 4;
+  iptv_copy_str(spec.arg1, sizeof(spec.arg1), vid);
+  iptv_copy_str(spec.out_path, sizeof(spec.out_path), "iptv/.adult-stream.txt");
+  if (iptv_start_job(&spec)) {
+    notify("Carregando vídeo +18...");
+  }
+}
+
 static void iptv_reload(void) {
   iptv_view = IPTV_VIEW_CATS;
   iptv_count = iptv_selected = iptv_offset = 0;
@@ -575,14 +605,16 @@ static void iptv_reload(void) {
 }
 
 static void iptv_open(void) {
-  if (iptv_source < 0 || iptv_source > 3) iptv_source = 0;
+  int max_src = iptv_source_count() - 1;
+  if (iptv_source < 0 || iptv_source > max_src) iptv_source = 0;
   iptv_reload();
-  if (!iptv_cat_count || iptv_source == 3) iptv_fetch_categories_start(false);
+  if (!iptv_cat_count || iptv_source == 3 || iptv_source == 4) iptv_fetch_categories_start(false);
   mode = 8;
 }
 
 static void iptv_switch_source(int delta) {
-  iptv_source = (iptv_source + delta + 4) % 4;
+  int n = iptv_source_count();
+  iptv_source = (iptv_source + delta + n) % n;
   iptv_reload();
   iptv_fetch_categories_start(false);
 }
@@ -745,6 +777,13 @@ static void iptv_refresh_current(void) {
 static void iptv_apply_search_submit(void) {
   iptv_selected = iptv_offset = 0;
   iptv_ep_selected = iptv_ep_offset = 0;
+  if (iptv_source == 4 && iptv_search_query[0]) {
+    char qid[128], qlabel[128];
+    snprintf(qid, sizeof(qid), "search:%.63s", iptv_search_query);
+    snprintf(qlabel, sizeof(qlabel), "Busca +18: %.63s", iptv_search_query);
+    iptv_fetch_items_start(qid, qlabel, true);
+    return;
+  }
   if (iptv_search_return_view == IPTV_VIEW_CATS && iptv_search_query[0] && iptv_cat_count > 0) {
     /* Prefer opening "all" / first category so user immediately sees matching channels/series */
     int pick = 0;
@@ -876,6 +915,8 @@ static void iptv_key(SDL_Keycode k) {
         if (iptv_parse_series_id(ch, ltr, sizeof(ltr), sh, sizeof(sh))) {
           iptv_clear_search();
           iptv_fetch_episodes_start(ltr, sh, ch->name, false);
+        } else if (!strncmp(ch->url, "kplayer-adult://", 16)) {
+          iptv_resolve_adult_start(ch);
         } else {
           iptv_play_channel(ch);
         }
@@ -959,6 +1000,28 @@ static void iptv_poll_worker_result(void) {
       iptv_fetch_categories_start(true);
     } else {
       notify(tr("URL inválida (use http:// ou https://)"));
+    }
+  } else if (job == IPTV_JOB_RESOLVE_ADULT) {
+    char stream_url[1024] = "";
+    if (ok) {
+      FILE *f = fopen(done_path, "r");
+      if (f) {
+        if (fgets(stream_url, sizeof(stream_url), f)) {
+          size_t n = strlen(stream_url);
+          while (n > 0 && (stream_url[n - 1] == '\n' || stream_url[n - 1] == '\r')) stream_url[--n] = 0;
+        }
+        fclose(f);
+      }
+    }
+    if (stream_url[0] && (!strncmp(stream_url, "http://", 7) || !strncmp(stream_url, "https://", 8))) {
+      IptvChannel resolved;
+      memset(&resolved, 0, sizeof(resolved));
+      iptv_copy_str(resolved.name, sizeof(resolved.name),
+                    iptv_adult_pending_name[0] ? iptv_adult_pending_name : "Vídeo +18");
+      iptv_copy_str(resolved.url, sizeof(resolved.url), stream_url);
+      iptv_play_channel(&resolved);
+    } else {
+      notify("Não foi possível obter o fluxo direto deste vídeo +18");
     }
   }
 }
@@ -1064,12 +1127,16 @@ static void draw_iptv(void) {
   label(iptv_source_label(iptv_source), 18, 40, 22, textc, 220);
   label(iptv_source_subtitle(iptv_source), 18, 66, 11, dim, 250);
 
-  /* Four source tabs: Canais | Filmes | Séries | Usuário */
-  const int tab_x[4] = {276, 362, 448, 534};
-  const int tab_w = 82;
-  for (int s = 0; s < 4; s++) {
-    pill(tab_x[s], 44, tab_w, 26, iptv_source == s);
-    centered(iptv_source_label(s), tab_x[s] + 2, 50, tab_w - 4, 12,
+  /* Four or five source tabs: Canais | Filmes | Séries | Usuário [| +18 when unlocked] */
+  int n_tabs = iptv_source_count();
+  if (iptv_source >= n_tabs) iptv_source = 0;
+  int tab_w = (n_tabs == 5) ? 66 : 82;
+  int tab_step = (n_tabs == 5) ? 70 : 86;
+  int tab_start_x = (n_tabs == 5) ? 272 : 276;
+  for (int s = 0; s < n_tabs; s++) {
+    int tx = tab_start_x + s * tab_step;
+    pill(tx, 44, tab_w, 26, iptv_source == s);
+    centered(iptv_source_label(s), tx + 2, 50, tab_w - 4, 12,
              iptv_source == s ? bg : muted);
   }
 
