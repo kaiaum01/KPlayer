@@ -307,6 +307,8 @@ static __typeof__(libvlc_audio_set_volume) *p_libvlc_audio_set_volume;
 #define libvlc_audio_set_volume p_libvlc_audio_set_volume
 static __typeof__(libvlc_audio_get_volume) *p_libvlc_audio_get_volume;
 #define libvlc_audio_get_volume p_libvlc_audio_get_volume
+static __typeof__(libvlc_audio_set_mute) *p_libvlc_audio_set_mute;
+#define libvlc_audio_set_mute p_libvlc_audio_set_mute
 static __typeof__(libvlc_get_version) *p_libvlc_get_version;
 #define libvlc_get_version p_libvlc_get_version
 static __typeof__(libvlc_media_new_path) *p_libvlc_media_new_path;
@@ -559,5 +561,7 @@ static int load_vlc(void) {
       dlsym(handle, "libvlc_audio_set_volume");
   *(void **)(&p_libvlc_audio_get_volume) =
       dlsym(handle, "libvlc_audio_get_volume");
+  *(void **)(&p_libvlc_audio_set_mute) =
+      dlsym(handle, "libvlc_audio_set_mute");
   return 1;
 }

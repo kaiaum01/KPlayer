@@ -340,7 +340,7 @@ def build_audio_cmd(
     vol_pct = int(validated.get("volume_pct", 55))
     gain = max(0.10, min(1.0, vol_pct / 100.0))
     start_sec = int(validated.get("media_pos_ms", 0) // 1000)
-    aout_arg = "--aout=pulse" if backend == "pulse" else "--aout=alsa"
+    aout_arg = "--aout=pulse,alsa,any" if backend == "pulse" else "--aout=alsa,pulse,any"
 
     cvlc = which_fn("cvlc") or which_fn("vlc")
     if cvlc:

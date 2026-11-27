@@ -2861,9 +2861,11 @@ static bool kp_export_audio_payload(const char *out_path, const char *target_pat
         bg_track_count++;
       }
     }
-    /* Keep Mini-Player enabled even if no tracks yet (daemon scans /roms/bgmusic too) */
+    /* Keep Mini-Player enabled even if no tracks yet (daemon scans /roms/bgmusic too).
+     * In system-wide mode (empty target_path), replace EmulationStation BGM with auto_play=true;
+     * for standalone port launches from File Manager, stay silent until opened with L3+R3. */
     keep_bg = true;
-    auto_play = false;
+    auto_play = (!target_path || !target_path[0]);
     if (bg_track_count > 0) {
       bg_track_index = 0;
       mtype = bg_tracks[0].is_radio ? "radio" : "music";

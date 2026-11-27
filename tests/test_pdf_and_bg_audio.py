@@ -290,6 +290,10 @@ class SystemInjectTest(unittest.TestCase):
             daemon_txt = daemon_sh_path.read_text(encoding="utf-8")
             self.assertNotIn('rm -f "$SHM_PATH"', daemon_txt)
             self.assertIn("for _w in $(seq 1 20)", daemon_txt)
+            self.assertIn('RUNTIME_DIR="$(dirname "$sock")"', daemon_txt)
+            self.assertIn("libpulse_plugin.so", daemon_txt)
+            self.assertIn("setpriv --reuid=", daemon_txt)
+            self.assertIn("for _gname in input audio;", daemon_txt)
             self.assertTrue((fake_root / "etc/systemd/system/kplayer-miniplayer.service").is_file())
             self.assertTrue((fake_root / "etc/profile.d/kplayer-miniplayer.sh").is_file())
 

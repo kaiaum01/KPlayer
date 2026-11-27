@@ -1371,10 +1371,15 @@ static bool bg_mp_main_lock_active(void) {
 }
 
 static void bg_mp_apply_volume(libvlc_media_player_t *mp, int volume_pct) {
-  if (!mp || !p_libvlc_audio_set_volume) return;
+  if (!mp) return;
   if (volume_pct < 10) volume_pct = 10;
   if (volume_pct > 100) volume_pct = 100;
-  (void)libvlc_audio_set_volume(mp, volume_pct);
+  if (p_libvlc_audio_set_mute) {
+    (void)libvlc_audio_set_mute(mp, 0);
+  }
+  if (p_libvlc_audio_set_volume) {
+    (void)libvlc_audio_set_volume(mp, volume_pct);
+  }
 }
 
 static void bg_mp_play_current(libvlc_instance_t *inst, libvlc_media_player_t *mp,
@@ -1409,25 +1414,27 @@ static libvlc_instance_t *bg_mp_create_vlc(void) {
   const char *alsa_dev = getenv("KPLAYER_BG_ALSA_DEV");
   if (!alsa_dev || !alsa_dev[0]) alsa_dev = "default";
 
+  char dev_arg[128];
+  snprintf(dev_arg, sizeof(dev_arg), "--alsa-audio-device=%.96s", alsa_dev);
+
   libvlc_instance_t *inst = NULL;
   if (aout && !strcmp(aout, "pulse")) {
     const char *args[] = {
         "--no-video",
         "--quiet",
         "--no-xlib",
-        "--aout=pulse",
+        "--aout=pulse,alsa,any",
+        dev_arg,
         "--network-caching=1500",
         "--file-caching=500",
     };
     inst = libvlc_new((int)(sizeof(args) / sizeof(args[0])), args);
-  } else if (aout && !strcmp(aout, "alsa")) {
-    char dev_arg[128];
-    snprintf(dev_arg, sizeof(dev_arg), "--alsa-audio-device=%.96s", alsa_dev);
+  } else {
     const char *args[] = {
         "--no-video",
         "--quiet",
         "--no-xlib",
-        "--aout=alsa",
+        "--aout=alsa,pulse,any",
         dev_arg,
         "--network-caching=1500",
         "--file-caching=500",
@@ -1495,19 +1502,23 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
   int64_t fb_open_start_ms = 0;
   int64_t fb_open_prev_draw_ms = 0;
   int64_t fb_last_blit_ms = 0;
+  int64_t last_err_retry_ms = 0;
+  int err_retry_count = 0;
   int vol_sync_ticks = 0;
 
   if (st.auto_play && st.track_count > 0 && !(system_mode && bg_mp_main_lock_active())) {
     st.started = true;
     st.paused = false;
     bg_mp_play_current(inst, mp, &st, st.initial_pos_ms);
-    vol_sync_ticks = 20;
+    vol_sync_ticks = 30;
     if (shm) bg_mp_fill_shared(shm, &st);
   }
 
   fprintf(stderr,
-          "bg_miniplayer: pronto (%d faixa(s), vol=%d%%, evdev=%d, shm=%d, game_pid=%ld, sys=%d, auto=%d)\n",
-          st.track_count, st.volume_pct, ev.count, shm ? 1 : 0, (long)game_pid,
+          "bg_miniplayer: pronto (%d faixa(s), vol=%d%%, aout=%s, uid=%u, evdev=%d, shm=%d, game_pid=%ld, sys=%d, auto=%d)\n",
+          st.track_count, st.volume_pct,
+          getenv("KPLAYER_BG_AOUT") ? getenv("KPLAYER_BG_AOUT") : "alsa",
+          (unsigned)getuid(), ev.count, shm ? 1 : 0, (long)game_pid,
           system_mode ? 1 : 0, st.auto_play ? 1 : 0);
 
   struct timespec ts = {0, 20000000L}; /* 20ms = 50Hz responsive polling */
@@ -1515,7 +1526,7 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
     if (!bg_mp_game_alive(game_pid)) break;
     int64_t loop_now = kp_ov_now_ms();
 
-    /* In system-wide mode, pause cleanly while KPlayer UI or a port handoff owns the lock */
+    /* In system-wide mode, stop VLC completely while KPlayer UI or a port handoff owns the lock */
     if (system_mode) {
       bool lock_now = bg_mp_main_lock_active();
       if (lock_now && !yielded_to_kplayer) {
@@ -1531,13 +1542,18 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
             bg_mp_fill_shared(shm, &st);
           }
         }
-        if (st.started && !st.paused) {
+        /* Stop unconditionally even if paused so ALSA/Pulse device is always released for KPlayer */
+        if (st.started) {
           libvlc_media_player_stop(mp);
           st.started = false;
+          st.paused = false;
         }
         fprintf(stderr, "bg_miniplayer: pausado enquanto o app KPlayer esta aberto\n");
       } else if (!lock_now && yielded_to_kplayer) {
         yielded_to_kplayer = false;
+        /* Brief settle so KPlayer's VLC/ALSA teardown releases the device cleanly */
+        struct timespec settle = {0, 150000000L};
+        nanosleep(&settle, NULL);
         /* Reload latest playlist/theme saved by KPlayer on exit */
         BgMpState reloaded;
         if (bg_mp_load_json_file(json_path, &reloaded)) {
@@ -1548,14 +1564,16 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
           shm->swallow_until_ms = 0;
           bg_mp_fill_shared(shm, &st);
         }
+        err_retry_count = 0;
         if (st.auto_play && st.track_count > 0) {
           st.started = true;
           st.paused = false;
           bg_mp_play_current(inst, mp, &st, st.initial_pos_ms);
-          vol_sync_ticks = 20;
+          vol_sync_ticks = 30;
           if (shm) bg_mp_fill_shared(shm, &st);
         }
-        fprintf(stderr, "bg_miniplayer: retomado no sistema (%d faixa(s))\n", st.track_count);
+        fprintf(stderr, "bg_miniplayer: retomado no sistema (%d faixa(s), auto=%d)\n",
+                st.track_count, st.auto_play ? 1 : 0);
       }
       if (yielded_to_kplayer) {
         nanosleep(&ts, NULL);
@@ -1565,7 +1583,8 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
 
     if (vol_sync_ticks > 0) {
       vol_sync_ticks--;
-      if (vol_sync_ticks == 0 || vol_sync_ticks == 10) {
+      if (vol_sync_ticks == 28 || vol_sync_ticks == 20 ||
+          vol_sync_ticks == 10 || vol_sync_ticks == 0) {
         bg_mp_apply_volume(mp, st.volume_pct);
       }
     }
@@ -1614,17 +1633,34 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
     }
     (void)fb_last_blit_ms;
 
-    /* Auto-advance when a local track finishes */
+    /* Auto-advance when a local track finishes, and recover cleanly from transient audio errors */
     if (st.started && !st.paused && st.track_count > 0) {
       libvlc_state_t vstate = libvlc_media_player_get_state(mp);
-      if (vstate == libvlc_Ended) {
+      if (vstate == libvlc_Playing) {
+        err_retry_count = 0;
+      } else if (vstate == libvlc_Ended) {
+        err_retry_count = 0;
         st.current_index = (st.current_index + 1) % st.track_count;
         bg_mp_play_current(inst, mp, &st, 0);
-        vol_sync_ticks = 16;
+        vol_sync_ticks = 30;
         if (shm) bg_mp_fill_shared(shm, &st);
         if (st.overlay_open && fb.map) {
           bg_fb_render(&fb, &st);
           fb_last_blit_ms = loop_now;
+        }
+      } else if (vstate == libvlc_Error && (loop_now - last_err_retry_ms) >= 1500) {
+        last_err_retry_ms = loop_now;
+        err_retry_count++;
+        fprintf(stderr, "bg_miniplayer: erro de audio VLC (tentativa %d), recuperando...\n",
+                err_retry_count);
+        if (err_retry_count >= 2 && st.track_count > 1) {
+          st.current_index = (st.current_index + 1) % st.track_count;
+          err_retry_count = 0;
+        }
+        if (err_retry_count <= 4) {
+          bg_mp_play_current(inst, mp, &st, 0);
+          vol_sync_ticks = 30;
+          if (shm) bg_mp_fill_shared(shm, &st);
         }
       }
     }
@@ -1668,11 +1704,25 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
           }
         }
         if (flags & BG_RES_TRACK_CHANGED) {
+          err_retry_count = 0;
           bg_mp_play_current(inst, mp, &st, 0);
-          vol_sync_ticks = 16;
+          vol_sync_ticks = 30;
         }
         if (flags & BG_RES_PAUSE_TOGGLED) {
-          libvlc_media_player_set_pause(mp, st.paused ? 1 : 0);
+          if (!st.paused) {
+            libvlc_state_t cur_vs = libvlc_media_player_get_state(mp);
+            if (cur_vs == libvlc_NothingSpecial || cur_vs == libvlc_Stopped ||
+                cur_vs == libvlc_Ended || cur_vs == libvlc_Error) {
+              err_retry_count = 0;
+              bg_mp_play_current(inst, mp, &st, 0);
+              vol_sync_ticks = 30;
+            } else {
+              libvlc_media_player_set_pause(mp, 0);
+              bg_mp_apply_volume(mp, st.volume_pct);
+            }
+          } else {
+            libvlc_media_player_set_pause(mp, 1);
+          }
         }
         if (flags & BG_RES_VOLUME_CHANGED) {
           bg_mp_apply_volume(mp, st.volume_pct);

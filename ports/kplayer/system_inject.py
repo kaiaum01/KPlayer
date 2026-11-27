@@ -519,16 +519,24 @@ for candidate in /opt/system/Tools/PortMaster /opt/tools/PortMaster /roms/ports/
     fi
 done
 
-# Wait up to 10s on boot for user PulseAudio/PipeWire session before falling back to ALSA
-AOUT="alsa"
+# Wait up to 10s on boot for user audio session (PulseAudio/PipeWire) before continuing
+RUNTIME_DIR=""
+HAS_PULSE_SOCK=0
 for _w in $(seq 1 20); do
     for sock in /run/user/*/pulse/native /run/user/*/pipewire-0; do
         if [ -S "$sock" ]; then
-            AOUT="pulse"
-            export XDG_RUNTIME_DIR="$(dirname "$(dirname "$sock")")"
-            if [ -S "$(dirname "$sock")/native" ]; then
-                export PULSE_SERVER="unix:$sock"
-            fi
+            case "$sock" in
+                */pulse/native)
+                    RUNTIME_DIR="$(dirname "$(dirname "$sock")")"
+                    HAS_PULSE_SOCK=1
+                    ;;
+                *)
+                    RUNTIME_DIR="$(dirname "$sock")"
+                    if [ -S "$RUNTIME_DIR/pulse/native" ]; then
+                        HAS_PULSE_SOCK=1
+                    fi
+                    ;;
+            esac
             break 2
         fi
     done
@@ -538,6 +546,48 @@ for _w in $(seq 1 20); do
     fi
     sleep 0.5
 done
+
+# Resolve console session user (e.g. ark UID 1000) so PipeWire/Pulse/ALSA auth succeeds
+SOCK_UID=""
+SOCK_GID=""
+SOCK_USER=""
+SOCK_HOME=""
+if [ -n "$RUNTIME_DIR" ] && [ -d "$RUNTIME_DIR" ]; then
+    SOCK_UID="$(stat -c '%u' "$RUNTIME_DIR" 2>/dev/null || true)"
+fi
+if [ -z "$SOCK_UID" ] || [ "$SOCK_UID" = "0" ]; then
+    if command -v pgrep >/dev/null 2>&1; then
+        _es_pid="$(pgrep -x emulationstation 2>/dev/null | head -n 1 || true)"
+        if [ -n "$_es_pid" ] && [ -r "/proc/$_es_pid/status" ]; then
+            _es_uid="$(awk '/^Uid:/{{print $2; exit}}' "/proc/$_es_pid/status" 2>/dev/null || true)"
+            if [ -n "$_es_uid" ] && [ "$_es_uid" != "0" ]; then
+                SOCK_UID="$_es_uid"
+            fi
+        fi
+    fi
+fi
+if [ -n "$SOCK_UID" ] && [ "$SOCK_UID" != "0" ]; then
+    _pw_line="$(getent passwd "$SOCK_UID" 2>/dev/null || true)"
+    if [ -n "$_pw_line" ]; then
+        SOCK_USER="$(printf '%s' "$_pw_line" | cut -d: -f1)"
+        SOCK_GID="$(printf '%s' "$_pw_line" | cut -d: -f4)"
+        SOCK_HOME="$(printf '%s' "$_pw_line" | cut -d: -f6)"
+    fi
+    if [ -z "$RUNTIME_DIR" ] && [ -d "/run/user/$SOCK_UID" ]; then
+        RUNTIME_DIR="/run/user/$SOCK_UID"
+        [ -S "$RUNTIME_DIR/pulse/native" ] && HAS_PULSE_SOCK=1
+    fi
+fi
+
+if [ -n "$RUNTIME_DIR" ]; then
+    export XDG_RUNTIME_DIR="$RUNTIME_DIR"
+    if [ "$HAS_PULSE_SOCK" -eq 1 ]; then
+        export PULSE_SERVER="unix:$RUNTIME_DIR/pulse/native"
+    fi
+fi
+if [ -n "$SOCK_HOME" ] && [ -r "$SOCK_HOME/.config/pulse/cookie" ]; then
+    export PULSE_COOKIE="$SOCK_HOME/.config/pulse/cookie"
+fi
 
 ACTIVE_CFG="$SYSTEM_CFG"
 if [ -f "$LOCAL_CFG" ]; then
@@ -556,6 +606,58 @@ fi
 # Preserve the existing SHM inode so EmulationStation stays attached across daemon restarts
 chmod 0666 "$SHM_PATH" 2>/dev/null || true
 
+# Drop privileges to the active console user when safe (keeps input/audio groups for L3+R3 & sound)
+DROP_PRIV_CMD=""
+EXTRA_GIDS=""
+if [ "$(id -u)" -eq 0 ] && [ -n "$SOCK_UID" ] && [ "$SOCK_UID" != "0" ] && [ -n "$SOCK_GID" ] && [ -n "$SOCK_USER" ] && command -v setpriv >/dev/null 2>&1; then
+    _raw_gids="$SOCK_GID $(id -G "$SOCK_USER" 2>/dev/null || true)"
+    for _gname in input audio; do
+        _gid="$(getent group "$_gname" 2>/dev/null | cut -d: -f3 || true)"
+        [ -n "$_gid" ] && _raw_gids="$_raw_gids $_gid"
+    done
+    EXTRA_GIDS="$(printf '%s\n' $_raw_gids | awk 'NF && !seen[$1]++' | paste -sd, -)"
+    _can_drop=1
+    _ev_total=0
+    _ev_ok=0
+    for _ev in /dev/input/event*; do
+        if [ -e "$_ev" ]; then
+            _ev_total=$((_ev_total + 1))
+            if setpriv --reuid="$SOCK_UID" --regid="$SOCK_GID" --groups="$EXTRA_GIDS" test -r "$_ev" 2>/dev/null; then
+                _ev_ok=$((_ev_ok + 1))
+            fi
+        fi
+    done
+    if [ "$_ev_total" -gt 0 ] && [ "$_ev_ok" -eq 0 ]; then
+        _can_drop=0
+    fi
+    if [ "$_can_drop" -eq 1 ] && [ -f "$ACTIVE_CFG" ]; then
+        if ! setpriv --reuid="$SOCK_UID" --regid="$SOCK_GID" --groups="$EXTRA_GIDS" test -r "$ACTIVE_CFG" 2>/dev/null; then
+            _can_drop=0
+        fi
+    fi
+    if [ "$_can_drop" -eq 1 ] && [ -f "$SHM_PATH" ]; then
+        if ! setpriv --reuid="$SOCK_UID" --regid="$SOCK_GID" --groups="$EXTRA_GIDS" test -r "$SHM_PATH" -a -w "$SHM_PATH" 2>/dev/null; then
+            _can_drop=0
+        fi
+    fi
+    if [ "$_can_drop" -eq 1 ]; then
+        DROP_PRIV_CMD="setpriv"
+    fi
+fi
+
+# Default to ALSA (matching KPlayer main player on R36S); only prefer Pulse if plugin & user auth exist
+AOUT="alsa"
+HAS_PULSE_PLUGIN=0
+for _pdir in /usr/lib/aarch64-linux-gnu/vlc/plugins/audio_output /usr/lib/vlc/plugins/audio_output; do
+    if [ -f "$_pdir/libpulse_plugin.so" ]; then
+        HAS_PULSE_PLUGIN=1
+        break
+    fi
+done
+if [ "$HAS_PULSE_SOCK" -eq 1 ] && [ "$HAS_PULSE_PLUGIN" -eq 1 ] && {{ [ -n "$DROP_PRIV_CMD" ] || [ "$(id -u)" -ne 0 ]; }}; then
+    AOUT="pulse"
+fi
+
 export KPLAYER_GAMEDIR="$GAMEDIR"
 export LD_LIBRARY_PATH="$GAMEDIR/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
 export VLC_PLUGIN_PATH="/usr/lib/aarch64-linux-gnu/vlc/plugins"
@@ -565,6 +667,13 @@ export KPLAYER_BG_ALSA_DEV="default"
 export KPLAYER_OVERLAY_SHM="$SHM_PATH"
 export KPLAYER_SYSTEM_MODE="1"
 unset LD_PRELOAD
+
+if [ -n "$DROP_PRIV_CMD" ]; then
+    export HOME="${{SOCK_HOME:-/home/$SOCK_USER}}"
+    export USER="$SOCK_USER"
+    exec setpriv --reuid="$SOCK_UID" --regid="$SOCK_GID" --groups="$EXTRA_GIDS" \
+        "$GAMEDIR/kplayer" --bg-audio "$ACTIVE_CFG" 0
+fi
 
 exec "$GAMEDIR/kplayer" --bg-audio "$ACTIVE_CFG" 0
 """
