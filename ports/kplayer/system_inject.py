@@ -519,17 +519,24 @@ for candidate in /opt/system/Tools/PortMaster /opt/tools/PortMaster /roms/ports/
     fi
 done
 
-# Auto-detect PulseAudio/PipeWire vs ALSA dmix
+# Wait up to 10s on boot for user PulseAudio/PipeWire session before falling back to ALSA
 AOUT="alsa"
-for sock in /run/user/*/pulse/native /run/user/*/pipewire-0; do
-    if [ -S "$sock" ]; then
-        AOUT="pulse"
-        export XDG_RUNTIME_DIR="$(dirname "$(dirname "$sock")")"
-        if [ -S "$(dirname "$sock")/native" ]; then
-            export PULSE_SERVER="unix:$sock"
+for _w in $(seq 1 20); do
+    for sock in /run/user/*/pulse/native /run/user/*/pipewire-0; do
+        if [ -S "$sock" ]; then
+            AOUT="pulse"
+            export XDG_RUNTIME_DIR="$(dirname "$(dirname "$sock")")"
+            if [ -S "$(dirname "$sock")/native" ]; then
+                export PULSE_SERVER="unix:$sock"
+            fi
+            break 2
         fi
+    done
+    # Stop waiting early once EmulationStation is already running without Pulse/PipeWire
+    if [ "$_w" -ge 4 ] && command -v pgrep >/dev/null 2>&1 && pgrep -x emulationstation >/dev/null 2>&1; then
         break
     fi
+    sleep 0.5
 done
 
 ACTIVE_CFG="$SYSTEM_CFG"
@@ -546,8 +553,8 @@ if [ -f "$GAMEDIR/libkp_overlay.so" ] && [ -w "/usr/local/lib" ]; then
     fi
 fi
 
-# Clear any stale root-only SHM so bg_miniplayer recreates it with 0666 for EmulationStation (ark)
-rm -f "$SHM_PATH" 2>/dev/null || true
+# Preserve the existing SHM inode so EmulationStation stays attached across daemon restarts
+chmod 0666 "$SHM_PATH" 2>/dev/null || true
 
 export KPLAYER_GAMEDIR="$GAMEDIR"
 export LD_LIBRARY_PATH="$GAMEDIR/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
@@ -760,21 +767,29 @@ def install_system_miniplayer(
     _atomic_write_text(profile_path, _build_profile_script(), mode=0o644)
 
     # 5. Optional reversible shared ALSA dmix if no PulseAudio/PipeWire server is active
+    #    and the CFW does not already define a shared dmix/pulse/pipewire /etc/asound.conf
     asound_modified = bool(prev_state.get("asound_modified", False))
     asound_existed = prev_state.get("asound_existed")
     asound_backup = prev_state.get("asound_backup")
     if run_system_cmds and detect_audio_backend(os.environ) == "alsa":
         asound_path = _root_path(root, SYSTEM_ASOUND_REL)
-        if not asound_modified:
-            asound_existed = asound_path.is_file()
-            asound_backup = (
-                asound_path.read_text(encoding="utf-8", errors="ignore")
-                if asound_existed
-                else None
-            )
-        hw_dev = detect_alsa_hw_device()
-        _atomic_write_text(asound_path, _build_alsa_dmix_text(hw_dev), mode=0o644)
-        asound_modified = True
+        existing_asound = (
+            asound_path.read_text(encoding="utf-8", errors="ignore")
+            if asound_path.is_file()
+            else ""
+        )
+        cfw_has_shared_mixer = bool(
+            existing_asound
+            and "# KPlayer" not in existing_asound
+            and re.search(r"\b(dmix|pulse|pipewire)\b", existing_asound, re.IGNORECASE)
+        )
+        if not cfw_has_shared_mixer:
+            if not asound_modified:
+                asound_existed = asound_path.is_file()
+                asound_backup = existing_asound if asound_existed else None
+            hw_dev = detect_alsa_hw_device()
+            _atomic_write_text(asound_path, _build_alsa_dmix_text(hw_dev), mode=0o644)
+            asound_modified = True
 
     # 6. Install persistent daemon wrapper + systemd unit (with rc.local fallback)
     daemon_sh = _root_path(root, SYSTEM_DAEMON_SH_REL)

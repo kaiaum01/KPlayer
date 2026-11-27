@@ -764,16 +764,23 @@ static KpOverlayShared *bg_mp_shm_open(const BgMpState *st) {
   close(fd);
   if (m == MAP_FAILED) return NULL;
   KpOverlayShared *shm = (KpOverlayShared *)m;
-  memset(shm, 0, sizeof(*shm));
-  shm->magic = KP_OV_MAGIC;
-  shm->version = KP_OV_VERSION;
-  bg_mp_fill_shared(shm, st);
+  if (shm->magic == KP_OV_MAGIC && shm->version == KP_OV_VERSION) {
+    /* Preserve live hook heartbeats on daemon restart so EmulationStation never loses sync */
+    shm->swallow_until_ms = 0;
+    bg_mp_fill_shared(shm, st);
+  } else {
+    memset(shm, 0, sizeof(*shm));
+    shm->version = KP_OV_VERSION;
+    bg_mp_fill_shared(shm, st);
+    __atomic_store_n(&shm->magic, KP_OV_MAGIC, __ATOMIC_RELEASE);
+  }
   return shm;
 }
 
 static void bg_mp_shm_close(KpOverlayShared *shm) {
   if (!shm) return;
   shm->overlay_open = 0;
+  shm->swallow_until_ms = 0;
   __atomic_add_fetch(&shm->seq, 1u, __ATOMIC_RELEASE);
   munmap(shm, sizeof(KpOverlayShared));
 }
@@ -1186,6 +1193,13 @@ static void bg_evdev_set_grab(BgEvdevSet *ev, bool grab) {
   ev->grabbed = grab;
 }
 
+static bool bg_evdev_any_button_down(const BgEvdevSet *ev) {
+  if (!ev) return false;
+  return ev->prev_l3_r3 || ev->prev_r2 || ev->prev_l2 || ev->prev_confirm ||
+         ev->prev_close || ev->prev_up || ev->prev_down || ev->prev_left ||
+         ev->prev_right;
+}
+
 static void bg_evdev_close_all(BgEvdevSet *ev) {
   if (!ev) return;
   bg_evdev_set_grab(ev, false);
@@ -1476,6 +1490,8 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
   bool fb_fallback_pending = false;
   bool system_mode = (game_pid <= 0);
   bool yielded_to_kplayer = false;
+  bool pending_ungrab = false;
+  int64_t pending_ungrab_deadline_ms = 0;
   int64_t fb_open_start_ms = 0;
   int64_t fb_open_prev_draw_ms = 0;
   int64_t fb_last_blit_ms = 0;
@@ -1507,9 +1523,13 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
         if (st.overlay_open) {
           st.overlay_open = false;
           fb_fallback_pending = false;
+          pending_ungrab = false;
           bg_fb_close(&fb);
           bg_evdev_set_grab(&ev, false);
-          if (shm) bg_mp_fill_shared(shm, &st);
+          if (shm) {
+            shm->swallow_until_ms = 0;
+            bg_mp_fill_shared(shm, &st);
+          }
         }
         if (st.started && !st.paused) {
           libvlc_media_player_stop(mp);
@@ -1524,7 +1544,10 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
           reloaded.overlay_open = false;
           st = reloaded;
         }
-        if (shm) bg_mp_fill_shared(shm, &st);
+        if (shm) {
+          shm->swallow_until_ms = 0;
+          bg_mp_fill_shared(shm, &st);
+        }
         if (st.auto_play && st.track_count > 0) {
           st.started = true;
           st.paused = false;
@@ -1547,22 +1570,37 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
       }
     }
 
-    /* Arbitrate GLES/SDL overlay vs /dev/fb0 fallback cleanly (never fight live GLES frames) */
-    bool gl_hook_alive = (shm && shm->last_hook_ms > 0 && (loop_now - shm->last_hook_ms) < 2000);
+    /*
+     * Arbitrate GLES/SDL overlay vs /dev/fb0 fallback cleanly:
+     * - In system_mode (EmulationStation KMS/DRM), NEVER touch /dev/fb0, because
+     *   direct framebuffer writes fight live KMS/GLES buffers and cause severe flicker.
+     * - /dev/fb0 fallback is strictly for non-hooked standalone ports (game_pid > 1)
+     *   where the port process is cleanly paused via SIGSTOP while the menu is open.
+     */
+    bool gl_hook_alive = (shm && shm->last_hook_ms > 0 && (loop_now - shm->last_hook_ms) < 2500);
+    bool input_hook_alive =
+        (shm && shm->last_input_hook_ms > 0 && (loop_now - shm->last_input_hook_ms) < 2500);
     if (st.overlay_open && fb.map && shm && shm->last_draw_ms > fb_open_prev_draw_ms) {
       /* GLES/SDL hook took over -> immediately release /dev/fb0 to prevent double-draw flicker */
       bg_fb_close(&fb);
       fb_fallback_pending = false;
+      if (game_stopped) {
+        bg_mp_signal_game(game_pid, SIGCONT);
+        game_stopped = false;
+      }
       fprintf(stderr, "bg_miniplayer: overlay GLES/SDL assumiu, /dev/fb0 liberado\n");
-    } else if (st.overlay_open && fb_fallback_pending) {
+    } else if (st.overlay_open && fb_fallback_pending && !system_mode && game_pid > 1) {
       if (shm && shm->last_draw_ms > fb_open_prev_draw_ms) {
         fb_fallback_pending = false;
         fprintf(stderr, "bg_miniplayer: overlay GLES/SDL ativo\n");
-      } else if (!gl_hook_alive && (loop_now - fb_open_start_ms) >= 320) {
+      } else if (!gl_hook_alive && (loop_now - fb_open_start_ms) >= 350) {
         fb_fallback_pending = false;
-        if (game_pid > 1 && !game_stopped) {
+        if (!game_stopped) {
           bg_mp_signal_game(game_pid, SIGSTOP);
           game_stopped = true;
+        }
+        if (!input_hook_alive) {
+          bg_evdev_set_grab(&ev, true);
         }
         if (bg_fb_open(&fb)) {
           bg_fb_render(&fb, &st);
@@ -1592,26 +1630,41 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
     }
 
     BgMpAction act = bg_evdev_poll_action(&ev);
+
+    /* Release legacy EVIOCGRAB only once buttons are released so zero stuck keys occur */
+    if (pending_ungrab && (!bg_evdev_any_button_down(&ev) || loop_now >= pending_ungrab_deadline_ms)) {
+      bg_evdev_set_grab(&ev, false);
+      pending_ungrab = false;
+    }
+
     if (act != BG_ACT_NONE) {
       unsigned int flags = bg_mp_handle_action(&st, act);
       if (flags != BG_RES_NONE) {
         if (flags & BG_RES_OPEN_OVERLAY) {
           fprintf(stderr, "bg_miniplayer: abrindo Mini-Player KPlayer (L3+R3)\n");
-          bg_evdev_set_grab(&ev, true);
-          fb_fallback_pending = true;
-          fb_open_start_ms = loop_now;
-          fb_open_prev_draw_ms = shm ? shm->last_draw_ms : 0;
-          if (!shm) {
-            /* No SHM available -> open /dev/fb0 immediately */
+          pending_ungrab = false;
+          if (!system_mode && game_pid > 1) {
+            /* Standalone port: wait briefly for GLES/SDL hook; only grab/fb0 if unhooked */
+            fb_fallback_pending = true;
+            fb_open_start_ms = loop_now;
+            fb_open_prev_draw_ms = shm ? shm->last_draw_ms : 0;
+            if (!input_hook_alive && !gl_hook_alive) {
+              bg_evdev_set_grab(&ev, true);
+            }
+            if (!shm) {
+              fb_fallback_pending = false;
+              if (!game_stopped) {
+                bg_mp_signal_game(game_pid, SIGSTOP);
+                game_stopped = true;
+              }
+              if (bg_fb_open(&fb)) {
+                bg_fb_render(&fb, &st);
+                fb_last_blit_ms = loop_now;
+              }
+            }
+          } else {
+            /* System-wide EmulationStation mode: pure GLES/SDL overlay + SDL input filter, never /dev/fb0 or EVIOCGRAB */
             fb_fallback_pending = false;
-            if (game_pid > 1 && !game_stopped) {
-              bg_mp_signal_game(game_pid, SIGSTOP);
-              game_stopped = true;
-            }
-            if (bg_fb_open(&fb)) {
-              bg_fb_render(&fb, &st);
-              fb_last_blit_ms = loop_now;
-            }
           }
         }
         if (flags & BG_RES_TRACK_CHANGED) {
@@ -1624,22 +1677,29 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
         if (flags & BG_RES_VOLUME_CHANGED) {
           bg_mp_apply_volume(mp, st.volume_pct);
         }
+        if (flags & BG_RES_CLOSE_OVERLAY) {
+          fprintf(stderr, "bg_miniplayer: ocultando Mini-Player KPlayer\n");
+          fb_fallback_pending = false;
+          if (shm) {
+            /* Briefly swallow closing key-up/bounce events so EmulationStation/game never triggers A/B */
+            shm->swallow_until_ms = loop_now + 260;
+          }
+          bg_fb_close(&fb);
+          if (ev.grabbed) {
+            pending_ungrab = true;
+            pending_ungrab_deadline_ms = loop_now + 240;
+          }
+          if (game_stopped) {
+            bg_mp_signal_game(game_pid, SIGCONT);
+            game_stopped = false;
+          }
+        }
         if (shm) {
           bg_mp_fill_shared(shm, &st);
         }
         if ((flags & BG_RES_REDRAW) && st.overlay_open && fb.map) {
           bg_fb_render(&fb, &st);
           fb_last_blit_ms = loop_now;
-        }
-        if (flags & BG_RES_CLOSE_OVERLAY) {
-          fprintf(stderr, "bg_miniplayer: ocultando Mini-Player KPlayer\n");
-          fb_fallback_pending = false;
-          bg_fb_close(&fb);
-          bg_evdev_set_grab(&ev, false);
-          if (game_stopped) {
-            bg_mp_signal_game(game_pid, SIGCONT);
-            game_stopped = false;
-          }
         }
       }
     }

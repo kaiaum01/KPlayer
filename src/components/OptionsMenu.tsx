@@ -652,14 +652,6 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           onSelect: onOpenCommandsTutorial,
         },
         {
-          id: 'adult-18',
-          label: tr('Seção +18', language),
-          value: tr(adultSectionUnlocked ? 'Desbloqueado' : 'Bloqueado', language),
-          badge: adultSectionUnlocked ? '+18' : undefined,
-          selected: adultSectionUnlocked,
-          onSelect: onToggleAdultSection,
-        },
-        {
           id: 'ui-sfx',
           label: tr('Sons das teclas', language),
           value: tr(uiSfxEnabled ? 'Ativada' : 'Desativada', language),

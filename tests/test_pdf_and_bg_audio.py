@@ -285,7 +285,11 @@ class SystemInjectTest(unittest.TestCase):
 
             # Verify installed artifacts
             self.assertTrue((fake_root / "usr/local/lib/libkp_overlay.so").is_file())
-            self.assertTrue((fake_root / "usr/local/bin/kplayer-system-daemon.sh").is_file())
+            daemon_sh_path = fake_root / "usr/local/bin/kplayer-system-daemon.sh"
+            self.assertTrue(daemon_sh_path.is_file())
+            daemon_txt = daemon_sh_path.read_text(encoding="utf-8")
+            self.assertNotIn('rm -f "$SHM_PATH"', daemon_txt)
+            self.assertIn("for _w in $(seq 1 20)", daemon_txt)
             self.assertTrue((fake_root / "etc/systemd/system/kplayer-miniplayer.service").is_file())
             self.assertTrue((fake_root / "etc/profile.d/kplayer-miniplayer.sh").is_file())
 
@@ -330,6 +334,33 @@ class SystemInjectTest(unittest.TestCase):
             st_off = system_inject.get_status(gamedir, root=fake_root, check_live_procs=False)
             self.assertFalse(st_off["installed"])
             self.assertFalse(st_off["preload_active"])
+
+    def test_system_inject_preserves_existing_cfw_dmix_asound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            fake_root = tmp_dir / "rootfs"
+            gamedir = tmp_dir / "ports" / "kplayer"
+            music_dir = tmp_dir / "bgmusic"
+            gamedir.mkdir(parents=True)
+            music_dir.mkdir(parents=True)
+            (gamedir / "libkp_overlay.so").write_bytes(b"\x7fELF" + b"\x02\x01\x01\x00" + b"\x00" * 64)
+            (music_dir / "a.mp3").write_bytes(b"ID3" + b"\x00" * 32)
+
+            asound = fake_root / "etc" / "asound.conf"
+            asound.parent.mkdir(parents=True)
+            cfw_asound = "pcm.!default { type plug slave.pcm \"dmix\" }\n"
+            asound.write_text(cfw_asound, encoding="utf-8")
+
+            with mock.patch.object(system_inject, "detect_audio_backend", return_value="alsa"), \
+                 mock.patch.object(system_inject, "disable_emulationstation_bgm",
+                                   return_value={"es_settings_backups": {}, "disabled_services": [], "modified_files": []}):
+                system_inject.install_system_miniplayer(
+                    gamedir,
+                    root=fake_root,
+                    music_dirs=[music_dir],
+                    run_system_cmds=True,
+                )
+            self.assertEqual(asound.read_text(encoding="utf-8"), cfw_asound)
 
 
 class PdfOpsPdfCraftCompatTest(unittest.TestCase):

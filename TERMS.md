@@ -49,9 +49,9 @@ Antes de entrar nas funções de **IPTV** ou **Rádio Online**, o KPlayer exibe 
 
 ## 7. Seção +18 (Opcional e Bloqueada por Padrão)
 
-- A **Seção +18** vem **BLOQUEADA por padrão** em todas as instalações e só pode ser desbloqueada manualmente em **Opções Gerais → Seção +18** ou **Opções do IPTV → Seção +18** por usuários maiores de 18 anos após leitura e aceite explícito do **Aviso Prévio +18**.
+- A **Seção +18** vem **BLOQUEADA por padrão** em todas as instalações e só pode ser desbloqueada manualmente em **Opções do IPTV → Seção +18** por usuários maiores de 18 anos após leitura e aceite explícito do **Aviso Prévio +18**.
 - Quando desbloqueada, uma aba **`+18`** passa a ser exibida junto ao serviço de **IPTV**, permitindo escolher entre **PornHub** (API compatível com **`Derfirm/pornhub-api`**) e **XVideos** (API compatível com **`xvideos_api`**).
-- O KPlayer não hospeda, não armazena, não modera e não possui afiliação com provedores de conteúdo adulto de terceiros. O usuário é o único responsável por habilitar ou bloquear o recurso (que pode ser bloqueado novamente a qualquer momento nas Opções).
+- O KPlayer não hospeda, não armazena, não modera e não possui afiliação com provedores de conteúdo adulto de terceiros. O usuário é o único responsável por habilitar ou bloquear o recurso (que pode ser bloqueado novamente a qualquer momento nas Opções do IPTV).
 
 ---
 
@@ -96,6 +96,6 @@ Before entering **IPTV** or **Online Radio**, KPlayer displays a **Transparency 
 
 ## 6. Optional +18 Section (Locked by Default)
 
-- The **+18 Section** is **LOCKED by default** and can only be unlocked manually under **General Settings → +18 Section** or **IPTV Options → +18 Section** by adults aged 18+ after explicitly accepting the **+18 Prior Notice**.
+- The **+18 Section** is **LOCKED by default** and can only be unlocked manually under **IPTV Options → +18 Section** by adults aged 18+ after explicitly accepting the **+18 Prior Notice**.
 - Once unlocked, a **`+18`** tab appears alongside **IPTV**, letting the user choose between **PornHub** (`Derfirm/pornhub-api` compatible) and **XVideos** (`xvideos_api` compatible).
-- KPlayer does not host, store, moderate, or hold any affiliation with third-party adult content providers. Users are solely responsible for enabling or locking this option at any time in Settings.
+- KPlayer does not host, store, moderate, or hold any affiliation with third-party adult content providers. Users are solely responsible for enabling or locking this option at any time in IPTV Options.

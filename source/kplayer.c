@@ -1215,10 +1215,10 @@ static int opt_scroll = 0;
 /* General Root order (strict A-Z, then penultimate [A] Verificar atualizacoes, then last Sair):
  * 18=Adaptacao de tela, 22=Clima e Localizacao, 5=Idioma,
  * 24=Layout da tela inicial, 27=Mini-Player no Sistema Inteiro,
- * 25=Protetor de tela, 20=Rever comandos, 28=Secao +18, 26=Sons das teclas,
+ * 25=Protetor de tela, 20=Rever comandos, 26=Sons das teclas,
  * 9=Tema, 6=Termos de uso, 15=Timer de sono,
  * 19=[A] Verificar atualizacoes (penultimate), 8=Sair (last). */
-static const int opt_root_ids[] = {18, 22, 5, 24, 27, 25, 20, 28, 26, 9, 6, 15, 19, 8};
+static const int opt_root_ids[] = {18, 22, 5, 24, 27, 25, 20, 26, 9, 6, 15, 19, 8};
 #define OPT_ROOT_COUNT ((int)(sizeof(opt_root_ids) / sizeof(opt_root_ids[0])))
 
 static const int opt_weather_ids[] = {30, 31, 32, 11, 33, -99};

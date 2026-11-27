@@ -663,9 +663,21 @@ int main(void) {
   draw_tutorial();
   key(SDLK_BACKSPACE, false);
   assert(mode == 2 && opt_section == OPT_SEC_ROOT);
-  /* Verify Seção +18 (28): locked by default, requires Aviso Prévio +18, unlocks 5th IPTV tab */
+  /* Verify Seção +18 (28) is NOT in General Options (opt_root_ids), ONLY in IPTV Options (opt_iptv_ids) */
+  for (int i = 0; i < OPT_ROOT_COUNT; i++) {
+    assert(opt_root_ids[i] != 28);
+  }
+  int idx_28_in_iptv = -1;
+  for (int i = 0; i < OPT_IPTV_COUNT; i++) {
+    if (opt_iptv_ids[i] == 28) idx_28_in_iptv = i;
+  }
+  assert(idx_28_in_iptv >= 0);
+  /* Verify Seção +18 (28) from IPTV Options: locked by default, requires Aviso Prévio +18, unlocks 5th IPTV tab */
   assert(!adult_section_unlocked && iptv_source_count() == 4);
-  opt_cursor = 7;
+  opt_enter_section(OPT_SEC_IPTV);
+  assert(opt_section == OPT_SEC_IPTV);
+  draw_options();
+  opt_cursor = idx_28_in_iptv;
   opt_sync_option_id();
   assert(option == 28);
   key(SDLK_RETURN, false);
@@ -673,7 +685,7 @@ int main(void) {
   draw_stream_notice();
   /* A cancels and keeps +18 locked */
   key(SDLK_BACKSPACE, false);
-  assert(mode == 2 && !adult_section_unlocked && iptv_source_count() == 4);
+  assert(mode == 2 && opt_section == OPT_SEC_IPTV && !adult_section_unlocked && iptv_source_count() == 4);
   /* Open again, Y opens Terms page 5 (+18), A returns to notice, B confirms & unlocks */
   key(SDLK_RIGHT, false);
   assert(mode == 10 && stream_notice_target == 18);
@@ -683,16 +695,7 @@ int main(void) {
   key(SDLK_BACKSPACE, false);
   assert(mode == 10 && stream_notice_target == 18);
   key(SDLK_RETURN, false);
-  assert(mode == 2 && adult_section_unlocked && iptv_source_count() == 5);
-  /* Verify Seção +18 (28) is also exposed directly inside IPTV Options (OPT_SEC_IPTV) */
-  bool found_28_in_iptv = false;
-  for (int i = 0; i < OPT_IPTV_COUNT; i++) {
-    if (opt_iptv_ids[i] == 28) found_28_in_iptv = true;
-  }
-  assert(found_28_in_iptv);
-  opt_enter_section(OPT_SEC_IPTV);
-  assert(opt_section == OPT_SEC_IPTV);
-  draw_options();
+  assert(mode == 2 && opt_section == OPT_SEC_IPTV && adult_section_unlocked && iptv_source_count() == 5);
   /* Verify +18 tab opens PornHub / XVideos chooser and maps slugs accurately */
   mode = 8;
   iptv_source = 4;
@@ -713,14 +716,15 @@ int main(void) {
   iptv_key(SDLK_BACKSPACE);
   assert(iptv_adult_provider == 0 && mode == 8);
   mode = 2;
-  opt_enter_section(OPT_SEC_ROOT);
-  opt_cursor = 7;
+  opt_enter_section(OPT_SEC_IPTV);
+  opt_cursor = idx_28_in_iptv;
   opt_sync_option_id();
   assert(option == 28);
   /* Toggling again immediately locks +18 and hides 5th tab */
   key(SDLK_RIGHT, false);
   assert(mode == 2 && !adult_section_unlocked && iptv_source_count() == 4);
-  /* Verify penultimate is Verificar atualizacoes (19) and last is Sair (8) */
+  /* Return to General Options root and verify penultimate is Verificar atualizacoes (19) and last is Sair (8) */
+  opt_enter_section(OPT_SEC_ROOT);
   assert(opt_root_ids[OPT_ROOT_COUNT - 2] == 19);
   assert(opt_root_ids[OPT_ROOT_COUNT - 1] == 8);
   opt_cursor = OPT_ROOT_COUNT - 2;
@@ -1022,9 +1026,12 @@ int main(void) {
 
       KpOverlayShared ov;
       memset(&ov, 0, sizeof(ov));
+      assert(KP_OV_VERSION == 4u);
       ov.magic = KP_OV_MAGIC;
       ov.version = KP_OV_VERSION;
       ov.overlay_open = 1;
+      ov.last_input_hook_ms = 12345;
+      ov.swallow_until_ms = 12605;
       ov.selected_row = 1;
       ov.track_index = 1;
       ov.track_count = 3;

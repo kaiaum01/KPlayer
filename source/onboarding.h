@@ -135,11 +135,11 @@ static const char *terms_text[TERMS_COUNT] = {
     "fontes livres. As licenças estão na pasta licencas e o código-fonte "
     "acompanha o pacote. Sem afiliação com VideoLAN, PortMaster ou SofaScore.",
     "A Seção +18 vem BLOQUEADA por padrão e só pode ser desbloqueada nas "
-    "Opções Gerais ou nas Opções do IPTV por maiores de 18 anos após aceitar "
-    "o aviso prévio. Quando desbloqueada, exibe a aba +18 no IPTV com escolha "
-    "entre PornHub (Derfirm/pornhub-api) e XVideos (xvideos_api). O K PLAYER "
-    "não hospeda, modera nem se responsabiliza por conteúdo de terceiros; "
-    "você pode bloquear novamente a qualquer momento."};
+    "Opções do IPTV por maiores de 18 anos após aceitar o aviso prévio. "
+    "Quando desbloqueada, exibe a aba +18 no IPTV com escolha entre PornHub "
+    "(Derfirm/pornhub-api) e XVideos (xvideos_api). O K PLAYER não hospeda, "
+    "modera nem se responsabiliza por conteúdo de terceiros; você pode "
+    "bloquear novamente a qualquer momento nas Opções do IPTV."};
 static void draw_terms(void) {
   backdrop();
   draw_header(tr("Termos de uso"));
@@ -166,7 +166,7 @@ static void draw_stream_notice(void) {
 
     panel_card(20, 108, 600, 316, 16);
     label("1. Conteúdo adulto exclusivo para maiores de 18 anos", 36, 124, 14, accent, 568);
-    wrapped("Ao desbloquear, você declara ter 18 anos ou mais e concorda em exibir a aba +18 junto ao serviço de IPTV. Esta seção vem bloqueada por padrão e pode ser bloqueada novamente a qualquer momento em Opções.",
+    wrapped("Ao desbloquear, você declara ter 18 anos ou mais e concorda em exibir a aba +18 junto ao serviço de IPTV. Esta seção vem bloqueada por padrão e pode ser bloqueada novamente a qualquer momento nas Opções do IPTV.",
             36, 148, 568, 13, 20, 4, textc);
 
     rect(36, 240, 568, 1, alpha(textc, 24));

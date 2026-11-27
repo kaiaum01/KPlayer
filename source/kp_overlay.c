@@ -4,19 +4,24 @@
  *
  * Preloaded into launched games and EmulationStation when enabled via
  * KPLAYER_OVERLAY_SHM / /etc/ld.so.preload. Zero extra library dependencies
- * beyond libc/libdl, so it is completely inert inside bash/python/gptokeyb.
+ * beyond libc/libdl, zero static RGBA BSS bloat, and immediately inert inside
+ * system daemons, shells, python, oga_events, gptokeyb, and kplayer itself.
  *
- * Intercepts:
+ * Graphics hooks:
  *   - SDL_RenderPresent             (2D SDL2 games — software & GLES-backed)
  *   - SDL_GL_SwapWindow             (EmulationStation & SDL2 OpenGL ES / KMS-DRM)
  *   - eglSwapBuffers                (RetroArch, Godot, Love2D, native EGL engines)
  *   - eglSwapBuffersWithDamageKHR   (EGL partial-damage compositors / Mali G31)
  *   - eglSwapBuffersWithDamageEXT   (EGL partial-damage compositors / Mali G31)
  *
- * Supports both OpenGL ES 2.0+ (shader pipeline) and OpenGL ES 1.1 (fixed-
- * function pipeline used by older ArkOS/dArkOS EmulationStation builds), and
- * resolves symbols across libmali.so, libGLESv2.so.2, libGLESv1_CM.so.1,
- * eglGetProcAddress, and SDL_GL_GetProcAddress.
+ * Input isolation hooks (zero EVIOCGRAB conflicts, zero stuck keys in ES):
+ *   - SDL_PollEvent / SDL_WaitEvent / SDL_WaitEventTimeout / SDL_PeepEvents
+ *   - SDL_JoystickGetButton / SDL_JoystickGetHat / SDL_JoystickGetAxis
+ *   - SDL_GameControllerGetButton / SDL_GameControllerGetAxis
+ *
+ * Supports OpenGL ES 1.1 (matrix save/restore without stack overflow),
+ * OpenGL ES 2.0 (strict GLES2 enums only — no GLES3 GL_INVALID_ENUM), and
+ * OpenGL ES 3.0+ (PBO/VAO save/restore), with a 4-slot per-EGLContext cache.
  */
 
 #include <dlfcn.h>
@@ -53,6 +58,7 @@ typedef ptrdiff_t GLsizeiptr;
 #define EGL_HEIGHT 0x3056
 #define EGL_WIDTH 0x3057
 #define EGL_DRAW 0x3059
+#define EGL_CONTEXT_CLIENT_VERSION 0x3098
 
 #define GL_FALSE 0
 #define GL_TRUE 1
@@ -60,6 +66,7 @@ typedef ptrdiff_t GLsizeiptr;
 #define GL_UNSIGNED_BYTE 0x1401
 #define GL_FLOAT 0x1406
 #define GL_RGBA 0x1908
+#define GL_VERSION 0x1F02
 #define GL_TEXTURE_2D 0x0DE1
 #define GL_TEXTURE0 0x84C0
 #define GL_TEXTURE_MAG_FILTER 0x2800
@@ -91,6 +98,8 @@ typedef ptrdiff_t GLsizeiptr;
 #define GL_SCISSOR_BOX 0x0C10
 #define GL_SCISSOR_TEST 0x0C11
 #define GL_BLEND 0x0BE2
+#define GL_BLEND_DST 0x0BE0
+#define GL_BLEND_SRC 0x0BE1
 #define GL_BLEND_SRC_RGB 0x80C9
 #define GL_BLEND_DST_RGB 0x80C8
 #define GL_BLEND_SRC_ALPHA 0x80CB
@@ -120,6 +129,12 @@ typedef ptrdiff_t GLsizeiptr;
 #define GL_PROJECTION 0x1701
 #define GL_TEXTURE_MATRIX_MODE 0x1702
 #define GL_MATRIX_MODE 0x0BA0
+#define GL_MODELVIEW_MATRIX 0x0BA6
+#define GL_PROJECTION_MATRIX 0x0BA7
+#define GL_TEXTURE_MATRIX 0x0BA8
+#define GL_TEXTURE_ENV 0x2300
+#define GL_TEXTURE_ENV_MODE 0x2200
+#define GL_REPLACE 0x1E01
 #define GL_VERTEX_ARRAY 0x8074
 #define GL_COLOR_ARRAY 0x8076
 #define GL_TEXTURE_COORD_ARRAY 0x8078
@@ -129,20 +144,41 @@ typedef ptrdiff_t GLsizeiptr;
 #define KP_SDL_TEXTUREACCESS_STREAMING 1
 #define KP_SDL_BLENDMODE_BLEND 1
 
+/* SDL2 event ABI constants (verified 56-byte union on Linux ARM64 & x86_64) */
+#define KP_SDL_EVENT_SIZE 56
+#define KP_SDL_KEYDOWN 0x300u
+#define KP_SDL_KEYUP 0x301u
+#define KP_SDL_TEXTEDITING 0x302u
+#define KP_SDL_TEXTINPUT 0x303u
+#define KP_SDL_JOYAXISMOTION 0x600u
+#define KP_SDL_JOYBALLMOTION 0x601u
+#define KP_SDL_JOYHATMOTION 0x602u
+#define KP_SDL_JOYBUTTONDOWN 0x603u
+#define KP_SDL_JOYBUTTONUP 0x604u
+#define KP_SDL_CONTROLLERAXISMOTION 0x650u
+#define KP_SDL_CONTROLLERBUTTONDOWN 0x651u
+#define KP_SDL_CONTROLLERBUTTONUP 0x652u
+#define KP_SDL_GETEVENT 2
+
 typedef struct {
   int x, y, w, h;
 } KpSdlRect;
 
-/* ==================== SHARED MEMORY READER ==================== */
+/* ==================== SHARED MEMORY READER (INODE-RESILIENT) ==================== */
 
 static volatile int g_shm_disabled = -1;
-static volatile int64_t g_shm_last_try_ms = 0;
-static volatile int64_t g_last_hb_ms = 0;
+static int64_t g_shm_last_try_ms = 0;
+static int64_t g_shm_last_stat_ms = 0;
+static int64_t g_last_hb_ms = 0;
+static int64_t g_last_input_hb_ms = 0;
 static KpOverlayShared *g_shm = NULL;
 static bool g_shm_writable = false;
-static uint32_t g_rgba_buf[KP_OV_CARD_W * KP_OV_CARD_H];
+static dev_t g_shm_dev = 0;
+static ino_t g_shm_ino = 0;
+static uint32_t *g_rgba_buf = NULL;
 static uint32_t g_rendered_seq = 0xFFFFFFFFu;
 static __thread int g_in_hook = 0;
+static __thread int g_in_event_hook = 0;
 static volatile int g_lock = 0;
 
 static void kp_lock(void) {
@@ -171,7 +207,27 @@ static bool kp_should_skip_process(void) {
       if (n > 0) {
         comm[n] = 0;
         while (n > 0 && (comm[n - 1] == '\n' || comm[n - 1] == '\r')) comm[--n] = 0;
-        if (strcmp(comm, "kplayer") == 0) skip = 1;
+        static const char *const skip_list[] = {
+            "kplayer",        "bash",           "sh",           "dash",
+            "ash",            "python3",        "python",       "systemd",
+            "systemd-journal","systemd-udevd",  "systemd-logind","dbus-daemon",
+            "pulseaudio",     "pipewire",       "wireplumber",  "oga_events",
+            "gptokeyb",       "gptokeyb2",      "sshd",         "udevd",
+            "cron",           "mpg123",         "ogg123",       "alsactl",
+            "wpa_supplicant", "NetworkManager", "dhclient",     "udhcpc",
+            "getty",          "agetty",         "login",        "sudo",
+            "su",             "grep",           "sed",          "awk",
+            "sleep",          "cat",            "ls",           "cp",
+            "mv",             "rm",             "chmod",        "chown",
+            "find",           "tar",            "gzip",         "unzip",
+            "curl",           "wget",           "pgrep",        "pkill",
+        };
+        for (size_t i = 0; i < sizeof(skip_list) / sizeof(skip_list[0]); i++) {
+          if (strcmp(comm, skip_list[i]) == 0) {
+            skip = 1;
+            break;
+          }
+        }
       }
     }
   }
@@ -179,69 +235,94 @@ static bool kp_should_skip_process(void) {
   return skip != 0;
 }
 
-static KpOverlayShared *kp_get_shm(void) {
-  KpOverlayShared *cur = __atomic_load_n(&g_shm, __ATOMIC_ACQUIRE);
-  if (cur) return cur;
-  if (kp_should_skip_process()) return NULL;
-
-  int64_t now = kp_ov_now_ms();
-  int64_t last = __atomic_load_n(&g_shm_last_try_ms, __ATOMIC_RELAXED);
-  if (last != 0 && (now - last) < 1000) {
-    return NULL;
-  }
-
-  kp_lock();
-  if (!g_shm) {
-    __atomic_store_n(&g_shm_last_try_ms, now ? now : 1, __ATOMIC_RELAXED);
-    const char *path = getenv("KPLAYER_OVERLAY_SHM");
-    if (!path || !path[0]) path = KP_OV_DEFAULT_SHM_PATH;
-    bool writable = true;
-    int fd = open(path, O_RDWR | O_CLOEXEC);
-    if (fd < 0) {
-      writable = false;
-      fd = open(path, O_RDONLY | O_CLOEXEC);
-    }
-    if (fd >= 0) {
-      struct stat st;
-      if (fstat(fd, &st) == 0 && st.st_size >= (off_t)sizeof(KpOverlayShared)) {
-        int prot = writable ? (PROT_READ | PROT_WRITE) : PROT_READ;
-        void *m = mmap(NULL, sizeof(KpOverlayShared), prot, MAP_SHARED, fd, 0);
-        if (m != MAP_FAILED) {
-          g_shm_writable = writable;
-          __atomic_store_n(&g_shm, (KpOverlayShared *)m, __ATOMIC_RELEASE);
-        }
-      }
-      close(fd);
-    }
-  }
-  cur = g_shm;
-  kp_unlock();
-  return cur;
+static const char *kp_shm_path(void) {
+  const char *path = getenv("KPLAYER_OVERLAY_SHM");
+  if (!path || !path[0]) path = KP_OV_DEFAULT_SHM_PATH;
+  return path;
 }
 
-static void kp_touch_hook_heartbeat(KpOverlayShared *shm) {
-  if (!shm || !g_shm_writable) return;
-  if (shm->magic != KP_OV_MAGIC || shm->version != KP_OV_VERSION) return;
-  int64_t now = kp_ov_now_ms();
-  int64_t prev = __atomic_load_n(&g_last_hb_ms, __ATOMIC_RELAXED);
-  if (now - prev >= 250 || prev == 0) {
-    __atomic_store_n(&g_last_hb_ms, now, __ATOMIC_RELAXED);
+/* Must be called with kp_lock() held so munmap on inode rotation is 100% race-free */
+static KpOverlayShared *kp_get_shm_locked(int64_t now) {
+  if (kp_should_skip_process()) return NULL;
+
+  const char *path = kp_shm_path();
+  if (g_shm) {
+    if (now - g_shm_last_stat_ms >= 1000) {
+      g_shm_last_stat_ms = now;
+      struct stat st;
+      if (stat(path, &st) == 0 && (st.st_dev != g_shm_dev || st.st_ino != g_shm_ino)) {
+        munmap(g_shm, sizeof(KpOverlayShared));
+        g_shm = NULL;
+        g_shm_writable = false;
+        g_shm_dev = 0;
+        g_shm_ino = 0;
+        g_rendered_seq = 0xFFFFFFFFu;
+        g_shm_last_try_ms = 0;
+      }
+    }
+    if (g_shm) return g_shm;
+  }
+
+  if (g_shm_last_try_ms != 0 && (now - g_shm_last_try_ms) < 1000) {
+    return NULL;
+  }
+  g_shm_last_try_ms = now ? now : 1;
+
+  bool writable = true;
+  int fd = open(path, O_RDWR | O_CLOEXEC);
+  if (fd < 0) {
+    writable = false;
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+  }
+  if (fd >= 0) {
+    struct stat st;
+    if (fstat(fd, &st) == 0 && st.st_size >= (off_t)sizeof(KpOverlayShared)) {
+      int prot = writable ? (PROT_READ | PROT_WRITE) : PROT_READ;
+      void *m = mmap(NULL, sizeof(KpOverlayShared), prot, MAP_SHARED, fd, 0);
+      if (m != MAP_FAILED) {
+        g_shm = (KpOverlayShared *)m;
+        g_shm_writable = writable;
+        g_shm_dev = st.st_dev;
+        g_shm_ino = st.st_ino;
+        g_shm_last_stat_ms = now;
+      }
+    }
+    close(fd);
+  }
+  return g_shm;
+}
+
+static bool kp_shm_valid(const KpOverlayShared *shm) {
+  return shm && __atomic_load_n(&shm->magic, __ATOMIC_ACQUIRE) == KP_OV_MAGIC &&
+         shm->version == KP_OV_VERSION;
+}
+
+static void kp_touch_hook_heartbeat_locked(KpOverlayShared *shm, int64_t now) {
+  if (!shm || !g_shm_writable || !kp_shm_valid(shm)) return;
+  if (now - g_last_hb_ms >= 250 || g_last_hb_ms == 0) {
+    g_last_hb_ms = now;
     shm->last_hook_ms = now;
     shm->hook_pid = (uint32_t)getpid();
   }
 }
 
-static bool kp_overlay_active(KpOverlayShared **out_shm) {
-  KpOverlayShared *shm = kp_get_shm();
-  if (!shm || shm->magic != KP_OV_MAGIC || shm->version != KP_OV_VERSION) return false;
-  kp_touch_hook_heartbeat(shm);
+static bool kp_overlay_active_locked(KpOverlayShared **out_shm) {
+  int64_t now = kp_ov_now_ms();
+  KpOverlayShared *shm = kp_get_shm_locked(now);
+  if (!kp_shm_valid(shm)) return false;
+  kp_touch_hook_heartbeat_locked(shm, now);
   if (!shm->overlay_open) return false;
   *out_shm = shm;
   return true;
 }
 
 static bool kp_refresh_rgba_if_needed(const KpOverlayShared *shm) {
-  uint32_t cur_seq = shm->seq;
+  if (!g_rgba_buf) {
+    g_rgba_buf = (uint32_t *)malloc((size_t)KP_OV_CARD_W * KP_OV_CARD_H * sizeof(uint32_t));
+    if (!g_rgba_buf) return false;
+    g_rendered_seq = 0xFFFFFFFFu;
+  }
+  uint32_t cur_seq = __atomic_load_n(&shm->seq, __ATOMIC_ACQUIRE);
   if (cur_seq == g_rendered_seq) return false;
   KpOverlayShared snap;
   memcpy(&snap, shm, sizeof(snap));
@@ -291,8 +372,10 @@ typedef struct {
   EGLSurface (*eglGetCurrentSurface)(EGLint);
   EGLContext (*eglGetCurrentContext)(void);
   EGLBoolean (*eglQuerySurface)(EGLDisplay, EGLSurface, EGLint, EGLint *);
+  EGLBoolean (*eglQueryContext)(EGLDisplay, EGLContext, EGLint, EGLint *);
 
   /* Common GLES1/GLES2 functions */
+  const unsigned char *(*glGetString)(GLenum);
   void (*glGenTextures)(GLsizei, GLuint *);
   void (*glDeleteTextures)(GLsizei, const GLuint *);
   void (*glActiveTexture)(GLenum);
@@ -347,6 +430,9 @@ typedef struct {
   void (*glPushMatrix)(void);
   void (*glPopMatrix)(void);
   void (*glLoadIdentity)(void);
+  void (*glLoadMatrixf)(const GLfloat *);
+  void (*glTexEnvi)(GLenum, GLenum, GLint);
+  void (*glGetTexEnviv)(GLenum, GLenum, GLint *);
   void (*glClientActiveTexture)(GLenum);
   void (*glEnableClientState)(GLenum);
   void (*glDisableClientState)(GLenum);
@@ -406,7 +492,9 @@ static bool kp_gl_ensure_loaded(void) {
   LOAD_EGL(eglGetCurrentSurface);
   LOAD_EGL(eglGetCurrentContext);
   LOAD_EGL(eglQuerySurface);
+  LOAD_EGL(eglQueryContext);
 
+  LOAD_GL(glGetString);
   LOAD_GL(glGenTextures);
   LOAD_GL(glDeleteTextures);
   LOAD_GL(glActiveTexture);
@@ -459,6 +547,9 @@ static bool kp_gl_ensure_loaded(void) {
   LOAD_GL1(glPushMatrix);
   LOAD_GL1(glPopMatrix);
   LOAD_GL1(glLoadIdentity);
+  LOAD_GL1(glLoadMatrixf);
+  LOAD_GL1(glTexEnvi);
+  LOAD_GL1(glGetTexEnviv);
   LOAD_GL1(glClientActiveTexture);
   LOAD_GL1(glEnableClientState);
   LOAD_GL1(glDisableClientState);
@@ -487,17 +578,22 @@ static bool kp_gl_ensure_loaded(void) {
                   g_gl.glDisableVertexAttribArray && g_gl.glVertexAttribPointer &&
                   g_gl.glGetVertexAttribiv && g_gl.glGetVertexAttribPointerv;
 
-  g_gl.ok_gles1 = base_ok && g_gl.glBlendFunc && g_gl.glMatrixMode && g_gl.glPushMatrix &&
-                  g_gl.glPopMatrix && g_gl.glLoadIdentity && g_gl.glEnableClientState &&
-                  g_gl.glDisableClientState && g_gl.glVertexPointer && g_gl.glTexCoordPointer;
+  g_gl.ok_gles1 = base_ok && g_gl.glBlendFunc && g_gl.glMatrixMode && g_gl.glLoadIdentity &&
+                  (g_gl.glLoadMatrixf || (g_gl.glPushMatrix && g_gl.glPopMatrix)) &&
+                  g_gl.glEnableClientState && g_gl.glDisableClientState &&
+                  g_gl.glVertexPointer && g_gl.glTexCoordPointer;
 
   return g_gl.ok_gles2 || g_gl.ok_gles1;
 }
 
+#define KP_MAX_GL_SLOTS 4
+
 typedef struct {
   EGLContext ctx;
+  int client_ver;
   bool use_gles1;
   bool init_failed;
+  uint32_t last_used;
   GLuint prog;
   GLuint tex;
   GLuint vbo;
@@ -508,7 +604,29 @@ typedef struct {
   bool tex_allocated;
 } KpGlState;
 
-static KpGlState g_gl_st;
+static KpGlState g_gl_slots[KP_MAX_GL_SLOTS];
+static uint32_t g_gl_lru_clock = 0;
+
+static int kp_detect_gles_version(EGLDisplay dpy, EGLContext cur_ctx) {
+  if (g_gl.eglQueryContext && dpy && cur_ctx && cur_ctx != (EGLContext)(uintptr_t)1) {
+    EGLint ver = 0;
+    if (g_gl.eglQueryContext(dpy, cur_ctx, EGL_CONTEXT_CLIENT_VERSION, &ver) && ver >= 1) {
+      return (int)ver;
+    }
+  }
+  if (g_gl.glGetString) {
+    const char *vstr = (const char *)g_gl.glGetString(GL_VERSION);
+    if (vstr) {
+      if (strstr(vstr, "OpenGL ES-CM 1.") || strstr(vstr, "OpenGL ES-CL 1.") ||
+          strstr(vstr, "OpenGL ES 1.")) {
+        return 1;
+      }
+      if (strstr(vstr, "OpenGL ES 3.")) return 3;
+      if (strstr(vstr, "OpenGL ES 2.")) return 2;
+    }
+  }
+  return 2;
+}
 
 static GLuint kp_compile_shader(GLenum type, const char *src) {
   GLuint s = g_gl.glCreateShader(type);
@@ -524,19 +642,41 @@ static GLuint kp_compile_shader(GLenum type, const char *src) {
   return s;
 }
 
-static bool kp_gl_init_resources(EGLContext cur_ctx) {
-  if (g_gl_st.ctx == cur_ctx) {
-    if (g_gl_st.use_gles1 && g_gl_st.tex != 0) return true;
-    if (!g_gl_st.use_gles1 && g_gl_st.prog != 0 && g_gl_st.tex != 0) return true;
-    if (g_gl_st.init_failed) return false;
+static KpGlState *kp_gl_get_slot(EGLDisplay dpy, EGLContext cur_ctx) {
+  for (int i = 0; i < KP_MAX_GL_SLOTS; i++) {
+    if (g_gl_slots[i].ctx == cur_ctx) {
+      g_gl_slots[i].last_used = ++g_gl_lru_clock;
+      if (g_gl_slots[i].init_failed) return NULL;
+      if (g_gl_slots[i].use_gles1 && g_gl_slots[i].tex != 0) return &g_gl_slots[i];
+      if (!g_gl_slots[i].use_gles1 && g_gl_slots[i].prog != 0 && g_gl_slots[i].tex != 0) {
+        return &g_gl_slots[i];
+      }
+    }
   }
 
-  /* Context changed or first init: reset IDs without deleting across dead contexts */
-  memset(&g_gl_st, 0, sizeof(g_gl_st));
-  g_gl_st.ctx = cur_ctx;
-  g_gl_st.tex_seq = 0xFFFFFFFFu;
+  /* Pick empty slot or least-recently-used slot */
+  int pick = 0;
+  uint32_t oldest = 0xFFFFFFFFu;
+  for (int i = 0; i < KP_MAX_GL_SLOTS; i++) {
+    if (!g_gl_slots[i].ctx) {
+      pick = i;
+      break;
+    }
+    if (g_gl_slots[i].last_used < oldest) {
+      oldest = g_gl_slots[i].last_used;
+      pick = i;
+    }
+  }
 
-  if (g_gl.ok_gles2) {
+  KpGlState *st = &g_gl_slots[pick];
+  memset(st, 0, sizeof(*st));
+  st->ctx = cur_ctx;
+  st->last_used = ++g_gl_lru_clock;
+  st->tex_seq = 0xFFFFFFFFu;
+  st->client_ver = kp_detect_gles_version(dpy, cur_ctx);
+
+  /* Only touch GLES2 shader pipeline if context is actually GLES 2.0+ */
+  if (st->client_ver >= 2 && g_gl.ok_gles2) {
     static const char *vs_src =
         "attribute vec2 a_pos;\n"
         "attribute vec2 a_uv;\n"
@@ -568,39 +708,39 @@ static bool kp_gl_init_resources(EGLContext cur_ctx) {
       GLint linked = 0;
       g_gl.glGetProgramiv(prog, GL_LINK_STATUS, &linked);
       if (linked) {
-        g_gl_st.prog = prog;
-        g_gl_st.a_pos = g_gl.glGetAttribLocation(prog, "a_pos");
-        g_gl_st.a_uv = g_gl.glGetAttribLocation(prog, "a_uv");
-        g_gl_st.u_tex = g_gl.glGetUniformLocation(prog, "u_tex");
-        if (g_gl_st.a_pos >= 0 && g_gl_st.a_uv >= 0) {
-          g_gl.glGenTextures(1, &g_gl_st.tex);
-          g_gl.glGenBuffers(1, &g_gl_st.vbo);
-          if (g_gl_st.tex != 0 && g_gl_st.vbo != 0) {
-            g_gl_st.use_gles1 = false;
-            return true;
+        st->prog = prog;
+        st->a_pos = g_gl.glGetAttribLocation(prog, "a_pos");
+        st->a_uv = g_gl.glGetAttribLocation(prog, "a_uv");
+        st->u_tex = g_gl.glGetUniformLocation(prog, "u_tex");
+        if (st->a_pos >= 0 && st->a_uv >= 0) {
+          g_gl.glGenTextures(1, &st->tex);
+          g_gl.glGenBuffers(1, &st->vbo);
+          if (st->tex != 0 && st->vbo != 0) {
+            st->use_gles1 = false;
+            return st;
           }
         }
       }
       if (prog) g_gl.glDeleteProgram(prog);
-      g_gl_st.prog = 0;
+      st->prog = 0;
     } else {
       if (vs) g_gl.glDeleteShader(vs);
       if (fs) g_gl.glDeleteShader(fs);
     }
   }
 
-  /* Fallback to OpenGL ES 1.1 fixed-function pipeline (used by some ES builds) */
+  /* Pure OpenGL ES 1.1 fixed-function pipeline (used by GLES1 EmulationStation builds) */
   if (g_gl.ok_gles1) {
-    g_gl_st.tex = 0;
-    g_gl.glGenTextures(1, &g_gl_st.tex);
-    if (g_gl_st.tex != 0) {
-      g_gl_st.use_gles1 = true;
-      return true;
+    st->tex = 0;
+    g_gl.glGenTextures(1, &st->tex);
+    if (st->tex != 0) {
+      st->use_gles1 = true;
+      return st;
     }
   }
 
-  g_gl_st.init_failed = true;
-  return false;
+  st->init_failed = true;
+  return NULL;
 }
 
 typedef struct {
@@ -639,28 +779,30 @@ static void kp_restore_attrib(GLint loc, const KpAttribBackup *b) {
   }
 }
 
-static void kp_upload_overlay_tex(KpOverlayShared *shm) {
+static bool kp_upload_overlay_tex(KpGlState *st, KpOverlayShared *shm) {
   bool dirty = kp_refresh_rgba_if_needed(shm);
-  g_gl.glBindTexture(GL_TEXTURE_2D, g_gl_st.tex);
-  if (!g_gl_st.tex_allocated || dirty || g_gl_st.tex_seq != g_rendered_seq) {
+  if (!g_rgba_buf) return false;
+  g_gl.glBindTexture(GL_TEXTURE_2D, st->tex);
+  if (!st->tex_allocated || dirty || st->tex_seq != g_rendered_seq) {
     g_gl.glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     g_gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     g_gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     g_gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     g_gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    if (!g_gl_st.tex_allocated) {
+    if (!st->tex_allocated) {
       g_gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, KP_OV_CARD_W, KP_OV_CARD_H, 0,
                         GL_RGBA, GL_UNSIGNED_BYTE, g_rgba_buf);
-      g_gl_st.tex_allocated = true;
+      st->tex_allocated = true;
     } else {
       g_gl.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, KP_OV_CARD_W, KP_OV_CARD_H,
                            GL_RGBA, GL_UNSIGNED_BYTE, g_rgba_buf);
     }
-    g_gl_st.tex_seq = g_rendered_seq;
+    st->tex_seq = g_rendered_seq;
   }
+  return true;
 }
 
-static bool kp_gles1_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
+static bool kp_gles1_draw_overlay(KpGlState *st, KpOverlayShared *shm, int sw, int sh) {
   GLint prev_vp[4] = {0, 0, 0, 0};
   GLint prev_sc[4] = {0, 0, 0, 0};
   GLint prev_act_tex = GL_TEXTURE0;
@@ -669,18 +811,43 @@ static bool kp_gles1_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
   GLint prev_mat_mode = GL_MODELVIEW;
   GLint prev_unpack = 4;
   GLint prev_vbo = 0;
+  GLint prev_blend_src = GL_SRC_ALPHA;
+  GLint prev_blend_dst = GL_ONE_MINUS_SRC_ALPHA;
+  GLint prev_tex_env = GL_REPLACE;
   GLboolean prev_cmask[4] = {1, 1, 1, 1};
   GLfloat prev_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  GLfloat prev_proj[16];
+  GLfloat prev_mv[16];
+  GLfloat prev_texm[16];
+  bool saved_mats = false;
 
   g_gl.glGetIntegerv(GL_VIEWPORT, prev_vp);
+  if (sw <= 0 || sh <= 0) {
+    sw = prev_vp[2];
+    sh = prev_vp[3];
+  }
+  if (sw < 320 || sh < 240) {
+    return false;
+  }
+
   g_gl.glGetIntegerv(GL_SCISSOR_BOX, prev_sc);
   if (g_gl.glActiveTexture) g_gl.glGetIntegerv(GL_ACTIVE_TEXTURE, &prev_act_tex);
   if (g_gl.glClientActiveTexture) g_gl.glGetIntegerv(GL_CLIENT_ACTIVE_TEXTURE, &prev_cli_tex);
   g_gl.glGetIntegerv(GL_MATRIX_MODE, &prev_mat_mode);
   g_gl.glGetIntegerv(GL_UNPACK_ALIGNMENT, &prev_unpack);
+  g_gl.glGetIntegerv(GL_BLEND_SRC, &prev_blend_src);
+  g_gl.glGetIntegerv(GL_BLEND_DST, &prev_blend_dst);
   if (g_gl.glBindBuffer) g_gl.glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prev_vbo);
   g_gl.glGetBooleanv(GL_COLOR_WRITEMASK, prev_cmask);
-  if (g_gl.glGetFloatv) g_gl.glGetFloatv(GL_CURRENT_COLOR, prev_color);
+  if (g_gl.glGetFloatv) {
+    g_gl.glGetFloatv(GL_CURRENT_COLOR, prev_color);
+    if (g_gl.glLoadMatrixf) {
+      g_gl.glGetFloatv(GL_PROJECTION_MATRIX, prev_proj);
+      g_gl.glGetFloatv(GL_MODELVIEW_MATRIX, prev_mv);
+      g_gl.glGetFloatv(GL_TEXTURE_MATRIX, prev_texm);
+      saved_mats = true;
+    }
+  }
 
   GLboolean prev_tex2d = g_gl.glIsEnabled(GL_TEXTURE_2D);
   GLboolean prev_blend = g_gl.glIsEnabled(GL_BLEND);
@@ -697,19 +864,14 @@ static bool kp_gles1_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
   if (g_gl.glActiveTexture) g_gl.glActiveTexture(GL_TEXTURE0);
   if (g_gl.glClientActiveTexture) g_gl.glClientActiveTexture(GL_TEXTURE0);
   g_gl.glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev_tex0);
+  if (g_gl.glGetTexEnviv) g_gl.glGetTexEnviv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, &prev_tex_env);
 
-  if (sw <= 0 || sh <= 0) {
-    sw = prev_vp[2];
-    sh = prev_vp[3];
-  }
-  if (sw < 160 || sh < 120) {
+  if (!kp_upload_overlay_tex(st, shm)) {
     g_gl.glBindTexture(GL_TEXTURE_2D, (GLuint)prev_tex0);
     if (g_gl.glActiveTexture) g_gl.glActiveTexture((GLenum)prev_act_tex);
     if (g_gl.glClientActiveTexture) g_gl.glClientActiveTexture((GLenum)prev_cli_tex);
     return false;
   }
-
-  kp_upload_overlay_tex(shm);
 
   int rx, ry, rw, rh;
   kp_compute_card_rect(sw, sh, &rx, &ry, &rw, &rh);
@@ -734,17 +896,28 @@ static bool kp_gles1_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
   g_gl.glEnable(GL_BLEND);
   g_gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   g_gl.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  if (g_gl.glTexEnvi) g_gl.glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
   if (g_gl.glColor4f) g_gl.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
-  g_gl.glMatrixMode(GL_PROJECTION);
-  g_gl.glPushMatrix();
-  g_gl.glLoadIdentity();
-  g_gl.glMatrixMode(GL_MODELVIEW);
-  g_gl.glPushMatrix();
-  g_gl.glLoadIdentity();
-  g_gl.glMatrixMode(GL_TEXTURE_MATRIX_MODE);
-  g_gl.glPushMatrix();
-  g_gl.glLoadIdentity();
+  /* Avoid glPushMatrix() to prevent GL_STACK_OVERFLOW on 2-deep GLES 1.1 projection stacks */
+  if (saved_mats) {
+    g_gl.glMatrixMode(GL_PROJECTION);
+    g_gl.glLoadIdentity();
+    g_gl.glMatrixMode(GL_MODELVIEW);
+    g_gl.glLoadIdentity();
+    g_gl.glMatrixMode(GL_TEXTURE_MATRIX_MODE);
+    g_gl.glLoadIdentity();
+  } else {
+    g_gl.glMatrixMode(GL_PROJECTION);
+    g_gl.glPushMatrix();
+    g_gl.glLoadIdentity();
+    g_gl.glMatrixMode(GL_MODELVIEW);
+    g_gl.glPushMatrix();
+    g_gl.glLoadIdentity();
+    g_gl.glMatrixMode(GL_TEXTURE_MATRIX_MODE);
+    g_gl.glPushMatrix();
+    g_gl.glLoadIdentity();
+  }
 
   g_gl.glEnableClientState(GL_VERTEX_ARRAY);
   g_gl.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -753,13 +926,22 @@ static bool kp_gles1_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
   g_gl.glTexCoordPointer(2, GL_FLOAT, 0, uv);
   g_gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-  /* Restore GLES1 matrices & state */
-  g_gl.glMatrixMode(GL_TEXTURE_MATRIX_MODE);
-  g_gl.glPopMatrix();
-  g_gl.glMatrixMode(GL_MODELVIEW);
-  g_gl.glPopMatrix();
-  g_gl.glMatrixMode(GL_PROJECTION);
-  g_gl.glPopMatrix();
+  /* Restore GLES1 matrices & full render state */
+  if (saved_mats) {
+    g_gl.glMatrixMode(GL_TEXTURE_MATRIX_MODE);
+    g_gl.glLoadMatrixf(prev_texm);
+    g_gl.glMatrixMode(GL_MODELVIEW);
+    g_gl.glLoadMatrixf(prev_mv);
+    g_gl.glMatrixMode(GL_PROJECTION);
+    g_gl.glLoadMatrixf(prev_proj);
+  } else {
+    g_gl.glMatrixMode(GL_TEXTURE_MATRIX_MODE);
+    g_gl.glPopMatrix();
+    g_gl.glMatrixMode(GL_MODELVIEW);
+    g_gl.glPopMatrix();
+    g_gl.glMatrixMode(GL_PROJECTION);
+    g_gl.glPopMatrix();
+  }
   g_gl.glMatrixMode((GLenum)prev_mat_mode);
 
   if (prev_va) g_gl.glEnableClientState(GL_VERTEX_ARRAY);
@@ -771,11 +953,13 @@ static bool kp_gles1_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
 
   if (g_gl.glBindBuffer && prev_vbo != 0) g_gl.glBindBuffer(GL_ARRAY_BUFFER, (GLuint)prev_vbo);
   g_gl.glPixelStorei(GL_UNPACK_ALIGNMENT, prev_unpack);
+  if (g_gl.glTexEnvi) g_gl.glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, prev_tex_env);
   g_gl.glBindTexture(GL_TEXTURE_2D, (GLuint)prev_tex0);
   if (g_gl.glActiveTexture) g_gl.glActiveTexture((GLenum)prev_act_tex);
   if (g_gl.glClientActiveTexture) g_gl.glClientActiveTexture((GLenum)prev_cli_tex);
   g_gl.glViewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
   g_gl.glScissor(prev_sc[0], prev_sc[1], prev_sc[2], prev_sc[3]);
+  g_gl.glBlendFunc((GLenum)prev_blend_src, (GLenum)prev_blend_dst);
   g_gl.glColorMask(prev_cmask[0], prev_cmask[1], prev_cmask[2], prev_cmask[3]);
   if (g_gl.glColor4f) g_gl.glColor4f(prev_color[0], prev_color[1], prev_color[2], prev_color[3]);
   if (prev_tex2d) g_gl.glEnable(GL_TEXTURE_2D); else g_gl.glDisable(GL_TEXTURE_2D);
@@ -791,32 +975,46 @@ static bool kp_gles1_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
   return true;
 }
 
-static bool kp_gles_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
+static bool kp_gles_draw_overlay(KpOverlayShared *shm, EGLDisplay dpy, int sw, int sh) {
   if (!kp_gl_ensure_loaded()) return false;
   EGLContext cur_ctx =
       g_gl.eglGetCurrentContext ? g_gl.eglGetCurrentContext() : (EGLContext)(uintptr_t)1;
   if (!cur_ctx) return false;
+  if (!dpy && g_gl.eglGetCurrentDisplay) dpy = g_gl.eglGetCurrentDisplay();
 
-  if (!kp_gl_init_resources(cur_ctx)) return false;
-  if (g_gl_st.use_gles1) {
-    return kp_gles1_draw_overlay(shm, sw, sh);
+  KpGlState *st = kp_gl_get_slot(dpy, cur_ctx);
+  if (!st) return false;
+  if (st->use_gles1) {
+    return kp_gles1_draw_overlay(st, shm, sw, sh);
+  }
+
+  GLint prev_vp[4] = {0, 0, 0, 0};
+  g_gl.glGetIntegerv(GL_VIEWPORT, prev_vp);
+  if (sw <= 0 || sh <= 0) {
+    sw = prev_vp[2];
+    sh = prev_vp[3];
+  }
+  /* Ignore tiny offscreen/video-preview surfaces */
+  if (sw < 320 || sh < 240) {
+    return false;
   }
 
   GLint prev_prog = 0, prev_fbo = 0, prev_act_tex = 0, prev_tex0 = 0;
   GLint prev_vao = 0, prev_vbo = 0, prev_ebo = 0, prev_pbo = 0, prev_unpack = 4;
-  GLint prev_vp[4] = {0, 0, 0, 0};
   GLint prev_sc[4] = {0, 0, 0, 0};
   GLint prev_src_rgb = 0, prev_dst_rgb = 0, prev_src_a = 0, prev_dst_a = 0;
   GLint prev_eq_rgb = 0, prev_eq_a = 0;
   GLboolean prev_cmask[4] = {1, 1, 1, 1};
+  const bool is_gles3 = (st->client_ver >= 3);
 
   g_gl.glGetIntegerv(GL_CURRENT_PROGRAM, &prev_prog);
   g_gl.glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
   g_gl.glGetIntegerv(GL_ACTIVE_TEXTURE, &prev_act_tex);
   g_gl.glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prev_vbo);
   g_gl.glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &prev_ebo);
-  g_gl.glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &prev_pbo);
-  g_gl.glGetIntegerv(GL_VIEWPORT, prev_vp);
+  if (is_gles3) {
+    g_gl.glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &prev_pbo);
+  }
   g_gl.glGetIntegerv(GL_SCISSOR_BOX, prev_sc);
   g_gl.glGetIntegerv(GL_BLEND_SRC_RGB, &prev_src_rgb);
   g_gl.glGetIntegerv(GL_BLEND_DST_RGB, &prev_dst_rgb);
@@ -833,7 +1031,7 @@ static bool kp_gles_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
   GLboolean prev_cull = g_gl.glIsEnabled(GL_CULL_FACE);
   GLboolean prev_stencil = g_gl.glIsEnabled(GL_STENCIL_TEST);
 
-  if (g_gl.glBindVertexArray) {
+  if (is_gles3 && g_gl.glBindVertexArray) {
     g_gl.glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prev_vao);
     if (prev_vao != 0) g_gl.glBindVertexArray(0);
   }
@@ -841,73 +1039,64 @@ static bool kp_gles_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
   g_gl.glActiveTexture(GL_TEXTURE0);
   g_gl.glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev_tex0);
 
-  if (sw <= 0 || sh <= 0) {
-    sw = prev_vp[2];
-    sh = prev_vp[3];
-  }
-  if (sw < 160 || sh < 120) {
-    g_gl.glBindTexture(GL_TEXTURE_2D, (GLuint)prev_tex0);
-    g_gl.glActiveTexture((GLenum)prev_act_tex);
-    if (g_gl.glBindVertexArray && prev_vao != 0) g_gl.glBindVertexArray((GLuint)prev_vao);
-    return false;
-  }
-
   KpAttribBackup ab_pos, ab_uv;
-  kp_save_attrib(g_gl_st.a_pos, &ab_pos);
-  kp_save_attrib(g_gl_st.a_uv, &ab_uv);
+  kp_save_attrib(st->a_pos, &ab_pos);
+  kp_save_attrib(st->a_uv, &ab_uv);
 
-  if (prev_pbo != 0) g_gl.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-  kp_upload_overlay_tex(shm);
-  if (prev_pbo != 0) g_gl.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, (GLuint)prev_pbo);
+  if (is_gles3 && prev_pbo != 0) g_gl.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  bool uploaded = kp_upload_overlay_tex(st, shm);
+  if (is_gles3 && prev_pbo != 0) g_gl.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, (GLuint)prev_pbo);
 
-  int rx, ry, rw, rh;
-  kp_compute_card_rect(sw, sh, &rx, &ry, &rw, &rh);
-  /* Convert top-down screen rect to GL NDC (y=+1 is top, y=-1 is bottom) */
-  float x0 = (2.0f * (float)rx / (float)sw) - 1.0f;
-  float x1 = (2.0f * (float)(rx + rw) / (float)sw) - 1.0f;
-  float y_top = 1.0f - (2.0f * (float)ry / (float)sh);
-  float y_bot = 1.0f - (2.0f * (float)(ry + rh) / (float)sh);
+  if (uploaded) {
+    int rx, ry, rw, rh;
+    kp_compute_card_rect(sw, sh, &rx, &ry, &rw, &rh);
+    /* Convert top-down screen rect to GL NDC (y=+1 is top, y=-1 is bottom) */
+    float x0 = (2.0f * (float)rx / (float)sw) - 1.0f;
+    float x1 = (2.0f * (float)(rx + rw) / (float)sw) - 1.0f;
+    float y_top = 1.0f - (2.0f * (float)ry / (float)sh);
+    float y_bot = 1.0f - (2.0f * (float)(ry + rh) / (float)sh);
 
-  /* Row 0 of g_rgba_buf is top of card -> v=0.0 at y_top, v=1.0 at y_bot */
-  const GLfloat verts[16] = {
-      x0, y_top, 0.0f, 0.0f,
-      x1, y_top, 1.0f, 0.0f,
-      x0, y_bot, 0.0f, 1.0f,
-      x1, y_bot, 1.0f, 1.0f,
-  };
+    /* Row 0 of g_rgba_buf is top of card -> v=0.0 at y_top, v=1.0 at y_bot */
+    const GLfloat verts[16] = {
+        x0, y_top, 0.0f, 0.0f,
+        x1, y_top, 1.0f, 0.0f,
+        x0, y_bot, 0.0f, 1.0f,
+        x1, y_bot, 1.0f, 1.0f,
+    };
 
-  g_gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  g_gl.glViewport(0, 0, sw, sh);
-  g_gl.glDisable(GL_SCISSOR_TEST);
-  g_gl.glDisable(GL_DEPTH_TEST);
-  g_gl.glDisable(GL_CULL_FACE);
-  g_gl.glDisable(GL_STENCIL_TEST);
-  g_gl.glEnable(GL_BLEND);
-  g_gl.glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-  g_gl.glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
-                           GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-  g_gl.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    g_gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    g_gl.glViewport(0, 0, sw, sh);
+    g_gl.glDisable(GL_SCISSOR_TEST);
+    g_gl.glDisable(GL_DEPTH_TEST);
+    g_gl.glDisable(GL_CULL_FACE);
+    g_gl.glDisable(GL_STENCIL_TEST);
+    g_gl.glEnable(GL_BLEND);
+    g_gl.glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    g_gl.glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
+                             GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    g_gl.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
-  g_gl.glUseProgram(g_gl_st.prog);
-  if (g_gl_st.u_tex >= 0) g_gl.glUniform1i(g_gl_st.u_tex, 0);
+    g_gl.glUseProgram(st->prog);
+    if (st->u_tex >= 0) g_gl.glUniform1i(st->u_tex, 0);
 
-  g_gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-  g_gl.glBindBuffer(GL_ARRAY_BUFFER, g_gl_st.vbo);
-  g_gl.glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)sizeof(verts), verts, GL_DYNAMIC_DRAW);
+    g_gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    g_gl.glBindBuffer(GL_ARRAY_BUFFER, st->vbo);
+    g_gl.glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)sizeof(verts), verts, GL_DYNAMIC_DRAW);
 
-  g_gl.glEnableVertexAttribArray((GLuint)g_gl_st.a_pos);
-  g_gl.glEnableVertexAttribArray((GLuint)g_gl_st.a_uv);
-  g_gl.glVertexAttribPointer((GLuint)g_gl_st.a_pos, 2, GL_FLOAT, GL_FALSE,
-                             (GLsizei)(4 * sizeof(GLfloat)), (const void *)0);
-  g_gl.glVertexAttribPointer((GLuint)g_gl_st.a_uv, 2, GL_FLOAT, GL_FALSE,
-                             (GLsizei)(4 * sizeof(GLfloat)),
-                             (const void *)(2 * sizeof(GLfloat)));
+    g_gl.glEnableVertexAttribArray((GLuint)st->a_pos);
+    g_gl.glEnableVertexAttribArray((GLuint)st->a_uv);
+    g_gl.glVertexAttribPointer((GLuint)st->a_pos, 2, GL_FLOAT, GL_FALSE,
+                               (GLsizei)(4 * sizeof(GLfloat)), (const void *)0);
+    g_gl.glVertexAttribPointer((GLuint)st->a_uv, 2, GL_FLOAT, GL_FALSE,
+                               (GLsizei)(4 * sizeof(GLfloat)),
+                               (const void *)(2 * sizeof(GLfloat)));
 
-  g_gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    g_gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  }
 
-  /* Complete GLES2 state restore */
-  kp_restore_attrib(g_gl_st.a_pos, &ab_pos);
-  kp_restore_attrib(g_gl_st.a_uv, &ab_uv);
+  /* Complete GLES2/3 state restore */
+  kp_restore_attrib(st->a_pos, &ab_pos);
+  kp_restore_attrib(st->a_uv, &ab_uv);
   g_gl.glBindBuffer(GL_ARRAY_BUFFER, (GLuint)prev_vbo);
   g_gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, (GLuint)prev_ebo);
   g_gl.glPixelStorei(GL_UNPACK_ALIGNMENT, prev_unpack);
@@ -926,13 +1115,13 @@ static bool kp_gles_draw_overlay(KpOverlayShared *shm, int sw, int sh) {
   if (prev_depth) g_gl.glEnable(GL_DEPTH_TEST); else g_gl.glDisable(GL_DEPTH_TEST);
   if (prev_cull) g_gl.glEnable(GL_CULL_FACE); else g_gl.glDisable(GL_CULL_FACE);
   if (prev_stencil) g_gl.glEnable(GL_STENCIL_TEST); else g_gl.glDisable(GL_STENCIL_TEST);
-  if (g_gl.glBindVertexArray && prev_vao != 0) g_gl.glBindVertexArray((GLuint)prev_vao);
+  if (is_gles3 && g_gl.glBindVertexArray && prev_vao != 0) g_gl.glBindVertexArray((GLuint)prev_vao);
 
-  if (g_shm_writable) shm->last_draw_ms = kp_ov_now_ms();
-  return true;
+  if (uploaded && g_shm_writable) shm->last_draw_ms = kp_ov_now_ms();
+  return uploaded;
 }
 
-static void kp_draw_on_egl_surface(KpOverlayShared *shm, EGLDisplay dpy, EGLSurface surface) {
+static void kp_draw_on_egl_surface_locked(KpOverlayShared *shm, EGLDisplay dpy, EGLSurface surface) {
   int sw = 0, sh = 0;
   if (kp_gl_ensure_loaded() && g_gl.eglQuerySurface) {
     EGLint ew = 0, eh = 0;
@@ -942,7 +1131,7 @@ static void kp_draw_on_egl_surface(KpOverlayShared *shm, EGLDisplay dpy, EGLSurf
       sh = (int)eh;
     }
   }
-  (void)kp_gles_draw_overlay(shm, sw, sh);
+  (void)kp_gles_draw_overlay(shm, dpy, sw, sh);
 }
 
 /* ==================== HOOK 1: eglSwapBuffers (+ Damage KHR/EXT) ==================== */
@@ -954,11 +1143,13 @@ EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
     if (!real_fn) return 0;
   }
 
-  KpOverlayShared *shm = NULL;
-  if (!g_in_hook && kp_overlay_active(&shm)) {
+  if (!g_in_hook && !kp_should_skip_process()) {
     g_in_hook = 1;
     kp_lock();
-    kp_draw_on_egl_surface(shm, dpy, surface);
+    KpOverlayShared *shm = NULL;
+    if (kp_overlay_active_locked(&shm)) {
+      kp_draw_on_egl_surface_locked(shm, dpy, surface);
+    }
     kp_unlock();
     EGLBoolean ret = real_fn(dpy, surface);
     g_in_hook = 0;
@@ -976,14 +1167,18 @@ EGLBoolean eglSwapBuffersWithDamageKHR(EGLDisplay dpy, EGLSurface surface,
     if (!real_fn) return 0;
   }
 
-  KpOverlayShared *shm = NULL;
-  if (!g_in_hook && kp_overlay_active(&shm)) {
+  if (!g_in_hook && !kp_should_skip_process()) {
     g_in_hook = 1;
+    bool drew = false;
     kp_lock();
-    kp_draw_on_egl_surface(shm, dpy, surface);
+    KpOverlayShared *shm = NULL;
+    if (kp_overlay_active_locked(&shm)) {
+      kp_draw_on_egl_surface_locked(shm, dpy, surface);
+      drew = true;
+    }
     kp_unlock();
     /* Pass full-surface swap when overlay is open so partial damage cannot clip the card */
-    EGLBoolean ret = real_fn(dpy, surface, NULL, 0);
+    EGLBoolean ret = drew ? real_fn(dpy, surface, NULL, 0) : real_fn(dpy, surface, rects, n_rects);
     g_in_hook = 0;
     return ret;
   }
@@ -999,13 +1194,17 @@ EGLBoolean eglSwapBuffersWithDamageEXT(EGLDisplay dpy, EGLSurface surface,
     if (!real_fn) return 0;
   }
 
-  KpOverlayShared *shm = NULL;
-  if (!g_in_hook && kp_overlay_active(&shm)) {
+  if (!g_in_hook && !kp_should_skip_process()) {
     g_in_hook = 1;
+    bool drew = false;
     kp_lock();
-    kp_draw_on_egl_surface(shm, dpy, surface);
+    KpOverlayShared *shm = NULL;
+    if (kp_overlay_active_locked(&shm)) {
+      kp_draw_on_egl_surface_locked(shm, dpy, surface);
+      drew = true;
+    }
     kp_unlock();
-    EGLBoolean ret = real_fn(dpy, surface, NULL, 0);
+    EGLBoolean ret = drew ? real_fn(dpy, surface, NULL, 0) : real_fn(dpy, surface, rects, n_rects);
     g_in_hook = 0;
     return ret;
   }
@@ -1026,14 +1225,16 @@ void SDL_GL_SwapWindow(void *window) {
     if (!real_fn) return;
   }
 
-  KpOverlayShared *shm = NULL;
-  if (!g_in_hook && kp_overlay_active(&shm)) {
+  if (!g_in_hook && !kp_should_skip_process()) {
     g_in_hook = 1;
     kp_lock();
-    int sw = 0, sh = 0;
-    if (fn_drawable_size && window) fn_drawable_size(window, &sw, &sh);
-    if ((sw <= 0 || sh <= 0) && fn_window_size && window) fn_window_size(window, &sw, &sh);
-    (void)kp_gles_draw_overlay(shm, sw, sh);
+    KpOverlayShared *shm = NULL;
+    if (kp_overlay_active_locked(&shm)) {
+      int sw = 0, sh = 0;
+      if (fn_drawable_size && window) fn_drawable_size(window, &sw, &sh);
+      if ((sw <= 0 || sh <= 0) && fn_window_size && window) fn_window_size(window, &sw, &sh);
+      (void)kp_gles_draw_overlay(shm, NULL, sw, sh);
+    }
     kp_unlock();
     real_fn(window);
     g_in_hook = 0;
@@ -1053,7 +1254,6 @@ void SDL_RenderPresent(void *renderer) {
   static void (*real_fn)(void *) = NULL;
   static int (*fn_out_size)(void *, int *, int *) = NULL;
   static void *(*fn_create_tex)(void *, uint32_t, int, int, int) = NULL;
-  static void (*fn_destroy_tex)(void *) = NULL;
   static int (*fn_set_blend)(void *, int) = NULL;
   static int (*fn_update_tex)(void *, const KpSdlRect *, const void *, int) = NULL;
   static int (*fn_copy)(void *, void *, const KpSdlRect *, const KpSdlRect *) = NULL;
@@ -1069,7 +1269,6 @@ void SDL_RenderPresent(void *renderer) {
     *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_RenderPresent");
     *(void **)(&fn_out_size) = dlsym(RTLD_DEFAULT, "SDL_GetRendererOutputSize");
     *(void **)(&fn_create_tex) = dlsym(RTLD_DEFAULT, "SDL_CreateTexture");
-    *(void **)(&fn_destroy_tex) = dlsym(RTLD_DEFAULT, "SDL_DestroyTexture");
     *(void **)(&fn_set_blend) = dlsym(RTLD_DEFAULT, "SDL_SetTextureBlendMode");
     *(void **)(&fn_update_tex) = dlsym(RTLD_DEFAULT, "SDL_UpdateTexture");
     *(void **)(&fn_copy) = dlsym(RTLD_DEFAULT, "SDL_RenderCopy");
@@ -1083,57 +1282,58 @@ void SDL_RenderPresent(void *renderer) {
     if (!real_fn) return;
   }
 
-  KpOverlayShared *shm = NULL;
-  if (!g_in_hook && renderer && kp_overlay_active(&shm) &&
+  if (!g_in_hook && renderer && !kp_should_skip_process() &&
       fn_out_size && fn_create_tex && fn_update_tex && fn_copy) {
     g_in_hook = 1;
     kp_lock();
-    int sw = 0, sh = 0;
-    if (fn_out_size(renderer, &sw, &sh) == 0 && sw >= 160 && sh >= 120) {
-      if (g_sdl_last_ren != renderer) {
-        if (g_sdl_tex && fn_destroy_tex && g_sdl_last_ren == renderer) {
-          fn_destroy_tex(g_sdl_tex);
+    KpOverlayShared *shm = NULL;
+    if (kp_overlay_active_locked(&shm)) {
+      int sw = 0, sh = 0;
+      if (fn_out_size(renderer, &sw, &sh) == 0 && sw >= 240 && sh >= 180) {
+        if (g_sdl_last_ren != renderer) {
+          g_sdl_tex = NULL;
+          g_sdl_last_ren = renderer;
+          g_sdl_tex_seq = 0xFFFFFFFFu;
         }
-        g_sdl_tex = NULL;
-        g_sdl_last_ren = renderer;
-        g_sdl_tex_seq = 0xFFFFFFFFu;
-      }
-      if (!g_sdl_tex) {
-        g_sdl_tex = fn_create_tex(renderer, KP_SDL_PIXELFORMAT_ABGR8888,
-                                  KP_SDL_TEXTUREACCESS_STREAMING,
-                                  KP_OV_CARD_W, KP_OV_CARD_H);
-        if (g_sdl_tex && fn_set_blend) {
-          fn_set_blend(g_sdl_tex, KP_SDL_BLENDMODE_BLEND);
+        if (!g_sdl_tex) {
+          g_sdl_tex = fn_create_tex(renderer, KP_SDL_PIXELFORMAT_ABGR8888,
+                                    KP_SDL_TEXTUREACCESS_STREAMING,
+                                    KP_OV_CARD_W, KP_OV_CARD_H);
+          if (g_sdl_tex && fn_set_blend) {
+            fn_set_blend(g_sdl_tex, KP_SDL_BLENDMODE_BLEND);
+          }
         }
-      }
-      if (g_sdl_tex) {
-        bool dirty = kp_refresh_rgba_if_needed(shm);
-        if (dirty || g_sdl_tex_seq != g_rendered_seq) {
-          fn_update_tex(g_sdl_tex, NULL, g_rgba_buf, KP_OV_CARD_W * 4);
-          g_sdl_tex_seq = g_rendered_seq;
+        if (g_sdl_tex) {
+          bool dirty = kp_refresh_rgba_if_needed(shm);
+          if (g_rgba_buf) {
+            if (dirty || g_sdl_tex_seq != g_rendered_seq) {
+              fn_update_tex(g_sdl_tex, NULL, g_rgba_buf, KP_OV_CARD_W * 4);
+              g_sdl_tex_seq = g_rendered_seq;
+            }
+            KpSdlRect prev_vp = {0, 0, 0, 0};
+            KpSdlRect prev_clip = {0, 0, 0, 0};
+            int was_clipped = 0;
+            float sx = 1.0f, sy = 1.0f;
+            if (fn_get_vp) fn_get_vp(renderer, &prev_vp);
+            if (fn_is_clipped) was_clipped = fn_is_clipped(renderer);
+            if (was_clipped && fn_get_clip) fn_get_clip(renderer, &prev_clip);
+            if (fn_get_scale) fn_get_scale(renderer, &sx, &sy);
+
+            if (fn_set_vp) fn_set_vp(renderer, NULL);
+            if (fn_set_clip) fn_set_clip(renderer, NULL);
+            if (fn_set_scale) fn_set_scale(renderer, 1.0f, 1.0f);
+
+            KpSdlRect dst;
+            kp_compute_card_rect(sw, sh, &dst.x, &dst.y, &dst.w, &dst.h);
+            fn_copy(renderer, g_sdl_tex, NULL, &dst);
+
+            if (fn_set_scale) fn_set_scale(renderer, sx, sy);
+            if (fn_set_vp && prev_vp.w > 0 && prev_vp.h > 0) fn_set_vp(renderer, &prev_vp);
+            if (fn_set_clip) fn_set_clip(renderer, was_clipped ? &prev_clip : NULL);
+
+            if (g_shm_writable) shm->last_draw_ms = kp_ov_now_ms();
+          }
         }
-        KpSdlRect prev_vp = {0, 0, 0, 0};
-        KpSdlRect prev_clip = {0, 0, 0, 0};
-        int was_clipped = 0;
-        float sx = 1.0f, sy = 1.0f;
-        if (fn_get_vp) fn_get_vp(renderer, &prev_vp);
-        if (fn_is_clipped) was_clipped = fn_is_clipped(renderer);
-        if (was_clipped && fn_get_clip) fn_get_clip(renderer, &prev_clip);
-        if (fn_get_scale) fn_get_scale(renderer, &sx, &sy);
-
-        if (fn_set_vp) fn_set_vp(renderer, NULL);
-        if (fn_set_clip) fn_set_clip(renderer, NULL);
-        if (fn_set_scale) fn_set_scale(renderer, 1.0f, 1.0f);
-
-        KpSdlRect dst;
-        kp_compute_card_rect(sw, sh, &dst.x, &dst.y, &dst.w, &dst.h);
-        fn_copy(renderer, g_sdl_tex, NULL, &dst);
-
-        if (fn_set_scale) fn_set_scale(renderer, sx, sy);
-        if (fn_set_vp && prev_vp.w > 0 && prev_vp.h > 0) fn_set_vp(renderer, &prev_vp);
-        if (fn_set_clip) fn_set_clip(renderer, was_clipped ? &prev_clip : NULL);
-
-        if (g_shm_writable) shm->last_draw_ms = kp_ov_now_ms();
       }
     }
     kp_unlock();
@@ -1143,4 +1343,361 @@ void SDL_RenderPresent(void *renderer) {
   }
 
   real_fn(renderer);
+}
+
+/* ==================== HOOK 4: ZERO-CONFLICT SDL2 INPUT ISOLATION ==================== */
+
+typedef struct {
+  bool shm_ready;
+  bool overlay_open;
+  bool block_input;
+  uint32_t seq;
+} KpInputStatus;
+
+static uint64_t g_held_joy_btns = 0;
+static uint64_t g_held_ctrl_btns = 0;
+static uint64_t g_held_keys[8];
+static bool g_held_hat_nonzero = false;
+static uint32_t g_wait_last_seq = 0xFFFFFFFFu;
+static bool g_wait_last_open = false;
+
+static KpInputStatus kp_query_input_status(void) {
+  KpInputStatus st;
+  memset(&st, 0, sizeof(st));
+  if (kp_should_skip_process()) return st;
+
+  int64_t now = kp_ov_now_ms();
+  kp_lock();
+  KpOverlayShared *shm = kp_get_shm_locked(now);
+  if (kp_shm_valid(shm)) {
+    st.shm_ready = true;
+    st.overlay_open = (shm->overlay_open != 0);
+    st.block_input = st.overlay_open || (now < shm->swallow_until_ms);
+    st.seq = __atomic_load_n(&shm->seq, __ATOMIC_ACQUIRE);
+    if (g_shm_writable && (now - g_last_input_hb_ms >= 250 || g_last_input_hb_ms == 0)) {
+      g_last_input_hb_ms = now;
+      shm->last_input_hook_ms = now;
+    }
+  }
+  kp_unlock();
+  return st;
+}
+
+static bool kp_held_key_test(uint32_t scancode) {
+  if (scancode >= 512u) return false;
+  return (g_held_keys[scancode >> 6] & (1ULL << (scancode & 63u))) != 0;
+}
+
+static void kp_held_key_set(uint32_t scancode, bool down) {
+  if (scancode >= 512u) return;
+  uint64_t mask = 1ULL << (scancode & 63u);
+  if (down) g_held_keys[scancode >> 6] |= mask;
+  else g_held_keys[scancode >> 6] &= ~mask;
+}
+
+/*
+ * Returns true if the SDL event should be SWALLOWED (hidden from EmulationStation / game).
+ * Preserves paired UP/center events ONLY for keys/buttons pressed BEFORE the overlay opened,
+ * guaranteeing zero stuck keys AND zero leaked Mini-Player button presses.
+ */
+static bool kp_should_swallow_sdl_event(const void *ev_ptr, bool block_input) {
+  if (!ev_ptr) return false;
+  const uint8_t *raw = (const uint8_t *)ev_ptr;
+  uint32_t type = 0;
+  memcpy(&type, raw, sizeof(type));
+
+  if (!block_input) {
+    if (type == KP_SDL_KEYDOWN) {
+      uint32_t sc = 0;
+      memcpy(&sc, raw + 16, sizeof(sc));
+      kp_held_key_set(sc, true);
+    } else if (type == KP_SDL_KEYUP) {
+      uint32_t sc = 0;
+      memcpy(&sc, raw + 16, sizeof(sc));
+      kp_held_key_set(sc, false);
+    } else if (type == KP_SDL_JOYBUTTONDOWN) {
+      uint8_t btn = raw[12];
+      if (btn < 64u) g_held_joy_btns |= (1ULL << btn);
+    } else if (type == KP_SDL_JOYBUTTONUP) {
+      uint8_t btn = raw[12];
+      if (btn < 64u) g_held_joy_btns &= ~(1ULL << btn);
+    } else if (type == KP_SDL_CONTROLLERBUTTONDOWN) {
+      uint8_t btn = raw[12];
+      if (btn < 64u) g_held_ctrl_btns |= (1ULL << btn);
+    } else if (type == KP_SDL_CONTROLLERBUTTONUP) {
+      uint8_t btn = raw[12];
+      if (btn < 64u) g_held_ctrl_btns &= ~(1ULL << btn);
+    } else if (type == KP_SDL_JOYHATMOTION) {
+      g_held_hat_nonzero = (raw[13] != 0);
+    }
+    return false;
+  }
+
+  switch (type) {
+    case KP_SDL_KEYDOWN:
+    case KP_SDL_TEXTEDITING:
+    case KP_SDL_TEXTINPUT:
+    case KP_SDL_JOYAXISMOTION:
+    case KP_SDL_JOYBALLMOTION:
+    case KP_SDL_JOYBUTTONDOWN:
+    case KP_SDL_CONTROLLERAXISMOTION:
+    case KP_SDL_CONTROLLERBUTTONDOWN:
+      return true;
+    case KP_SDL_KEYUP: {
+      uint32_t sc = 0;
+      memcpy(&sc, raw + 16, sizeof(sc));
+      if (kp_held_key_test(sc)) {
+        kp_held_key_set(sc, false);
+        return false;
+      }
+      return true;
+    }
+    case KP_SDL_JOYBUTTONUP: {
+      uint8_t btn = raw[12];
+      if (btn < 64u && (g_held_joy_btns & (1ULL << btn))) {
+        g_held_joy_btns &= ~(1ULL << btn);
+        return false;
+      }
+      return true;
+    }
+    case KP_SDL_CONTROLLERBUTTONUP: {
+      uint8_t btn = raw[12];
+      if (btn < 64u && (g_held_ctrl_btns & (1ULL << btn))) {
+        g_held_ctrl_btns &= ~(1ULL << btn);
+        return false;
+      }
+      return true;
+    }
+    case KP_SDL_JOYHATMOTION: {
+      if (raw[13] == 0 && g_held_hat_nonzero) {
+        g_held_hat_nonzero = false;
+        return false;
+      }
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+int SDL_PollEvent(void *event) {
+  static int (*real_fn)(void *) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_PollEvent");
+    if (!real_fn) return 0;
+  }
+  if (g_in_event_hook || !event || kp_should_skip_process()) {
+    return real_fn(event);
+  }
+
+  g_in_event_hook = 1;
+  KpInputStatus st = kp_query_input_status();
+  int res = 0;
+  for (int tries = 0; tries < 64; tries++) {
+    res = real_fn(event);
+    if (res <= 0) break;
+    if (!st.shm_ready) break;
+    if (!kp_should_swallow_sdl_event(event, st.block_input)) break;
+    res = 0;
+  }
+  g_in_event_hook = 0;
+  return res;
+}
+
+int SDL_WaitEventTimeout(void *event, int timeout) {
+  static int (*real_fn)(void *, int) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_WaitEventTimeout");
+    if (!real_fn) return 0;
+  }
+  if (g_in_event_hook || !event || kp_should_skip_process()) {
+    return real_fn(event, timeout);
+  }
+
+  g_in_event_hook = 1;
+  KpInputStatus st = kp_query_input_status();
+  if (!st.shm_ready) {
+    int res = real_fn(event, timeout);
+    g_in_event_hook = 0;
+    return res;
+  }
+
+  int eff_timeout = timeout;
+  if (st.overlay_open) {
+    /* Keep EmulationStation's render loop alive while the Mini-Player is visible */
+    if (eff_timeout < 0 || eff_timeout > 25) eff_timeout = 25;
+  } else if (eff_timeout < 0 || eff_timeout > 80) {
+    eff_timeout = 80;
+  }
+
+  int64_t deadline = (timeout >= 0) ? (kp_ov_now_ms() + timeout) : 0;
+  int res = 0;
+  for (;;) {
+    res = real_fn(event, eff_timeout);
+    st = kp_query_input_status();
+    if (res > 0) {
+      if (!kp_should_swallow_sdl_event(event, st.block_input)) break;
+      res = 0;
+    }
+    if (st.overlay_open || st.overlay_open != g_wait_last_open || st.seq != g_wait_last_seq) {
+      g_wait_last_open = st.overlay_open;
+      g_wait_last_seq = st.seq;
+      /* Return 0 (timeout) so the caller breaks out of wait and swaps a fresh frame */
+      res = 0;
+      break;
+    }
+    if (timeout >= 0) {
+      int64_t rem = deadline - kp_ov_now_ms();
+      if (rem <= 0) {
+        res = 0;
+        break;
+      }
+      eff_timeout = (rem > 80) ? 80 : (int)rem;
+    } else {
+      eff_timeout = 80;
+    }
+  }
+  g_in_event_hook = 0;
+  return res;
+}
+
+int SDL_WaitEvent(void *event) {
+  static int (*real_fn)(void *) = NULL;
+  static int (*real_wait_to)(void *, int) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_WaitEvent");
+    *(void **)(&real_wait_to) = dlsym(RTLD_NEXT, "SDL_WaitEventTimeout");
+    if (!real_fn) return 0;
+  }
+  if (g_in_event_hook || !event || !real_wait_to || kp_should_skip_process()) {
+    return real_fn(event);
+  }
+
+  g_in_event_hook = 1;
+  KpInputStatus st = kp_query_input_status();
+  if (!st.shm_ready) {
+    int res = real_fn(event);
+    g_in_event_hook = 0;
+    return res;
+  }
+
+  for (;;) {
+    int slice = st.overlay_open ? 25 : 80;
+    int res = real_wait_to(event, slice);
+    st = kp_query_input_status();
+    if (res > 0) {
+      if (!kp_should_swallow_sdl_event(event, st.block_input)) {
+        g_in_event_hook = 0;
+        return res;
+      }
+    }
+    if (st.overlay_open || st.overlay_open != g_wait_last_open ||
+        (st.overlay_open && st.seq != g_wait_last_seq)) {
+      g_wait_last_open = st.overlay_open;
+      g_wait_last_seq = st.seq;
+      /* Emit benign SDL_FIRSTEVENT (type=0) so PowerSaver EmulationStation repaints cleanly */
+      memset(event, 0, KP_SDL_EVENT_SIZE);
+      g_in_event_hook = 0;
+      return 1;
+    }
+  }
+}
+
+int SDL_PeepEvents(void *events, int numevents, int action, uint32_t minType, uint32_t maxType) {
+  static int (*real_fn)(void *, int, int, uint32_t, uint32_t) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_PeepEvents");
+    if (!real_fn) return 0;
+  }
+  if (g_in_event_hook || action != KP_SDL_GETEVENT || !events || numevents <= 0 ||
+      kp_should_skip_process()) {
+    return real_fn(events, numevents, action, minType, maxType);
+  }
+
+  g_in_event_hook = 1;
+  int got = real_fn(events, numevents, action, minType, maxType);
+  if (got > 0) {
+    KpInputStatus st = kp_query_input_status();
+    if (st.shm_ready) {
+      uint8_t *arr = (uint8_t *)events;
+      int out = 0;
+      for (int i = 0; i < got; i++) {
+        uint8_t *ev = arr + (size_t)i * KP_SDL_EVENT_SIZE;
+        if (!kp_should_swallow_sdl_event(ev, st.block_input)) {
+          if (out != i) {
+            memcpy(arr + (size_t)out * KP_SDL_EVENT_SIZE, ev, KP_SDL_EVENT_SIZE);
+          }
+          out++;
+        }
+      }
+      got = out;
+    }
+  }
+  g_in_event_hook = 0;
+  return got;
+}
+
+uint8_t SDL_JoystickGetButton(void *joystick, int button) {
+  static uint8_t (*real_fn)(void *, int) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_JoystickGetButton");
+    if (!real_fn) return 0;
+  }
+  if (!g_in_event_hook && !kp_should_skip_process()) {
+    KpInputStatus st = kp_query_input_status();
+    if (st.block_input) return 0;
+  }
+  return real_fn(joystick, button);
+}
+
+uint8_t SDL_JoystickGetHat(void *joystick, int hat) {
+  static uint8_t (*real_fn)(void *, int) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_JoystickGetHat");
+    if (!real_fn) return 0;
+  }
+  if (!g_in_event_hook && !kp_should_skip_process()) {
+    KpInputStatus st = kp_query_input_status();
+    if (st.block_input) return 0;
+  }
+  return real_fn(joystick, hat);
+}
+
+int16_t SDL_JoystickGetAxis(void *joystick, int axis) {
+  static int16_t (*real_fn)(void *, int) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_JoystickGetAxis");
+    if (!real_fn) return 0;
+  }
+  if (!g_in_event_hook && !kp_should_skip_process()) {
+    KpInputStatus st = kp_query_input_status();
+    if (st.block_input) return 0;
+  }
+  return real_fn(joystick, axis);
+}
+
+uint8_t SDL_GameControllerGetButton(void *controller, int button) {
+  static uint8_t (*real_fn)(void *, int) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_GameControllerGetButton");
+    if (!real_fn) return 0;
+  }
+  if (!g_in_event_hook && !kp_should_skip_process()) {
+    KpInputStatus st = kp_query_input_status();
+    if (st.block_input) return 0;
+  }
+  return real_fn(controller, button);
+}
+
+int16_t SDL_GameControllerGetAxis(void *controller, int axis) {
+  static int16_t (*real_fn)(void *, int) = NULL;
+  if (!real_fn) {
+    *(void **)(&real_fn) = dlsym(RTLD_NEXT, "SDL_GameControllerGetAxis");
+    if (!real_fn) return 0;
+  }
+  if (!g_in_event_hook && !kp_should_skip_process()) {
+    KpInputStatus st = kp_query_input_status();
+    if (st.block_input) return 0;
+  }
+  return real_fn(controller, axis);
 }

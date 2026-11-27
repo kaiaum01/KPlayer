@@ -2956,7 +2956,7 @@ export default function App() {
                               1. Conteúdo adulto exclusivo para maiores de 18 anos
                             </div>
                             <p style={{ color: theme.text }} className="text-[12px] @min-[540px]:text-[12.5px] leading-[1.52] mt-0.5">
-                              Ao desbloquear, você declara ter 18 anos ou mais e concorda em exibir a aba +18 junto ao serviço de IPTV (com escolha entre PornHub e XVideos). Esta seção vem bloqueada por padrão e pode ser bloqueada novamente a qualquer momento nas Opções Gerais ou nas Opções do IPTV.
+                              Ao desbloquear, você declara ter 18 anos ou mais e concorda em exibir a aba +18 junto ao serviço de IPTV (com escolha entre PornHub e XVideos). Esta seção vem bloqueada por padrão e pode ser bloqueada novamente a qualquer momento nas Opções do IPTV.
                             </p>
                           </div>
 
