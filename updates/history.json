@@ -5,9 +5,9 @@
     {
       "version": "2.1.7",
       "releaseTag": "v2.1.7",
-      "releasedAt": "2026-11-27T21:40:27Z",
+      "releasedAt": "2026-11-27T22:00:05Z",
       "r36s": "updates/v2.1.7/KPlayer-v2.1.7-R36S.zip",
-      "sha256": "89eba4ab804e92b1460e6ee8d4d311dd753de6a830868aae6fb671bff388392e",
+      "sha256": "4cafda03ef53bf410f4a315de8f2c86689f0fcf64186f8533ba5f3f9a9a128fb",
       "notes": [
         "Mini-Player KPlayer (L3 + R3) Nativo Sempre Disponível nos Ports:",
         "Ao abrir qualquer jogo .sh ou executável pelo Gerenciador de Arquivos (Arquivos), você escolhe direto na hora:",
