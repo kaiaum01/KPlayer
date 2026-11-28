@@ -181,6 +181,39 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
   const [adultEmbedModal, setAdultEmbedModal] = useState<{ title: string; embedUrl: string } | null>(null);
   const [adultResolving, setAdultResolving] = useState<boolean>(false);
 
+  // Persistent IPTV Favorites (top-pinned with ★ badge)
+  const [iptvFavs, setIptvFavs] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('kp_iptv_favs');
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const favKey = useCallback((ch: IptvChannel) => ch.url || `${ch.group}:${ch.name}`, []);
+
+  const toggleIptvFavorite = useCallback(
+    (ch: IptvChannel | undefined) => {
+      if (!ch) return;
+      const key = favKey(ch);
+      setIptvFavs((prev) => {
+        const next = { ...prev };
+        const added = !next[key];
+        if (added) next[key] = true;
+        else delete next[key];
+        try {
+          localStorage.setItem('kp_iptv_favs', JSON.stringify(next));
+        } catch {
+          // Ignore storage quota errors
+        }
+        notify(added ? `★ Favoritado: ${ch.name}` : `Removido dos favoritos: ${ch.name}`);
+        return next;
+      });
+    },
+    [favKey, notify]
+  );
+
   const openEpgGuide = useCallback(async (ch: IptvChannel) => {
     setEpgModalChannel(ch);
     setEpgGuide(null);
@@ -335,14 +368,23 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
 
   const filteredItems = useMemo(() => {
     const q = itemQuery.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (it) =>
-        it.name.toLowerCase().includes(q) ||
-        it.group.toLowerCase().includes(q) ||
-        it.id.toLowerCase().includes(q)
-    );
-  }, [items, itemQuery]);
+    const base = !q
+      ? items
+      : items.filter(
+          (it) =>
+            it.name.toLowerCase().includes(q) ||
+            it.group.toLowerCase().includes(q) ||
+            it.id.toLowerCase().includes(q)
+        );
+    // Top-pin favorited channels while preserving relative order
+    const pinned: IptvChannel[] = [];
+    const rest: IptvChannel[] = [];
+    for (const it of base) {
+      if (iptvFavs[favKey(it)]) pinned.push(it);
+      else rest.push(it);
+    }
+    return pinned.length > 0 ? [...pinned, ...rest] : base;
+  }, [items, itemQuery, iptvFavs, favKey]);
 
   const filteredEpisodes = useMemo(() => {
     if (!seasonFilter) return episodes;
@@ -566,7 +608,11 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
         }
 
         if (btn === 'X') {
-          setSourceIdx((s) => (s + 1) % sources.length);
+          if (view === 'items' && filteredItems[itemSelected]) {
+            toggleIptvFavorite(filteredItems[itemSelected]);
+          } else {
+            setSourceIdx((s) => (s + 1) % sources.length);
+          }
           return;
         }
 
@@ -686,6 +732,7 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
       activateItem,
       onPlayItem,
       openSeriesEpisodes,
+      toggleIptvFavorite,
     ]
   );
 
@@ -1302,8 +1349,13 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <div style={{ color: theme.text }} className="text-[13px] font-bold truncate">
-                            {ch.name}
+                          <div style={{ color: theme.text }} className="text-[13px] font-bold truncate flex items-center gap-1.5">
+                            {iptvFavs[favKey(ch)] && (
+                              <span style={{ color: theme.accent }} className="shrink-0" title="Favorito fixado no topo">
+                                ★
+                              </span>
+                            )}
+                            <span className="truncate">{ch.name}</span>
                           </div>
                           {ch.epgNow && (
                             <span
@@ -1338,6 +1390,20 @@ export const IptvScreen = forwardRef<IptvScreenHandle, IptvScreenProps>(function
                           </div>
                         )}
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleIptvFavorite(ch);
+                        }}
+                        style={{
+                          color: iptvFavs[favKey(ch)] ? theme.accent : theme.muted,
+                        }}
+                        className="px-1.5 py-1 text-[13px] leading-none shrink-0 cursor-pointer hover:brightness-125"
+                        title={iptvFavs[favKey(ch)] ? 'Remover favorito (X)' : 'Favoritar e fixar no topo (X)'}
+                      >
+                        {iptvFavs[favKey(ch)] ? '★' : '☆'}
+                      </button>
                       {ch.mediaType === 'series-show' ? (
                         <span
                           style={{

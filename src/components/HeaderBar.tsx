@@ -6,13 +6,15 @@ export interface UpdateBannerContextValue {
   currentVersion: string;
   updateAvailable: boolean;
   latestVersion: string;
+  sleepRemainingMin?: number;
   onOpenUpdate?: () => void;
 }
 
 export const UpdateBannerContext = createContext<UpdateBannerContextValue>({
-  currentVersion: '2.1.0',
+  currentVersion: '2.1.7',
   updateAvailable: false,
-  latestVersion: '2.1.0',
+  latestVersion: '2.1.7',
+  sleepRemainingMin: 0,
 });
 
 export function HeaderBar({
@@ -53,6 +55,8 @@ export function HeaderBar({
     }
     return () => clearInterval(id);
   }, []);
+
+  const sleepMin = updateCtx.sleepRemainingMin ?? 0;
 
   return (
     <div
@@ -96,6 +100,15 @@ export function HeaderBar({
       </div>
 
       <div className="flex items-center justify-end gap-2 sm:gap-2.5 text-[11.5px] sm:text-[12px] flex-1 min-w-0">
+        {sleepMin > 0 && (
+          <span
+            style={{ color: theme.accent }}
+            className="text-[10.5px] font-bold tabular-nums shrink-0 whitespace-nowrap"
+            title={`Timer de sono ativo: ${sleepMin} min restantes`}
+          >
+            ZZZ {sleepMin}m
+          </span>
+        )}
         {updateCtx.updateAvailable && (
           <button
             type="button"
@@ -108,14 +121,10 @@ export function HeaderBar({
             className="h-[22px] px-2 rounded-full flex items-center gap-1 text-[9.5px] sm:text-[10px] font-extrabold shrink-0 cursor-pointer transition-all hover:brightness-110"
             title={`Nova versão v${updateCtx.latestVersion} disponível — pressione SELECT para atualizar`}
           >
-            <span
-              style={{ backgroundColor: theme.accent }}
-              className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-            />
             <span className="whitespace-nowrap">
               v{updateCtx.latestVersion}
             </span>
-            <span className="hidden @min-[520px]:inline opacity-80">• SELECT</span>
+            <span className="hidden @min-[520px]:inline opacity-80">· SELECT</span>
           </button>
         )}
         <span style={{ color: theme.muted }} className="tabular-nums shrink-0">

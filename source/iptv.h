@@ -70,6 +70,84 @@ static int iptv_search_return_view = IPTV_VIEW_CATS;
 static int iptv_skb_row = 1;
 static int iptv_skb_col = 0;
 
+/* IPTV Favorites persistence (iptv_favorites.cfg) & top pinning (v2.1.7+) */
+#define IPTV_FAV_MAX 128
+static char iptv_fav_urls[IPTV_FAV_MAX][1024];
+static int iptv_fav_count = 0;
+static bool iptv_fav_loaded = false;
+
+static void iptv_fav_load(void) {
+  if (iptv_fav_loaded) return;
+  iptv_fav_loaded = true;
+  iptv_fav_count = 0;
+  FILE *f = fopen("iptv_favorites.cfg", "r");
+  if (!f) return;
+  char line[1080];
+  while (iptv_fav_count < IPTV_FAV_MAX && fgets(line, sizeof(line), f)) {
+    line[strcspn(line, "\r\n")] = 0;
+    if (!line[0]) continue;
+    snprintf(iptv_fav_urls[iptv_fav_count++], sizeof(iptv_fav_urls[0]), "%.1023s", line);
+  }
+  fclose(f);
+}
+
+static void iptv_fav_save(void) {
+  FILE *f = fopen("iptv_favorites.tmp", "w");
+  if (!f) return;
+  bool ok = true;
+  for (int i = 0; i < iptv_fav_count; i++) {
+    if (fprintf(f, "%s\n", iptv_fav_urls[i]) < 0) ok = false;
+  }
+  if (fclose(f) == 0 && ok) rename("iptv_favorites.tmp", "iptv_favorites.cfg");
+}
+
+static bool iptv_fav_is(const char *url) {
+  if (!url || !url[0]) return false;
+  iptv_fav_load();
+  for (int i = 0; i < iptv_fav_count; i++) {
+    if (!strcmp(iptv_fav_urls[i], url)) return true;
+  }
+  return false;
+}
+
+static void iptv_pin_favorites_first(IptvChannel *list, int count) {
+  if (!list || count <= 1) return;
+  iptv_fav_load();
+  if (iptv_fav_count == 0) return;
+  IptvChannel *tmp = malloc((size_t)count * sizeof(IptvChannel));
+  if (!tmp) return;
+  int w = 0;
+  for (int i = 0; i < count; i++) {
+    if (iptv_fav_is(list[i].url)) tmp[w++] = list[i];
+  }
+  for (int i = 0; i < count; i++) {
+    if (!iptv_fav_is(list[i].url)) tmp[w++] = list[i];
+  }
+  memcpy(list, tmp, (size_t)count * sizeof(IptvChannel));
+  free(tmp);
+}
+
+static bool iptv_fav_toggle_url(const char *url) {
+  if (!url || !url[0] || strpbrk(url, "\r\n")) return false;
+  iptv_fav_load();
+  int found = -1;
+  for (int i = 0; i < iptv_fav_count; i++) {
+    if (!strcmp(iptv_fav_urls[i], url)) { found = i; break; }
+  }
+  bool added = false;
+  if (found >= 0) {
+    memmove(&iptv_fav_urls[found], &iptv_fav_urls[found + 1],
+            (size_t)(iptv_fav_count - found - 1) * sizeof(iptv_fav_urls[0]));
+    iptv_fav_count--;
+  } else if (iptv_fav_count < IPTV_FAV_MAX) {
+    snprintf(iptv_fav_urls[iptv_fav_count++], sizeof(iptv_fav_urls[0]), "%s", url);
+    added = true;
+  }
+  iptv_fav_save();
+  if (iptv_count > 1) iptv_pin_favorites_first(iptv_channels, iptv_count);
+  return added;
+}
+
 static const char *iptv_skb_rows[5][10] = {
     {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
     {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
@@ -976,10 +1054,17 @@ static void iptv_key(SDL_Keycode k) {
       } else {
         iptv_view = IPTV_VIEW_CATS;
       }
+    } else if (k == SDLK_SPACE && vis_n > 0) {
+      int real_idx = iptv_filtered_index(iptv_channels, iptv_count, iptv_selected);
+      if (real_idx >= 0 && real_idx < iptv_count) {
+        bool added = iptv_fav_toggle_url(iptv_channels[real_idx].url);
+        iptv_selected = iptv_offset = 0;
+        notify(added ? "★ Canal fixado no topo dos favoritos!" : "Removido dos favoritos de IPTV");
+      }
     } else if (k == SDLK_LEFT && !radio_play_is_busy()) {
       iptv_clear_search();
       iptv_switch_source(-1);
-    } else if ((k == SDLK_RIGHT || k == SDLK_SPACE) && !radio_play_is_busy()) {
+    } else if (k == SDLK_RIGHT && !radio_play_is_busy()) {
       iptv_clear_search();
       iptv_switch_source(1);
     } else if (k == SDLK_m && !radio_play_is_busy() && iptv_active_cat_id[0]) {
@@ -1027,6 +1112,7 @@ static void iptv_poll_worker_result(void) {
   } else if (job == IPTV_JOB_ITEMS && src == iptv_source && iptv_view == IPTV_VIEW_ITEMS) {
     if (ok) {
       iptv_count = iptv_read_list_dyn(done_path, &iptv_channels, &iptv_cap);
+      iptv_pin_favorites_first(iptv_channels, iptv_count);
       iptv_selected = iptv_offset = 0;
     } else {
       notify(tr("Lista indisponível; usando cache"));
@@ -1335,12 +1421,20 @@ static void draw_iptv(void) {
       int idx = iptv_filtered_index(list, raw_count, pos);
       if (idx < 0) continue;
       bool focus = pos == *sel;
+      bool is_fav = !is_ep_view && iptv_fav_is(list[idx].url);
       card(236, y, 386, 46, 10, focus, panel);
       char number[24];
-      snprintf(number, sizeof(number), "%d", pos + 1);
-      label(number, 248, y + 13, 14, focus ? accent : muted, 44);
+      snprintf(number, sizeof(number), is_fav ? "★" : "%d", pos + 1);
+      label(number, 248, y + 13, 14, (focus || is_fav) ? accent : muted, 44);
       label(list[idx].name, 294, y + 6, 16, textc, 318);
-      if (list[idx].group[0]) label(list[idx].group, 294, y + 27, 11, muted, 318);
+      if (list[idx].group[0]) {
+        char meta_line[160];
+        snprintf(meta_line, sizeof(meta_line), is_fav ? "★ Favorito  •  %.120s" : "%.120s",
+                 list[idx].group);
+        label(meta_line, 294, y + 27, 11, is_fav ? accent : muted, 318);
+      } else if (is_fav) {
+        label("★ Favorito fixado (X remove)", 294, y + 27, 11, accent, 318);
+      }
     }
   }
 

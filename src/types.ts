@@ -17,6 +17,8 @@ export type ScreenMode =
   | 'news'
   | 'football'
   | 'weather'
+  | 'wifi'
+  | 'diagnostics'
   | 'options';
 
 export type OptionsContext = 'general' | 'video' | 'music' | 'iptv' | 'radio';

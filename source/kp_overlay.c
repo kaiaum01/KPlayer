@@ -311,7 +311,8 @@ static bool kp_overlay_active_locked(KpOverlayShared **out_shm) {
   KpOverlayShared *shm = kp_get_shm_locked(now);
   if (!kp_shm_valid(shm)) return false;
   kp_touch_hook_heartbeat_locked(shm, now);
-  if (!shm->overlay_open) return false;
+  bool toast_active = (shm->toast_until_ms > 0 && now < shm->toast_until_ms);
+  if (!shm->overlay_open && !toast_active) return false;
   *out_shm = shm;
   return true;
 }

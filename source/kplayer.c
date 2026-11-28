@@ -862,6 +862,26 @@ static void stop_media(void) {
   mode = 0;
   menu_dirty = true;
 }
+/* Video player HUD state & sleep timer action (v2.1.7+) */
+static int video_osd_row = 0;
+static int video_dock_idx = 0;
+static bool video_locked = false;
+static long long video_ab_a = -1;
+static long long video_ab_b = -1;
+static char video_hud_toast[64] = "";
+static uint32_t video_hud_toast_until = 0;
+static int sleep_action = 0; /* 0=Pausar reprodução, 1=Desligar console */
+
+static void video_show_toast(const char *msg) {
+  if (!msg || !msg[0]) return;
+  snprintf(video_hud_toast, sizeof(video_hud_toast), "%.63s", msg);
+  video_hud_toast_until = SDL_GetTicks() + 1800u;
+  ui_anim_kick(400);
+}
+
+#include "r36s_hw.h"
+#include "playlists.h"
+
 static void play_path(const char *path) {
   radio_cancel_retries();
   resume_pending_ms = -1;
@@ -903,7 +923,23 @@ static void play_path(const char *path) {
   meta_next = 0;
   libvlc_media_player_set_rate(player, playing_audio ? 1.0f : rate);
   mode = playing_audio ? 4 : 1;
-  osd_until = SDL_GetTicks() + 3000;
+  if (!playing_audio) {
+    video_osd_row = 0;
+    video_dock_idx = 0;
+    video_locked = false;
+    video_ab_a = -1;
+    video_ab_b = -1;
+    long long wh_pos = kp_wh_find_ms(saved, NULL);
+    if (wh_pos >= 5000) {
+      resume_pending_ms = wh_pos;
+      resume_deadline = SDL_GetTicks() + 15000;
+      char wt[32], msg[64];
+      time_string(wh_pos, wt, sizeof(wt));
+      snprintf(msg, sizeof(msg), "Continuando de %s", wt);
+      video_show_toast(msg);
+    }
+  }
+  osd_until = SDL_GetTicks() + 3500;
   show_osd = true;
 }
 static void save_resume(void) {
@@ -912,6 +948,9 @@ static void save_resume(void) {
   if (pos < 0) return;
   char full[PATH_MAX];
   if (!realpath(current_path, full)) return;
+  if (!playing_audio && !playing_iptv && !playing_news_video) {
+    kp_wh_record(full, pos, duration_ms());
+  }
   FILE *f = fopen("resume.tmp", "w");
   if (!f) return;
   bool ok = fprintf(f, "%lld\n%s\n", pos, full) > 0;
@@ -1080,6 +1119,7 @@ extern char **environ;
 #include "splash.h"
 // First-run screens use the skin drawing helpers.
 #include "onboarding.h"
+#include "wifi_diag.h"
 static void track_label(bool subtitle, char *out, size_t n) {
   int id =
       subtitle ? libvlc_video_get_spu(player) : libvlc_audio_get_track(player);
@@ -1213,12 +1253,13 @@ static int opt_cursor = 0;
 static int opt_scroll = 0;
 
 /* General Root order (strict A-Z, then penultimate [A] Verificar atualizacoes, then last Sair):
- * 18=Adaptacao de tela, 22=Clima e Localizacao, 5=Idioma,
- * 24=Layout da tela inicial, 27=Mini-Player no Sistema Inteiro,
- * 25=Protetor de tela, 20=Rever comandos, 26=Sons das teclas,
- * 9=Tema, 6=Termos de uso, 15=Timer de sono,
- * 19=[A] Verificar atualizacoes (penultimate), 8=Sair (last). */
-static const int opt_root_ids[] = {18, 22, 5, 24, 27, 25, 20, 26, 9, 6, 15, 19, 8};
+ * 80=Ação do timer de sono, 18=Adaptação de tela, 82=Backup e restauração,
+ * 81=Brilho da tela, 22=Clima e Localização, 83=Diagnóstico do sistema,
+ * 5=Idioma, 24=Layout da tela inicial, 27=Mini-Player no Sistema Inteiro,
+ * 25=Protetor de tela, 20=Rever comandos, 26=Sons das teclas, 9=Tema,
+ * 6=Termos de uso, 15=Timer de sono, 84=Transferir via Wi-Fi,
+ * 19=[A] Verificar atualizações (penultimate), 8=Sair (last). */
+static const int opt_root_ids[] = {80, 18, 82, 81, 22, 83, 5, 24, 27, 25, 20, 26, 9, 6, 15, 84, 19, 8};
 #define OPT_ROOT_COUNT ((int)(sizeof(opt_root_ids) / sizeof(opt_root_ids[0])))
 
 static const int opt_weather_ids[] = {30, 31, 32, 11, 33, -99};
@@ -1231,20 +1272,20 @@ static const int opt_screensaver_ids[] = {70, 71, 72, 73, 74, -99};
 #define OPT_SCREENSAVER_COUNT 6
 
 /* Video player contextual options ONLY */
-static const int opt_video_ids[] = {0, 1, 2, 3, 4, 14, -98};
-#define OPT_VIDEO_COUNT 7
+static const int opt_video_ids[] = {0, 1, 2, 3, 81, 88, 4, 14, 15, -98};
+#define OPT_VIDEO_COUNT ((int)(sizeof(opt_video_ids) / sizeof(opt_video_ids[0])))
 
 /* Music player contextual options ONLY */
-static const int opt_music_ids[] = {12, 16, 7, 13, 4, 14, 0, 25, 15, -98};
-#define OPT_MUSIC_COUNT 10
+static const int opt_music_ids[] = {12, 16, 7, 13, 85, 86, 87, 81, 4, 14, 0, 25, 15, -98};
+#define OPT_MUSIC_COUNT ((int)(sizeof(opt_music_ids) / sizeof(opt_music_ids[0])))
 
-/* TV / IPTV contextual options ONLY */
-static const int opt_iptv_ids[] = {50, 51, 52, 53, 54, 28, 6, -98};
+/* TV / IPTV contextual options ONLY (Seção +18 & PIN live strictly here) */
+static const int opt_iptv_ids[] = {50, 51, 52, 53, 54, 28, 29, 6, -98};
 #define OPT_IPTV_COUNT ((int)(sizeof(opt_iptv_ids) / sizeof(opt_iptv_ids[0])))
 
 /* Radio contextual options ONLY */
-static const int opt_radio_ids[] = {60, 61, 62, 25, 15, 6, -98};
-#define OPT_RADIO_COUNT 7
+static const int opt_radio_ids[] = {60, 61, 62, 87, 81, 25, 15, 6, -98};
+#define OPT_RADIO_COUNT ((int)(sizeof(opt_radio_ids) / sizeof(opt_radio_ids[0])))
 
 typedef struct {
   const char *btn;
@@ -1483,6 +1524,7 @@ static const char *opt_label_for(int id) {
   case 26: return "Sons das teclas";
   case 27: return "Mini-Player no Sistema Inteiro";
   case 28: return "Seção +18";
+  case 29: return "PIN da Seção +18 (4 direções)";
   case 30: return "Abrir aplicativo de Clima";
   case 31: return "Usar localização do meu IP";
   case 32: return "Pesquisar cidade manualmente";
@@ -1510,6 +1552,15 @@ static const char *opt_label_for(int id) {
   case 72: return "Relógio, data e clima";
   case 73: return "Letras sobre visualizador";
   case 74: return "Iniciar protetor agora";
+  case 80: return "Ação do timer de sono";
+  case 81: return "Brilho da tela";
+  case 82: return "Backup e restauração (.zip)";
+  case 83: return "Diagnóstico do sistema";
+  case 84: return "Transferir via Wi-Fi";
+  case 85: return "Salvar fila como playlist (.m3u)";
+  case 86: return "Carregar playlist salva (.m3u)";
+  case 87: return "Apagar tela (modo bolso)";
+  case 88: return "Travar controles do vídeo";
   case -98: return "Configurações gerais ›";
   case -99: return "← Voltar às Opções";
   default: return "";
@@ -1566,8 +1617,8 @@ static void opt_value_for(int id, char *value, size_t cap) {
     snprintf(value, cap, "%s", tr(shuffle_enabled ? "Ativada" : "Desativada"));
     break;
   case 15: {
-    const int minutes[] = {0, 15, 30, 60, 90, 120};
-    if (sleep_choice) snprintf(value, cap, "%d min", minutes[sleep_choice]);
+    const int minutes[] = {0, 15, 30, 45, 60, 90, 120};
+    if (sleep_choice > 0 && sleep_choice < 7) snprintf(value, cap, "%d min", minutes[sleep_choice]);
     else snprintf(value, cap, "%s", tr("Desativada"));
     break;
   }
@@ -1623,6 +1674,38 @@ static void opt_value_for(int id, char *value, size_t cap) {
   case 28:
     snprintf(value, cap, "%s",
              adult_section_unlocked ? "Desbloqueado" : "Bloqueado");
+    break;
+  case 29:
+    snprintf(value, cap, "%s",
+             adult_pin_enabled ? "Ativo (B alterar)" : "Desativado (B ativar)");
+    break;
+  case 80:
+    snprintf(value, cap, "%s",
+             sleep_action == 1 ? "Desligar console" : "Pausar reprodução");
+    break;
+  case 81:
+    snprintf(value, cap, "%d%%", kp_hw_brightness_pct);
+    break;
+  case 82:
+    snprintf(value, cap, "Abrir ›");
+    break;
+  case 83:
+    snprintf(value, cap, "Hardware & Som ›");
+    break;
+  case 84:
+    snprintf(value, cap, "QR + PIN ›");
+    break;
+  case 85:
+    snprintf(value, cap, "%d faixas", queue_count);
+    break;
+  case 86:
+    snprintf(value, cap, "Abrir ›");
+    break;
+  case 87:
+    snprintf(value, cap, "Economizar bateria");
+    break;
+  case 88:
+    snprintf(value, cap, "%s", video_locked ? "Travados" : "Destravados");
     break;
   case 30:
     snprintf(value, cap, "Open-Meteo ›");
@@ -1970,8 +2053,8 @@ static void change_option(int dir) {
     resume_last();
     break;
   case 15: {
-    const int minutes[] = {0, 15, 30, 60, 90, 120};
-    sleep_choice = (sleep_choice + dir + 6) % 6;
+    const int minutes[] = {0, 15, 30, 45, 60, 90, 120};
+    sleep_choice = (sleep_choice + dir + 7) % 7;
     sleep_end = sleep_choice ? SDL_GetTicks() + (uint32_t)minutes[sleep_choice] * 60000u : 0;
     break;
   }
@@ -2052,6 +2135,62 @@ static void change_option(int dir) {
       save_settings();
       notify("Seção +18 bloqueada e oculta do IPTV");
     }
+    break;
+  case 29:
+    if (dir < 0 && adult_pin_enabled) {
+      adult_pin_enabled = false;
+      save_settings();
+      notify("PIN da Seção +18 desativado");
+    } else {
+      kp_pin_open_set(2);
+    }
+    break;
+  case 80:
+    sleep_action = (sleep_action + 1) % 2;
+    save_settings();
+    notify(sleep_action == 1 ? "Timer de sono: Desligar console"
+                             : "Timer de sono: Pausar reprodução");
+    break;
+  case 81: {
+    int pct = kp_hw_step_brightness(dir >= 0 ? 10 : -10);
+    save_settings();
+    char bmsg[48];
+    snprintf(bmsg, sizeof(bmsg), "Brilho da tela: %d%%", pct);
+    notify(bmsg);
+    break;
+  }
+  case 82:
+    diag_open(2, 2);
+    break;
+  case 83:
+    diag_open(2, 0);
+    break;
+  case 84:
+    wifi_transfer_open(2);
+    break;
+  case 85: {
+    char pname[128] = "";
+    if (kp_queue_save_m3u(NULL, pname, sizeof(pname))) {
+      char pmsg[192];
+      snprintf(pmsg, sizeof(pmsg), "Playlist salva: playlists/%.120s", pname);
+      notify(pmsg);
+    } else {
+      notify("Fila vazia ou erro ao salvar playlist");
+    }
+    break;
+  }
+  case 86:
+    playlists_picker_open(2);
+    break;
+  case 87:
+    mode = return_mode;
+    kp_hw_set_screen_off(true);
+    break;
+  case 88:
+    video_locked = !video_locked;
+    mode = return_mode;
+    osd_until = SDL_GetTicks() + 2600;
+    video_show_toast(video_locked ? "Controles travados" : "Controles destravados");
     break;
   case 30:
     weather_open(2);
@@ -2190,8 +2329,105 @@ static void open_options(void) {
     opt_entry_section = OPT_SEC_ROOT;
   opt_enter_section(opt_entry_section);
 }
+static void video_exec_dock_action(void) {
+  char msg[64] = "";
+  switch (video_dock_idx) {
+  case 0: /* Pause / Play */
+    toggle_pause();
+    video_show_toast(paused ? "Pausado" : "Reproduzindo");
+    break;
+  case 1: { /* Playback speed */
+    float nr = rate + 0.25f;
+    if (nr > 2.01f) nr = 0.5f;
+    if (libvlc_media_player_set_rate(player, nr) == 0 || preview_mode) rate = nr;
+    save_settings();
+    snprintf(msg, sizeof(msg), "Velocidade: %.2fx", rate);
+    video_show_toast(msg);
+    break;
+  }
+  case 2: /* Aspect / Fit */
+    fit = (fit + 1) % 3;
+    save_settings();
+    snprintf(msg, sizeof(msg), "Tela: %s",
+             fit == 0 ? "Proporção original" : fit == 1 ? "Preencher (corte)" : "Esticar");
+    video_show_toast(msg);
+    break;
+  case 3: /* Audio track */
+    cycle_track(false, 1);
+    track_label(false, msg, sizeof(msg));
+    {
+      char amsg[96];
+      snprintf(amsg, sizeof(amsg), "Áudio: %.48s", msg[0] ? msg : "Padrão");
+      video_show_toast(amsg);
+    }
+    break;
+  case 4: /* Subtitle track */
+    cycle_track(true, 1);
+    track_label(true, msg, sizeof(msg));
+    {
+      char smsg[96];
+      snprintf(smsg, sizeof(smsg), "Legenda: %.48s", msg[0] ? msg : "Desativada");
+      video_show_toast(smsg);
+    }
+    break;
+  case 5: { /* LCD Backlight Brightness */
+    int next_b = kp_hw_brightness_pct + 20;
+    if (next_b > 100) next_b = 20;
+    kp_hw_set_brightness_pct(next_b);
+    save_settings();
+    snprintf(msg, sizeof(msg), "Brilho: %d%%", kp_hw_brightness_pct);
+    video_show_toast(msg);
+    break;
+  }
+  case 6: { /* A-B Loop */
+    long long cur = now_ms();
+    if (video_ab_a < 0) {
+      video_ab_a = cur;
+      video_ab_b = -1;
+      char ta[24];
+      time_string(video_ab_a, ta, sizeof(ta));
+      snprintf(msg, sizeof(msg), "Ponto A marcado (%s)", ta);
+    } else if (video_ab_b <= video_ab_a) {
+      if (cur > video_ab_a + 500) {
+        video_ab_b = cur;
+        char ta[24], tb[24];
+        time_string(video_ab_a, ta, sizeof(ta));
+        time_string(video_ab_b, tb, sizeof(tb));
+        snprintf(msg, sizeof(msg), "Loop A-B: %s → %s", ta, tb);
+      } else {
+        video_ab_a = video_ab_b = -1;
+        snprintf(msg, sizeof(msg), "Loop A-B cancelado");
+      }
+    } else {
+      video_ab_a = video_ab_b = -1;
+      snprintf(msg, sizeof(msg), "Loop A-B desativado");
+    }
+    video_show_toast(msg);
+    break;
+  }
+  case 7: /* Lock controls */
+    video_locked = true;
+    video_show_toast("Controles travados");
+    break;
+  }
+}
+
 static void key(SDL_Keycode k, bool repeat) {
+  if (kp_hw_screen_off) {
+    if (!repeat) {
+      kp_hw_set_screen_off(false);
+      notify("Tela reativada");
+    }
+    return;
+  }
   ui_anim_kick(320);
+  if (kp_pin_modal_mode != KP_PIN_MODE_NONE) {
+    if (!repeat) {
+      sfx_play_for_key(k);
+      kp_pin_handle_key(k);
+    }
+    return;
+  }
   if (!repeat || k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT || k == SDLK_RIGHT)
     sfx_play_for_key(k);
   if (radio_play_is_busy()) {
@@ -2204,6 +2440,15 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (k == SDLK_ESCAPE) {
     running = 0;
+    return;
+  }
+  if (mode == 1 && video_locked) {
+    osd_until = SDL_GetTicks() + 2500;
+    if ((k == SDLK_SPACE || k == SDLK_F1) && !repeat) {
+      video_locked = false;
+      show_osd = true;
+      video_show_toast("Controles destravados");
+    }
     return;
   }
   if (k == SDLK_F1 && !repeat) {
@@ -2250,10 +2495,14 @@ static void key(SDL_Keycode k, bool repeat) {
   if (mode == 10) {
     if (k == SDLK_RETURN && !repeat) {
       if (stream_notice_target == 18) {
-        adult_section_unlocked = true;
-        save_settings();
-        mode = stream_notice_return;
-        notify("Seção +18 desbloqueada no serviço de IPTV");
+        if (adult_pin_enabled) {
+          kp_pin_open_unlock(stream_notice_return);
+        } else {
+          adult_section_unlocked = true;
+          save_settings();
+          mode = stream_notice_return;
+          notify("Seção +18 desbloqueada no serviço de IPTV");
+        }
       } else {
         stream_notice_accepted = true;
         if (stream_notice_target == 7)
@@ -2315,8 +2564,9 @@ static void key(SDL_Keycode k, bool repeat) {
           option == 4 || option == 5 || option == 9 || option == 11 ||
           option == 12 || option == 15 || option == 16 || option == 18 ||
           option == 24 || option == 26 || option == 27 || option == 28 ||
-          option == 52 || option == 61 || option == 70 || option == 71 ||
-          option == 72 || option == 73)
+          option == 29 || option == 52 || option == 61 || option == 70 ||
+          option == 71 || option == 72 || option == 73 || option == 80 ||
+          option == 81 || option == 88)
         change_option(-1);
     } else if (k == SDLK_RIGHT) {
       if (option == 0 || option == 1 || option == 2 || option == 3 ||
@@ -2324,7 +2574,8 @@ static void key(SDL_Keycode k, bool repeat) {
           option == 12 || option == 15 || option == 16 || option == 18 ||
           option == 24 || option == 26 || option == 27 || option == 28 ||
           option == 52 || option == 61 || option == 70 || option == 71 ||
-          option == 72 || option == 73)
+          option == 72 || option == 73 || option == 80 || option == 81 ||
+          option == 88)
         change_option(1);
     } else if (k == SDLK_RETURN && !repeat) {
       change_option(1);
@@ -2390,6 +2641,18 @@ static void key(SDL_Keycode k, bool repeat) {
   }
   if (mode == 16) {
     fm_key(k, repeat);
+    return;
+  }
+  if (mode == 17) {
+    if (!repeat) wifi_transfer_key(k);
+    return;
+  }
+  if (mode == 18) {
+    if (!repeat) diagnostics_key(k);
+    return;
+  }
+  if (mode == 19) {
+    if (!repeat) playlists_picker_key(k);
     return;
   }
   if (mode == 0) {
@@ -2490,8 +2753,18 @@ static void key(SDL_Keycode k, bool repeat) {
           plain_scroll = plain_count - 1;
       }
     } else if (k == SDLK_m && !repeat) {
-      audio_panel = 0;
-      plain_scroll = 0;
+      if (audio_panel == 1 && queue_count > 1) {
+        if (kp_queue_remove_at(queue_selected))
+          notify("Faixa removida da fila");
+      } else {
+        audio_panel = 0;
+        plain_scroll = 0;
+      }
+    } else if ((k == SDLK_PAGEUP || k == SDLK_PAGEDOWN) && !repeat) {
+      if (audio_panel == 1 && queue_count > 1) {
+        if (kp_queue_move_at(queue_selected, k == SDLK_PAGEUP ? -1 : 1))
+          notify("Ordem da fila atualizada");
+      }
     } else if ((k == SDLK_q || k == SDLK_e) && !repeat) {
       next_media(k == SDLK_q ? -1 : 1);
       queue_selected = queue_index;
@@ -2509,13 +2782,18 @@ static void key(SDL_Keycode k, bool repeat) {
     mode = was_fm ? 16 : was_news ? 15 : was_iptv ? 8 : 3;
     return;
   }
-  if (k == SDLK_RETURN && !repeat)
-    toggle_pause();
-  else if (k == SDLK_SPACE && !repeat) {
-    {
-      show_osd = !show_osd;
-      return;
+  bool osd_vis = show_osd && (SDL_GetTicks() < osd_until || paused || preview_mode);
+  if (k == SDLK_RETURN && !repeat) {
+    if (mode == 1 && osd_vis && video_osd_row == 1) {
+      video_exec_dock_action();
+    } else {
+      toggle_pause();
+      if (mode == 1) video_show_toast(paused ? "Pausado" : "Reproduzindo");
     }
+  } else if (k == SDLK_SPACE && !repeat) {
+    show_osd = !show_osd;
+    if (show_osd) osd_until = SDL_GetTicks() + 3800;
+    return;
   } else if (k == SDLK_m && !repeat) {
     if (mode == 4)
       toggle_favorite();
@@ -2526,15 +2804,28 @@ static void key(SDL_Keycode k, bool repeat) {
       iptv_step_channel(k == SDLK_q ? -1 : 1);
     else
       next_media(k == SDLK_q ? -1 : 1);
-  }
-  else if (k == SDLK_LEFT || k == SDLK_RIGHT)
-    seek_media(k == SDLK_LEFT ? -10000 : 10000);
-  else if (k == SDLK_PAGEUP || k == SDLK_PAGEDOWN)
-    seek_media(k == SDLK_PAGEUP ? -5000 : 5000);
-  else if (k == SDLK_UP || k == SDLK_DOWN) {
-    /* Volume is controlled exclusively by the console firmware. */
+  } else if (k == SDLK_LEFT || k == SDLK_RIGHT) {
+    if (mode == 1 && osd_vis && video_osd_row == 1) {
+      video_dock_idx = (video_dock_idx + (k == SDLK_LEFT ? 7 : 1)) % 8;
+    } else {
+      seek_media(k == SDLK_LEFT ? -10000 : 10000);
+      if (mode == 1) video_show_toast(k == SDLK_LEFT ? "-10s" : "+10s");
+    }
+  } else if (k == SDLK_PAGEUP || k == SDLK_PAGEDOWN) {
+    seek_media(k == SDLK_PAGEUP ? -30000 : 30000);
+    if (mode == 1) video_show_toast(k == SDLK_PAGEUP ? "-30s" : "+30s");
+  } else if (k == SDLK_UP || k == SDLK_DOWN) {
+    if (mode == 1) {
+      if (!osd_vis) {
+        show_osd = true;
+        video_osd_row = 1;
+      } else {
+        video_osd_row = (k == SDLK_DOWN) ? 1 : 0;
+      }
+    }
   }
   show_osd = true;
+  osd_until = SDL_GetTicks() + 3800;
 }
 static bool read_font(const char *path, unsigned char **data,
                       stbtt_fontinfo *info) {
@@ -2570,14 +2861,17 @@ static void save_settings(void) {
           "KPLAYER_SETTINGS 2\nfit %d\nloop %d\nrate %.2f\ntheme %d\n"
           "location %d\nrepeat %d\nshuffle %d\ndisplay %d\n"
           "home_inv %d\ntutorial %d\nss_sec %d\nss_viz %d\nss_clock %d\nss_lyrics %d\n"
-          "seen_ver %s\nui_sfx %d\nbg_audio %d\nadult_18 %d\n",
+          "seen_ver %s\nui_sfx %d\nbg_audio %d\nadult_18 %d\n"
+          "sleep_act %d\nbrightness %d\nadult_pin_on %d\nadult_pin_h %llu\n",
           fit, loop_video, rate, theme_index,
           network_location_enabled ? 1 : 0, repeat_mode,
           shuffle_enabled ? 1 : 0, display_mode,
           home_layout_inverted ? 1 : 0, tutorial_done ? 1 : 0,
           ss_timeout_idx, ss_viz_style, ss_show_clock ? 1 : 0, ss_show_lyrics ? 1 : 0,
           seen_version[0] ? seen_version : "-", ui_sfx_enabled ? 1 : 0,
-          bg_audio_preview ? 1 : 0, adult_section_unlocked ? 1 : 0);
+          bg_audio_preview ? 1 : 0, adult_section_unlocked ? 1 : 0,
+          sleep_action, kp_hw_brightness_pct, adult_pin_enabled ? 1 : 0,
+          (unsigned long long)adult_pin_hash);
   if (fclose(f) == 0)
     rename("settings.tmp", "settings.cfg");
 }
@@ -2593,7 +2887,10 @@ static void load_settings(void) {
                                 saved_tutorial = 0, saved_ss_sec = 1,
                                 saved_ss_viz = 0, saved_ss_clock = 1,
                                 saved_ss_lyrics = 1, saved_ui_sfx = 1,
-                                saved_bg_audio = 0, saved_adult_18 = 0;
+                                saved_bg_audio = 0, saved_adult_18 = 0,
+                                saved_sleep_act = 0, saved_brightness = 100,
+                                saved_pin_on = 0;
+  unsigned long long saved_pin_h = 0;
   float r;
   bool valid = false;
   if (fgets(line, sizeof(line), f)) {
@@ -2614,6 +2911,10 @@ static void load_settings(void) {
       if (valid && fscanf(f, "\nui_sfx %d", &saved_ui_sfx) != 1) saved_ui_sfx = 1;
       if (valid && fscanf(f, "\nbg_audio %d", &saved_bg_audio) != 1) saved_bg_audio = 0;
       if (valid && fscanf(f, "\nadult_18 %d", &saved_adult_18) != 1) saved_adult_18 = 0;
+      if (valid && fscanf(f, "\nsleep_act %d", &saved_sleep_act) != 1) saved_sleep_act = 0;
+      if (valid && fscanf(f, "\nbrightness %d", &saved_brightness) != 1) saved_brightness = 100;
+      if (valid && fscanf(f, "\nadult_pin_on %d", &saved_pin_on) != 1) saved_pin_on = 0;
+      if (valid && fscanf(f, "\nadult_pin_h %llu", &saved_pin_h) != 1) saved_pin_h = 0;
     } else
       valid = sscanf(line, "%d %d %d %f", &legacy_setting, &ft, &loop, &r) == 4;
   }
@@ -2634,6 +2935,10 @@ static void load_settings(void) {
     ui_sfx_enabled = saved_ui_sfx != 0;
     bg_audio_preview = saved_bg_audio == 1;
     adult_section_unlocked = saved_adult_18 == 1;
+    sleep_action = saved_sleep_act == 1 ? 1 : 0;
+    kp_hw_set_brightness_pct(saved_brightness);
+    adult_pin_enabled = saved_pin_on == 1;
+    adult_pin_hash = (uint64_t)saved_pin_h;
     if (saved_seen[0] && strcmp(saved_seen, "-") != 0)
       snprintf(seen_version, sizeof(seen_version), "%.31s", saved_seen);
     else
@@ -3145,6 +3450,18 @@ int main(int argc, char **argv) {
       sleep_choice = 0;
       sleep_end = 0;
       if (active) { save_resume(); stop_media(); mode = 3; }
+      save_settings();
+      if (sleep_action == 1 && !preview_mode && !getenv("KPLAYER_NO_POWEROFF")) {
+        char *p_argv[] = {"poweroff", NULL};
+        pid_t pp = 0;
+        if (posix_spawnp(&pp, "poweroff", NULL, NULL, p_argv, environ) != 0) {
+          char *s_argv[] = {"systemctl", "poweroff", NULL};
+          (void)posix_spawnp(&pp, "systemctl", NULL, NULL, s_argv, environ);
+        }
+        running = 0;
+      } else {
+        notify("Timer de sono concluído: reprodução pausada");
+      }
     }
     static uint32_t resume_next_save;
     SDL_Event e;
@@ -3172,6 +3489,12 @@ int main(int argc, char **argv) {
       if (!playing_radio && resume_pending_ms < 0 && (int32_t)(frame - resume_next_save) >= 0) {
         save_resume();
         resume_next_save = frame + 10000;
+      }
+      if (mode == 1 && !paused && video_ab_a >= 0 && video_ab_b > video_ab_a) {
+        long long cpos = now_ms();
+        if (cpos >= video_ab_b) {
+          libvlc_media_player_set_time(player, video_ab_a);
+        }
       }
       update_metadata();
       libvlc_state_t state = libvlc_media_player_get_state(player);
@@ -3211,6 +3534,14 @@ int main(int argc, char **argv) {
         }
       }
     }
+    if (kp_hw_screen_off) {
+      begin_full_screen_pass();
+      color((SDL_Color){0, 0, 0, 255});
+      SDL_RenderClear(renderer);
+      SDL_RenderPresent(renderer);
+      SDL_Delay(120);
+      continue;
+    }
     ui_trans_check_mode(mode);
     if (mode == 1)
       draw_video();
@@ -3244,8 +3575,15 @@ int main(int argc, char **argv) {
       draw_news();
     else if (mode == 16)
       draw_file_manager();
+    else if (mode == 17)
+      draw_wifi_transfer();
+    else if (mode == 18)
+      draw_diagnostics();
+    else if (mode == 19)
+      draw_playlists_picker();
     else
       draw_menu();
+    kp_pin_draw_modal();
     ui_trans_overlay();
     SDL_RenderPresent(renderer);
     uint32_t elapsed = SDL_GetTicks() - frame;
@@ -3262,6 +3600,8 @@ int main(int argc, char **argv) {
     if (elapsed < frame_ms)
       SDL_Delay(frame_ms - elapsed);
   }
+  wifi_transfer_stop();
+  kp_hw_set_screen_off(false);
   save_settings();
   save_resume();
   bool handoff_ready = false;

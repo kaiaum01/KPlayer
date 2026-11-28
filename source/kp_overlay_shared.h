@@ -17,10 +17,10 @@
 #include <time.h>
 
 #define KP_OV_MAGIC 0x4B504D50u /* "KPMP" */
-#define KP_OV_VERSION 4u
+#define KP_OV_VERSION 5u
 #define KP_OV_CARD_W 296
-#define KP_OV_CARD_H 240
-#define KP_OV_ROW_COUNT 5
+#define KP_OV_CARD_H 304
+#define KP_OV_ROW_COUNT 7
 #define KP_OV_DEFAULT_SHM_PATH "/dev/shm/kplayer-overlay.shm"
 #define KP_OV_MAIN_LOCK_PATH "/dev/shm/kplayer-main.lock"
 
@@ -39,13 +39,21 @@ typedef struct {
   volatile uint8_t accent_g;
   volatile uint8_t accent_b;
   uint8_t reserved0;
+  volatile uint32_t shuffle;
+  volatile uint32_t repeat_mode; /* 0=off, 1=track, 2=queue */
+  volatile int32_t battery_pct;  /* -1=N/A, 0..100 */
+  volatile uint32_t pos_sec;
+  volatile uint32_t dur_sec;
   volatile int64_t last_draw_ms;
   volatile int64_t last_hook_ms;
   volatile int64_t last_input_hook_ms;
   volatile int64_t swallow_until_ms;
+  volatile int64_t toast_until_ms;
   volatile uint32_t hook_pid;
   uint32_t reserved1;
+  char clock_hhmm[8];
   char title[160];
+  char toast_text[128];
 } KpOverlayShared;
 
 static inline int64_t kp_ov_now_ms(void) {
@@ -289,11 +297,22 @@ static inline void kp_ov_draw_text_right(uint32_t *buf, int bw, int bh,
   kp_ov_draw_text(buf, bw, bh, x, y, scale, right_x - x + 6 * scale, asc, col);
 }
 
+static inline void kp_ov_fmt_time(uint32_t secs, char *out, size_t cap) {
+  uint32_t m = secs / 60u;
+  uint32_t s = secs % 60u;
+  if (m >= 60u) {
+    uint32_t h = m / 60u;
+    snprintf(out, cap, "%u:%02u:%02u", h, m % 60u, s);
+  } else {
+    snprintf(out, cap, "%02u:%02u", m, s);
+  }
+}
+
 static inline void kp_ov_render_rgba(const KpOverlayShared *st, uint32_t *rgba_out) {
   if (!st || !rgba_out) return;
   const int w = KP_OV_CARD_W;
   const int h = KP_OV_CARD_H;
-  /* Clear buffer fully transparent so rounded outer corners blend seamlessly */
+  /* Clear buffer fully transparent so rounded outer corners & toast mode blend seamlessly */
   memset(rgba_out, 0, (size_t)w * (size_t)h * sizeof(uint32_t));
 
   uint8_t ar = st->accent_r ? st->accent_r : 29;
@@ -312,6 +331,28 @@ static inline void kp_ov_render_rgba(const KpOverlayShared *st, uint32_t *rgba_o
   uint32_t disc_dark = kp_ov_rgba(16, 21, 28, 255);
   uint32_t disc_groove = kp_ov_rgba(40, 48, 60, 255);
 
+  /* Mode A: Discreet slim top track-change toast when full Mini-Player is closed */
+  if (!st->overlay_open) {
+    int th = 36;
+    kp_ov_fill_rounded_grad(
+        rgba_out, w, h, 0, 0, w, th, 9,
+        kp_ov_lerp8(18, ar, 14, 100), kp_ov_lerp8(22, ag, 14, 100), kp_ov_lerp8(30, ab, 14, 100),
+        10, 13, 18, 236);
+    kp_ov_stroke_rounded(rgba_out, w, h, 0, 0, w, th, 9, border_soft);
+    kp_ov_fill_rect(rgba_out, w, h, 4, 7, 3, th - 14, acc);
+    kp_ov_draw_text(rgba_out, w, h, 14, 7, 1, 140,
+                    st->is_radio ? "RADIO KPLAYER" : "TOCANDO AGORA", acc);
+    if (st->clock_hhmm[0]) {
+      kp_ov_draw_text_right(rgba_out, w, h, w - 10, 7, 1, st->clock_hhmm, muted);
+    }
+    char toast_copy[128];
+    memcpy(toast_copy, st->toast_text, sizeof(toast_copy));
+    toast_copy[sizeof(toast_copy) - 1] = 0;
+    const char *line = toast_copy[0] ? toast_copy : st->title;
+    kp_ov_draw_text(rgba_out, w, h, 14, 20, 1, w - 24, line, white);
+    return;
+  }
+
   unsigned int sel = (unsigned int)st->selected_row;
   if (sel >= KP_OV_ROW_COUNT) sel = 0;
 
@@ -325,7 +366,7 @@ static inline void kp_ov_render_rgba(const KpOverlayShared *st, uint32_t *rgba_o
   /* Subtle KPlayer top accent line inside rounded header */
   kp_ov_fill_rect(rgba_out, w, h, 14, 1, w - 28, 2, acc);
 
-  /* 2. KPlayer Header: Vinyl Disc Emblem + "K PLAYER" + "MINI-PLAYER" + item counter */
+  /* 2. KPlayer Header: Vinyl Disc Emblem + "K PLAYER" + Clock & Battery */
   kp_ov_fill_circle(rgba_out, w, h, 22, 22, 11, acc);
   kp_ov_fill_circle(rgba_out, w, h, 22, 22, 9, disc_dark);
   kp_ov_fill_circle(rgba_out, w, h, 22, 22, 7, disc_groove);
@@ -333,25 +374,42 @@ static inline void kp_ov_render_rgba(const KpOverlayShared *st, uint32_t *rgba_o
   kp_ov_fill_circle(rgba_out, w, h, 22, 22, 4, acc);
   kp_ov_fill_circle(rgba_out, w, h, 22, 22, 1, disc_dark);
 
-  kp_ov_draw_text(rgba_out, w, h, 40, 10, 2, 180, "K PLAYER", white);
-  kp_ov_draw_text(rgba_out, w, h, 41, 27, 1, 160, "MINI-PLAYER", acc);
-  char idx_badge[16];
-  snprintf(idx_badge, sizeof(idx_badge), "%u/%u", sel + 1u, (unsigned int)KP_OV_ROW_COUNT);
-  kp_ov_draw_text_right(rgba_out, w, h, w - 12, 17, 1, idx_badge, muted);
+  kp_ov_draw_text(rgba_out, w, h, 40, 10, 2, 140, "K PLAYER", white);
+  kp_ov_draw_text(rgba_out, w, h, 41, 27, 1, 130, "MINI-PLAYER", acc);
 
-  /* 3. KPlayer Now-Playing rounded inner card */
-  kp_ov_fill_rounded_grad(rgba_out, w, h, 8, 41, w - 16, 36, 7,
+  /* Right header telemetry: Clock HH:MM + Battery % */
+  char sys_top[32];
+  if (st->battery_pct >= 0 && st->clock_hhmm[0]) {
+    snprintf(sys_top, sizeof(sys_top), "%s %d%%", st->clock_hhmm, (int)st->battery_pct);
+  } else if (st->battery_pct >= 0) {
+    snprintf(sys_top, sizeof(sys_top), "BAT %d%%", (int)st->battery_pct);
+  } else if (st->clock_hhmm[0]) {
+    snprintf(sys_top, sizeof(sys_top), "%s", st->clock_hhmm);
+  } else {
+    snprintf(sys_top, sizeof(sys_top), "%u/%u", sel + 1u, (unsigned int)KP_OV_ROW_COUNT);
+  }
+  uint32_t bat_col = (st->battery_pct >= 0 && st->battery_pct <= 15)
+                         ? kp_ov_rgba(248, 113, 113, 255)
+                         : white;
+  kp_ov_draw_text_right(rgba_out, w, h, w - 12, 11, 1, sys_top, bat_col);
+
+  char idx_badge[16];
+  snprintf(idx_badge, sizeof(idx_badge), "ITEM %u/%u", sel + 1u, (unsigned int)KP_OV_ROW_COUNT);
+  kp_ov_draw_text_right(rgba_out, w, h, w - 12, 25, 1, idx_badge, muted);
+
+  /* 3. KPlayer Now-Playing rounded inner card (with live progress bar) */
+  kp_ov_fill_rounded_grad(rgba_out, w, h, 8, 41, w - 16, 48, 7,
                           19, 24, 33, 13, 17, 24, 246);
-  kp_ov_stroke_rounded(rgba_out, w, h, 8, 41, w - 16, 36, 7, card_border);
+  kp_ov_stroke_rounded(rgba_out, w, h, 8, 41, w - 16, 48, 7, card_border);
 
   /* Mini equalizer icon on left of Now-Playing card */
   if (!st->paused) {
-    kp_ov_fill_rect(rgba_out, w, h, 15, 58, 3, 11, acc);
-    kp_ov_fill_rect(rgba_out, w, h, 20, 52, 3, 17, acc);
-    kp_ov_fill_rect(rgba_out, w, h, 25, 56, 3, 13, acc);
+    kp_ov_fill_rect(rgba_out, w, h, 15, 56, 3, 11, acc);
+    kp_ov_fill_rect(rgba_out, w, h, 20, 50, 3, 17, acc);
+    kp_ov_fill_rect(rgba_out, w, h, 25, 54, 3, 13, acc);
   } else {
-    kp_ov_fill_rect(rgba_out, w, h, 16, 53, 4, 15, muted);
-    kp_ov_fill_rect(rgba_out, w, h, 23, 53, 4, 15, muted);
+    kp_ov_fill_rect(rgba_out, w, h, 16, 51, 4, 15, muted);
+    kp_ov_fill_rect(rgba_out, w, h, 23, 51, 4, 15, muted);
   }
 
   unsigned int tc = (unsigned int)st->track_count;
@@ -361,28 +419,53 @@ static inline void kp_ov_render_rgba(const KpOverlayShared *st, uint32_t *rgba_o
            st->paused ? "PAUSADO" : "TOCANDO AGORA");
   snprintf(status_right, sizeof(status_right), "%s %u/%u",
            st->is_radio ? "RADIO" : "FAIXA", ti, tc);
-  kp_ov_draw_text(rgba_out, w, h, 35, 47, 1, 145, status_left, st->paused ? muted : acc);
-  kp_ov_draw_text_right(rgba_out, w, h, w - 15, 47, 1, status_right, muted);
+  kp_ov_draw_text(rgba_out, w, h, 35, 46, 1, 145, status_left, st->paused ? muted : acc);
+  kp_ov_draw_text_right(rgba_out, w, h, w - 15, 46, 1, status_right, muted);
 
   char title_copy[160];
   memcpy(title_copy, st->title, sizeof(title_copy));
   title_copy[sizeof(title_copy) - 1] = 0;
   const char *tname = title_copy[0] ? title_copy : "Nenhuma faixa disponivel";
-  kp_ov_draw_text(rgba_out, w, h, 35, 61, 1, w - 50, tname, white);
+  kp_ov_draw_text(rgba_out, w, h, 35, 58, 1, w - 50, tname, white);
 
-  /* 4. 5 KPlayer-style Selectable Option Cards */
+  /* Track progress bar + MM:SS / MM:SS */
+  int pbar_x = 16;
+  int pbar_y = 75;
+  int pbar_w = w - 108;
+  kp_ov_fill_rect(rgba_out, w, h, pbar_x, pbar_y + 2, pbar_w, 4, kp_ov_rgba(36, 44, 58, 255));
+  if (st->is_radio) {
+    kp_ov_fill_rect(rgba_out, w, h, pbar_x, pbar_y + 2, pbar_w, 4, acc);
+    kp_ov_draw_text_right(rgba_out, w, h, w - 15, pbar_y, 1, "AO VIVO", acc);
+  } else {
+    uint32_t ps = st->pos_sec;
+    uint32_t ds = st->dur_sec;
+    int fill_w = (ds > 0u) ? (int)(((uint64_t)pbar_w * (ps > ds ? ds : ps)) / ds) : 0;
+    if (fill_w > 0) kp_ov_fill_rect(rgba_out, w, h, pbar_x, pbar_y + 2, fill_w, 4, acc);
+    char t1[16], t2[16], tpair[36];
+    kp_ov_fmt_time(ps, t1, sizeof(t1));
+    kp_ov_fmt_time(ds, t2, sizeof(t2));
+    snprintf(tpair, sizeof(tpair), "%s/%s", t1, t2);
+    kp_ov_draw_text_right(rgba_out, w, h, w - 15, pbar_y, 1, tpair, muted);
+  }
+
+  /* 4. 7 KPlayer-style Selectable Option Cards */
   int vol = (int)st->volume_pct;
   if (vol < 0) vol = 0;
   if (vol > 100) vol = 100;
 
   char vol_val[24];
   snprintf(vol_val, sizeof(vol_val), "< %d%% >", vol);
+  const char *rep_val = st->repeat_mode == 1 ? "FAIXA"
+                        : st->repeat_mode == 2 ? "FILA"
+                                               : "OFF";
 
   const char *row_labels[KP_OV_ROW_COUNT] = {
       "TOCAR / PAUSAR",
       st->is_radio ? "PROXIMA RADIO" : "PROXIMA MUSICA",
       st->is_radio ? "VOLTAR RADIO" : "VOLTAR MUSICA",
       "VOLUME DO AUDIO",
+      "MODO ALEATORIO",
+      "REPETIR",
       "OCULTAR MENU",
   };
   const char *row_vals[KP_OV_ROW_COUNT] = {
@@ -390,16 +473,17 @@ static inline void kp_ov_render_rgba(const KpOverlayShared *st, uint32_t *rgba_o
       "R2",
       "L2",
       vol_val,
+      st->shuffle ? "ATIVO" : "OFF",
+      rep_val,
       "L3+R3",
   };
 
   for (unsigned int i = 0; i < KP_OV_ROW_COUNT; i++) {
-    int ry = 83 + (int)i * 25;
+    int ry = 95 + (int)i * 25;
     int rh = 22;
     bool active = (i == sel);
 
     if (active) {
-      /* Authentic KPlayer focused card: theme-tinted elevated fill + accent outline + left bar */
       kp_ov_fill_rounded_grad(
           rgba_out, w, h, 8, ry, w - 16, rh, 6,
           kp_ov_lerp8(24, ar, 30, 100), kp_ov_lerp8(30, ag, 30, 100), kp_ov_lerp8(40, ab, 30, 100),
@@ -415,8 +499,12 @@ static inline void kp_ov_render_rgba(const KpOverlayShared *st, uint32_t *rgba_o
                               br, bg, bb, br, bg, bb, 232);
     }
 
+    bool highlight_val = active ||
+                         (i == 0 && !st->paused) ||
+                         (i == 4 && st->shuffle) ||
+                         (i == 5 && st->repeat_mode != 0);
     uint32_t fg = active ? white : kp_ov_rgba(216, 224, 236, 255);
-    uint32_t vcol = active ? acc : ((i == 0 && !st->paused) ? acc : muted);
+    uint32_t vcol = highlight_val ? acc : muted;
 
     kp_ov_draw_text(rgba_out, w, h, 18, ry + (i == 3 ? 5 : 7), 1, 175, row_labels[i], fg);
     kp_ov_draw_text_right(rgba_out, w, h, w - 15, ry + (i == 3 ? 5 : 7), 1, row_vals[i], vcol);
@@ -434,9 +522,9 @@ static inline void kp_ov_render_rgba(const KpOverlayShared *st, uint32_t *rgba_o
   }
 
   /* 5. Compact KPlayer Footer Legend */
-  kp_ov_fill_rect(rgba_out, w, h, 12, 211, w - 24, 1, card_border);
-  kp_ov_draw_text(rgba_out, w, h, 14, 216, 1, w - 28, "^v MENU   <> VOL   B OK", muted);
-  kp_ov_draw_text(rgba_out, w, h, 14, 227, 1, w - 28, "L2/R2 FAIXA   A/L3+R3 SAIR", acc);
+  kp_ov_fill_rect(rgba_out, w, h, 12, 274, w - 24, 1, card_border);
+  kp_ov_draw_text(rgba_out, w, h, 14, 279, 1, w - 28, "^v MENU   <> VOL/MODO  B OK", muted);
+  kp_ov_draw_text(rgba_out, w, h, 14, 290, 1, w - 28, "L2/R2 FAIXA   A/L3+R3 SAIR", acc);
 }
 
 #endif /* KPLAYER_OVERLAY_SHARED_H */

@@ -599,9 +599,18 @@ int main(void) {
   /* General Options from Home (mode 3) opens OPT_SEC_ROOT */
   mode = 3;
   open_options();
-  assert(opt_section == OPT_SEC_ROOT && option == 18);
+  assert(opt_section == OPT_SEC_ROOT && option == 80);
+  /* Helper lookup for alphabetical General Options (strictly A-Z, penultimate=19, last=8) */
+  int idx_layout = -1, idx_sys_mp = -1, idx_ss = -1, idx_cmd = -1;
+  for (int i = 0; i < OPT_ROOT_COUNT; i++) {
+    if (opt_root_ids[i] == 24) idx_layout = i;
+    if (opt_root_ids[i] == 27) idx_sys_mp = i;
+    if (opt_root_ids[i] == 25) idx_ss = i;
+    if (opt_root_ids[i] == 20) idx_cmd = i;
+  }
+  assert(idx_layout >= 0 && idx_sys_mp >= 0 && idx_ss >= 0 && idx_cmd >= 0);
   /* Navigate to Layout da tela inicial (24) and toggle */
-  opt_cursor = 3;
+  opt_cursor = idx_layout;
   opt_sync_option_id();
   assert(option == 24);
   bool prev_inv = home_layout_inverted;
@@ -611,7 +620,7 @@ int main(void) {
   home_layout_inverted = false;
   /* Navigate to Mini-Player no Sistema Inteiro (27) and toggle + persist safely */
   setenv("KPLAYER_TEST_SYS_INJECT", "ok", 1);
-  opt_cursor = 4;
+  opt_cursor = idx_sys_mp;
   opt_sync_option_id();
   assert(option == 27);
   bool prev_sys_mp = system_miniplayer_installed;
@@ -628,7 +637,7 @@ int main(void) {
   unlink("system-audio.json");
   save_settings();
   /* Navigate to Protetor de tela (25) -> opens OPT_SEC_SCREENSAVER */
-  opt_cursor = 5;
+  opt_cursor = idx_ss;
   opt_sync_option_id();
   assert(option == 25);
   key(SDLK_RETURN, false);
@@ -655,7 +664,7 @@ int main(void) {
   mode = 2;
   opt_enter_section(OPT_SEC_ROOT);
   /* Navigate to Rever comandos (20) -> opens mode 12 tutorial */
-  opt_cursor = 6;
+  opt_cursor = idx_cmd;
   opt_sync_option_id();
   assert(option == 20);
   key(SDLK_RETURN, false);
@@ -663,9 +672,9 @@ int main(void) {
   draw_tutorial();
   key(SDLK_BACKSPACE, false);
   assert(mode == 2 && opt_section == OPT_SEC_ROOT);
-  /* Verify Seção +18 (28) is NOT in General Options (opt_root_ids), ONLY in IPTV Options (opt_iptv_ids) */
+  /* Verify Seção +18 (28) and PIN +18 (29) are NOT in General Options (opt_root_ids), ONLY in IPTV Options */
   for (int i = 0; i < OPT_ROOT_COUNT; i++) {
-    assert(opt_root_ids[i] != 28);
+    assert(opt_root_ids[i] != 28 && opt_root_ids[i] != 29);
   }
   int idx_28_in_iptv = -1;
   for (int i = 0; i < OPT_IPTV_COUNT; i++) {
@@ -994,9 +1003,17 @@ int main(void) {
            mp_st.volume_pct == 65);
     assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_LEFT) & BG_RES_VOLUME_CHANGED) &&
            mp_st.volume_pct == 55);
-    /* Navigate to row 4 (OCULTAR MENU) and CONFIRM closes overlay */
+    /* Navigate to row 4 (ALEATORIO) and toggle, row 5 (REPETIR) and cycle, row 6 (OCULTAR MENU) and close */
     assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) & BG_RES_REDRAW) &&
            mp_st.selected_row == 4);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_RIGHT) & BG_RES_REDRAW) &&
+           mp_st.shuffle);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) & BG_RES_REDRAW) &&
+           mp_st.selected_row == 5);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_RIGHT) & BG_RES_REDRAW) &&
+           mp_st.repeat_mode == 1);
+    assert((bg_mp_handle_action(&mp_st, BG_ACT_NAV_DOWN) & BG_RES_REDRAW) &&
+           mp_st.selected_row == 6);
     assert((bg_mp_handle_action(&mp_st, BG_ACT_CONFIRM) & BG_RES_CLOSE_OVERLAY) &&
            !mp_st.overlay_open);
     /* Reopen with L3+R3 and close with L3+R3 toggle */
@@ -1026,7 +1043,7 @@ int main(void) {
 
       KpOverlayShared ov;
       memset(&ov, 0, sizeof(ov));
-      assert(KP_OV_VERSION == 4u);
+      assert(KP_OV_VERSION == 5u && KP_OV_ROW_COUNT == 7);
       ov.magic = KP_OV_MAGIC;
       ov.version = KP_OV_VERSION;
       ov.overlay_open = 1;
@@ -1036,9 +1053,13 @@ int main(void) {
       ov.track_index = 1;
       ov.track_count = 3;
       ov.volume_pct = 55;
+      ov.battery_pct = 82;
+      ov.pos_sec = 42;
+      ov.dur_sec = 180;
       ov.accent_r = 0x22;
       ov.accent_g = 0xd3;
       ov.accent_b = 0xee;
+      snprintf(ov.clock_hhmm, sizeof(ov.clock_hhmm), "21:45");
       snprintf(ov.title, sizeof(ov.title), "Faixa Dois — R36S");
       uint32_t *rgba = (uint32_t *)calloc((size_t)KP_OV_CARD_W * KP_OV_CARD_H, sizeof(uint32_t));
       assert(rgba != NULL);
@@ -1048,9 +1069,103 @@ int main(void) {
       /* Top KPlayer accent line inside header must have exact theme accent color */
       assert(rgba[1 * KP_OV_CARD_W + 20] == kp_ov_rgba(0x22, 0xd3, 0xee, 255));
       /* Selected KPlayer row 1 left vertical focus bar must render in exact theme accent */
-      int sel_y = 83 + 1 * 25 + 6;
+      int sel_y = 95 + 1 * 25 + 6;
       assert(rgba[sel_y * KP_OV_CARD_W + 11] == kp_ov_rgba(0x22, 0xd3, 0xee, 255));
       free(rgba);
+    }
+
+    /* v2.1.7 Native upgrades: 4-direction Gamepad PIN, Watch History, Playlists, IPTV Favorites & New Screens */
+    {
+      /* 1. Salted 4-direction Gamepad PIN hash & verification */
+      int def_code[4] = {1, 1, 2, 2};
+      int alt_code[4] = {1, 4, 2, 3};
+      uint64_t h1 = kp_pin_hash_seq(def_code);
+      uint64_t h2 = kp_pin_hash_seq(alt_code);
+      assert(h1 != 0 && h1 == kp_pin_default_hash() && h1 != h2);
+      adult_pin_hash = h2;
+      assert(kp_pin_hash_seq(alt_code) == adult_pin_hash);
+      assert(kp_pin_hash_seq(def_code) != adult_pin_hash);
+
+      /* 2. Multi-video Watch History persistence */
+      char wh_tmp[] = "/tmp/kplayer-wh-XXXXXX";
+      assert(mkdtemp(wh_tmp));
+      char saved_wd[PATH_MAX];
+      assert(getcwd(saved_wd, sizeof(saved_wd)) != NULL);
+      assert(chdir(wh_tmp) == 0);
+      kp_wh_loaded = false;
+      kp_wh_count = 0;
+      kp_wh_record("/roms/movies/filme_a.mp4", 125000, 3600000);
+      kp_wh_record("/roms/movies/filme_b.mkv", 48000, 120000);
+      long long out_dur = 0;
+      assert(kp_wh_find_ms("/roms/movies/filme_a.mp4", &out_dur) == 125000 && out_dur == 3600000);
+      kp_wh_loaded = false;
+      kp_wh_count = 0;
+      kp_wh_load();
+      assert(kp_wh_find_ms("/roms/movies/filme_a.mp4", NULL) == 125000);
+      assert(kp_wh_find_ms("/roms/movies/filme_b.mkv", NULL) == 48000);
+      /* Near-end (>=95%) automatically clears resume entry */
+      kp_wh_record("/roms/movies/filme_b.mkv", 118000, 120000);
+      assert(kp_wh_find_ms("/roms/movies/filme_b.mkv", NULL) == 0);
+
+      /* 3. Queue remove/reorder & custom .m3u playlist save/scan */
+      clear_queue();
+      queue_paths[0] = strdup("/roms/bgmusic/a.mp3");
+      queue_paths[1] = strdup("/roms/bgmusic/b.mp3");
+      queue_paths[2] = strdup("/roms/bgmusic/c.mp3");
+      queue_count = 3;
+      queue_index = 1;
+      assert(kp_queue_move_at(1, -1));
+      assert(!strcmp(queue_paths[0], "/roms/bgmusic/b.mp3") && queue_index == 0);
+      char saved_pl[128] = "";
+      assert(kp_queue_save_m3u("MinhaLista", saved_pl, sizeof(saved_pl)));
+      assert(kp_playlists_scan() == 1);
+      assert(kp_saved_playlist_count == 1 && strstr(kp_saved_playlists[0].name, "MinhaLista") != NULL);
+      assert(kp_queue_remove_at(1));
+      assert(queue_count == 2);
+      clear_queue();
+      unlink(kp_saved_playlists[0].path);
+      rmdir("playlists");
+
+      /* 4. IPTV Favorites persistence & top-pinning */
+      iptv_fav_loaded = false;
+      iptv_fav_count = 0;
+      IptvChannel chs[2];
+      memset(chs, 0, sizeof(chs));
+      snprintf(chs[0].name, sizeof(chs[0].name), "Canal A");
+      snprintf(chs[0].url, sizeof(chs[0].url), "https://example.org/a.m3u8");
+      snprintf(chs[1].name, sizeof(chs[1].name), "Canal B");
+      snprintf(chs[1].url, sizeof(chs[1].url), "https://example.org/b.m3u8");
+      assert(iptv_fav_toggle_url(chs[1].url));
+      assert(iptv_fav_is(chs[1].url) && !iptv_fav_is(chs[0].url));
+      iptv_pin_favorites_first(chs, 2);
+      assert(!strcmp(chs[0].name, "Canal B"));
+      iptv_fav_loaded = false;
+      iptv_fav_count = 0;
+      iptv_fav_load();
+      assert(iptv_fav_count == 1 && iptv_fav_is(chs[0].url));
+      unlink("iptv_favorites.cfg");
+      unlink("watch_history.cfg");
+      assert(chdir(saved_wd) == 0 && rmdir(wh_tmp) == 0);
+
+      /* 5. Smoke-render upgraded Video HUD (dock + A-B loop + lock), Wi-Fi, Diagnostics, Playlists & PIN modal */
+      show_osd = true;
+      video_dock_idx = 2;
+      video_ab_a = 10000;
+      video_ab_b = 45000;
+      video_locked = false;
+      draw_video();
+      video_locked = true;
+      draw_video();
+      video_locked = false;
+      video_dock_idx = 0;
+      video_ab_a = -1;
+      video_ab_b = -1;
+      draw_wifi_transfer();
+      draw_diagnostics();
+      draw_playlists_picker();
+      kp_pin_open_unlock(mode);
+      kp_pin_draw_modal();
+      kp_pin_modal_mode = KP_PIN_MODE_NONE;
     }
 
     unlink(f_txt);

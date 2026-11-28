@@ -3,9 +3,13 @@ import {
   EyeOff,
   Pause,
   Play,
+  Repeat,
+  Shuffle,
   SkipBack,
   SkipForward,
+  Sun,
   Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import type { KpTheme } from '../themes';
@@ -17,21 +21,38 @@ export interface TrainerAudioInfo {
   index: number;
   total: number;
   isPlaying: boolean;
+  posSec?: number;
+  durSec?: number;
 }
 
-export const TRAINER_ROW_COUNT = 5;
+export const TRAINER_ROW_COUNT = 9;
 
 const rgba = rgbToRgba;
+
+function fmtSec(sec = 0): string {
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+}
 
 export interface GameTrainerHudProps {
   theme: KpTheme;
   audio: TrainerAudioInfo;
   volumePct: number;
+  brightnessPct?: number;
+  shuffle?: boolean;
+  repeatMode?: 0 | 1 | 2;
+  autoDucking?: boolean;
   selectedRow: number;
   modeSubtitle?: string;
   onSelectRow: (row: number) => void;
   onActivateRow: (row: number) => void;
   onVolumeDelta: (delta: number) => void;
+  onBrightnessDelta?: (delta: number) => void;
+  onToggleShuffle?: () => void;
+  onCycleRepeat?: () => void;
+  onToggleAutoDucking?: () => void;
   onClose: () => void;
   className?: string;
 }
@@ -40,25 +61,63 @@ export interface GameTrainerHudProps {
  * Floating KPlayer Mini-Player HUD (L3 + R3).
  * Matches KPlayer's native visual design system across all 14 themes:
  *   - Rounded theme-tinted surface panel with subtle accent top line
- *   - KPlayer vinyl disc emblem ("K PLAYER" + "Mini-Player")
- *   - Rounded Now-Playing card with mini equalizer bars
- *   - 5 rounded KPlayer-style option cards with accent focus border & left bar
+ *   - KPlayer vinyl disc emblem ("K PLAYER" + "Mini-Player") + clock & battery
+ *   - Rounded Now-Playing card with mini equalizer bars and live progress bar
+ *   - 9 rounded KPlayer-style option cards (Play, Next, Prev, Volume, Brightness, Shuffle, Repeat, Auto-Ducking, Hide)
  *   - Zero "Trainer" wording anywhere
  */
 export function GameTrainerHud({
   theme,
   audio,
   volumePct,
+  brightnessPct = 100,
+  shuffle = false,
+  repeatMode = 0,
+  autoDucking = true,
   selectedRow,
-  modeSubtitle = 'Mini-Player nativo • v2.1.7',
+  modeSubtitle = 'Mini-Player nativo · v2.1.7',
   onSelectRow,
   onActivateRow,
   onVolumeDelta,
+  onBrightnessDelta,
+  onToggleShuffle,
+  onCycleRepeat,
+  onToggleAutoDucking,
   onClose,
   className = '',
 }: GameTrainerHudProps) {
+  const [clock, setClock] = useState(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
+  const [battery, setBattery] = useState<number>(88);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const d = new Date();
+      setClock(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+    }, 10_000);
+    const nav = navigator as Navigator & {
+      getBattery?: () => Promise<{ level: number; addEventListener: (e: string, cb: () => void) => void }>;
+    };
+    if (nav.getBattery) {
+      nav
+        .getBattery()
+        .then((b) => {
+          setBattery(Math.round(b.level * 100));
+          b.addEventListener('levelchange', () => setBattery(Math.round(b.level * 100)));
+        })
+        .catch(() => {});
+    }
+    return () => window.clearInterval(id);
+  }, []);
+
   const isRadio = audio.kind === 'radio';
   const safeRow = ((selectedRow % TRAINER_ROW_COUNT) + TRAINER_ROW_COUNT) % TRAINER_ROW_COUNT;
+  const repeatLabel = repeatMode === 1 ? 'Faixa' : repeatMode === 2 ? 'Fila' : 'Off';
+  const posSec = audio.posSec ?? 42;
+  const durSec = audio.durSec ?? 198;
+  const trackPct = isRadio ? 100 : durSec > 0 ? Math.min(100, (posSec / durSec) * 100) : 0;
 
   const rows: Array<{
     id: number;
@@ -94,15 +153,59 @@ export function GameTrainerHud({
     },
     {
       id: 4,
+      label: 'Brilho da tela',
+      value: `${brightnessPct}%`,
+      icon: <Sun className="w-3.5 h-3.5" />,
+    },
+    {
+      id: 5,
+      label: 'Modo aleatório',
+      value: shuffle ? 'Ativo' : 'Off',
+      icon: <Shuffle className="w-3.5 h-3.5" />,
+      accentWhenInactive: shuffle,
+    },
+    {
+      id: 6,
+      label: 'Repetir',
+      value: repeatLabel,
+      icon: <Repeat className="w-3.5 h-3.5" />,
+      accentWhenInactive: repeatMode !== 0,
+    },
+    {
+      id: 7,
+      label: 'Auto-ducking em jogos',
+      value: autoDucking ? 'Ativo' : 'Off',
+      icon: <VolumeX className="w-3.5 h-3.5" />,
+      accentWhenInactive: autoDucking,
+    },
+    {
+      id: 8,
       label: 'Ocultar mini-player',
       value: 'L3+R3',
       icon: <EyeOff className="w-3.5 h-3.5" />,
     },
   ];
 
+  const handleRowClick = (id: number) => {
+    onSelectRow(id);
+    if (id === 5 && onToggleShuffle) {
+      onToggleShuffle();
+      return;
+    }
+    if (id === 6 && onCycleRepeat) {
+      onCycleRepeat();
+      return;
+    }
+    if (id === 7 && onToggleAutoDucking) {
+      onToggleAutoDucking();
+      return;
+    }
+    onActivateRow(id);
+  };
+
   return (
     <div
-      className={`w-[292px] rounded-2xl select-none overflow-hidden shadow-[0_18px_42px_rgba(0,0,0,0.72)] backdrop-blur-md ${className}`}
+      className={`w-[298px] rounded-2xl select-none overflow-hidden shadow-[0_18px_42px_rgba(0,0,0,0.72)] backdrop-blur-md ${className}`}
       style={{
         background: `linear-gradient(180deg, ${rgba(theme.panel, 0.96)} 0%, ${rgba(theme.bg, 0.96)} 100%)`,
         border: `1.5px solid ${rgba(theme.accent, 0.55)}`,
@@ -117,187 +220,161 @@ export function GameTrainerHud({
         }}
       />
 
-      {/* KPlayer Header: Vinyl Disc K Emblem + Brand + Item Index */}
-      <div className="px-3 pt-2.5 pb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          {/* KPlayer Vinyl Disc Emblem */}
+      {/* KPlayer Header: Vinyl Disc K Emblem + Brand + Clock & Battery */}
+      <div className="px-3 pt-2 pb-1.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 relative shadow-inner"
+            className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 relative shadow-inner"
             style={{
               backgroundColor: theme.isLight ? '#18181b' : '#0c1016',
               border: `2px solid ${theme.accent}`,
               boxShadow: `0 0 12px ${rgba(theme.accent, 0.32)}`,
             }}
           >
-            <div
-              className="w-5 h-5 rounded-full border border-white/15 flex items-center justify-center"
+            <div className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black leading-none"
+              style={{
+                backgroundColor: theme.accent,
+                color: theme.isLight ? '#ffffff' : '#080b10',
+              }}
             >
-              <div
-                className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black leading-none"
-                style={{
-                  backgroundColor: theme.accent,
-                  color: theme.isLight ? '#ffffff' : '#080b10',
-                }}
-              >
-                K
-              </div>
+              K
             </div>
           </div>
           <div className="leading-tight min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-[13px] font-extrabold tracking-wide">K PLAYER</span>
-              <span
-                className="text-[8.5px] font-bold px-1.5 py-[1px] rounded uppercase tracking-wider"
-                style={{
-                  backgroundColor: rgba(theme.accent, 0.16),
-                  color: theme.accent,
-                  border: `1px solid ${rgba(theme.accent, 0.35)}`,
-                }}
-              >
+              <span className="text-[12.5px] font-extrabold tracking-wide">K PLAYER</span>
+              <span className="text-[9.5px] font-bold" style={{ color: theme.accent }}>
                 Mini-Player
               </span>
             </div>
-            <div className="text-[9.5px] mt-0.5 truncate" style={{ color: theme.muted }}>
+            <div className="text-[9px] truncate" style={{ color: theme.muted }}>
               {modeSubtitle}
             </div>
           </div>
         </div>
-        <span
-          className="text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.5 rounded"
-          style={{
-            backgroundColor: rgba(theme.elevated, 0.85),
-            color: theme.muted,
-            border: `1px solid ${themeHairline(theme)}`,
-          }}
-        >
-          {safeRow + 1}/{TRAINER_ROW_COUNT}
-        </span>
+        <div className="text-right shrink-0 leading-tight tabular-nums">
+          <div className="text-[10px] font-bold" style={{ color: battery <= 15 ? '#f87171' : theme.text }}>
+            {clock} · {battery}%
+          </div>
+          <div className="text-[8.5px] font-mono" style={{ color: theme.muted }}>
+            {safeRow + 1}/{TRAINER_ROW_COUNT}
+          </div>
+        </div>
       </div>
 
-      {/* KPlayer Now-Playing Card */}
-      <div className="px-2.5 pb-2">
+      {/* KPlayer Now-Playing Card with Live Progress */}
+      <div className="px-2.5 pb-1.5">
         <div
-          className="rounded-xl px-2.5 py-2 flex items-center gap-2.5"
+          className="rounded-xl px-2.5 py-1.5 flex flex-col gap-1.5"
           style={{
             backgroundColor: rgba(theme.elevated, 0.92),
             border: `1px solid ${themeHairline(theme)}`,
           }}
         >
-          {/* Mini Equalizer / Paused Indicator */}
-          <div className="w-6 h-6 rounded-lg flex items-end justify-center gap-[2.5px] pb-1 shrink-0"
-            style={{ backgroundColor: rgba(theme.accent, 0.12) }}
-          >
-            {audio.isPlaying ? (
-              <>
-                <span
-                  className="w-[3px] rounded-full animate-pulse"
-                  style={{ height: '9px', backgroundColor: theme.accent }}
-                />
-                <span
-                  className="w-[3px] rounded-full animate-pulse"
-                  style={{ height: '14px', backgroundColor: theme.accent, animationDelay: '120ms' }}
-                />
-                <span
-                  className="w-[3px] rounded-full animate-pulse"
-                  style={{ height: '11px', backgroundColor: theme.accent, animationDelay: '240ms' }}
-                />
-              </>
-            ) : (
-              <Pause className="w-3.5 h-3.5 my-auto" style={{ color: theme.muted }} />
-            )}
+          <div className="flex items-center gap-2">
+            <div
+              className="w-5 h-5 rounded-md flex items-end justify-center gap-[2px] pb-0.5 shrink-0"
+              style={{ backgroundColor: rgba(theme.accent, 0.12) }}
+            >
+              {audio.isPlaying ? (
+                <>
+                  <span className="w-[2.5px] rounded-full" style={{ height: '7px', backgroundColor: theme.accent }} />
+                  <span className="w-[2.5px] rounded-full" style={{ height: '12px', backgroundColor: theme.accent }} />
+                  <span className="w-[2.5px] rounded-full" style={{ height: '9px', backgroundColor: theme.accent }} />
+                </>
+              ) : (
+                <Pause className="w-3 h-3 my-auto" style={{ color: theme.muted }} />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2 text-[8.5px] font-bold">
+                <span style={{ color: audio.isPlaying ? theme.accent : theme.muted }}>
+                  {audio.isPlaying ? 'Tocando agora' : 'Pausado'}
+                </span>
+                <span className="tabular-nums" style={{ color: theme.muted }}>
+                  {isRadio ? 'Rádio' : 'Faixa'} {audio.total > 0 ? audio.index + 1 : 0}/{audio.total}
+                </span>
+              </div>
+              <div className="text-[11px] font-bold truncate" style={{ color: theme.text }}>
+                {audio.title || 'Nenhuma faixa disponível'}
+              </div>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-wider">
-              <span style={{ color: audio.isPlaying ? theme.accent : theme.muted }}>
-                {audio.isPlaying ? 'Tocando agora' : 'Pausado'}
-              </span>
-              <span className="tabular-nums" style={{ color: theme.muted }}>
-                {isRadio ? 'Rádio' : 'Faixa'} {audio.total > 0 ? audio.index + 1 : 0}/{audio.total}
-              </span>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-[3.5px] rounded-full overflow-hidden" style={{ backgroundColor: rgba(theme.text, 0.14) }}>
+              <div className="h-full rounded-full" style={{ width: `${trackPct}%`, backgroundColor: theme.accent }} />
             </div>
-            <div className="text-[11.5px] font-bold truncate mt-0.5" style={{ color: theme.text }}>
-              {audio.title || 'Nenhuma faixa disponível'}
-            </div>
+            <span className="text-[8.5px] font-mono tabular-nums shrink-0" style={{ color: isRadio ? theme.accent : theme.muted }}>
+              {isRadio ? 'AO VIVO' : `${fmtSec(posSec)}/${fmtSec(durSec)}`}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* 5 KPlayer-Style Rounded Option Rows */}
-      <div className="px-2.5 pb-2 flex flex-col gap-1">
+      {/* 9 KPlayer-Style Rounded Option Rows */}
+      <div className="px-2.5 pb-1.5 flex flex-col gap-[3px]">
         {rows.map((row) => {
           const active = row.id === safeRow;
+          const isSliderRow = row.id === 3 || row.id === 4;
+          const sliderPct = row.id === 3 ? volumePct : brightnessPct;
+          const onSliderDelta = (d: number) => {
+            if (row.id === 3) onVolumeDelta(d);
+            else onBrightnessDelta?.(d);
+          };
           return (
             <div
               key={row.id}
               onMouseEnter={() => onSelectRow(row.id)}
-              onClick={() => {
-                onSelectRow(row.id);
-                onActivateRow(row.id);
-              }}
-              className="relative rounded-xl px-2.5 py-[6.5px] cursor-pointer transition-all"
+              onClick={() => handleRowClick(row.id)}
+              className="relative rounded-lg px-2 py-[4.5px] cursor-pointer transition-colors"
               style={{
                 background: active
                   ? `linear-gradient(90deg, ${rgba(theme.accent, theme.isLight ? 0.18 : 0.24)} 0%, ${rgba(theme.elevated, 0.94)} 100%)`
-                  : rgba(theme.elevated, 0.56),
-                border: `1.5px solid ${active ? theme.accent : 'transparent'}`,
+                  : rgba(theme.elevated, 0.54),
+                border: `1px solid ${active ? theme.accent : 'transparent'}`,
                 color: theme.text,
               }}
             >
-              {active && (
-                <div
-                  className="absolute left-1 top-1.5 bottom-1.5 w-[3px] rounded-full"
-                  style={{ backgroundColor: theme.accent }}
-                />
-              )}
-              <div className="flex items-center justify-between gap-2 text-[11px] font-semibold pl-1.5">
-                <span className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center justify-between gap-2 text-[10.5px] font-semibold">
+                <span className="flex items-center gap-1.5 min-w-0">
                   <span style={{ color: active ? theme.accent : theme.muted }}>{row.icon}</span>
                   <span className="truncate">{row.label}</span>
                 </span>
-                {row.id === 3 ? (
-                  <div className="flex items-center gap-1 shrink-0 font-mono text-[10.5px] font-bold">
+                {isSliderRow ? (
+                  <div className="flex items-center gap-1 shrink-0 font-mono text-[10px] font-bold">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onSelectRow(3);
-                        onVolumeDelta(-10);
+                        onSelectRow(row.id);
+                        onSliderDelta(-10);
                       }}
                       className="px-1 rounded hover:bg-white/10 cursor-pointer"
                       style={{ color: active ? theme.accent : theme.muted }}
-                      title="Diminuir volume (←)"
                     >
                       &lt;
                     </button>
-                    <span className="tabular-nums min-w-[30px] text-center" style={{ color: active ? theme.accent : theme.text }}>
-                      {volumePct}%
+                    <span className="tabular-nums min-w-[28px] text-center" style={{ color: active ? theme.accent : theme.text }}>
+                      {sliderPct}%
                     </span>
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onSelectRow(3);
-                        onVolumeDelta(10);
+                        onSelectRow(row.id);
+                        onSliderDelta(10);
                       }}
                       className="px-1 rounded hover:bg-white/10 cursor-pointer"
                       style={{ color: active ? theme.accent : theme.muted }}
-                      title="Aumentar volume (→)"
                     >
                       &gt;
                     </button>
                   </div>
                 ) : (
                   <span
-                    className="shrink-0 text-[10px] font-bold px-1.5 py-[1px] rounded"
+                    className="shrink-0 text-[9.5px] font-bold"
                     style={{
-                      backgroundColor: active
-                        ? rgba(theme.accent, 0.18)
-                        : rgba(theme.bg, 0.45),
-                      color: active
-                        ? theme.accent
-                        : row.accentWhenInactive
-                        ? theme.accent
-                        : theme.muted,
+                      color: active || row.accentWhenInactive ? theme.accent : theme.muted,
                     }}
                   >
                     {row.value}
@@ -305,16 +382,14 @@ export function GameTrainerHud({
                 )}
               </div>
 
-              {row.id === 3 && (
+              {isSliderRow && (
                 <div
-                  className="mt-1.5 ml-1.5 h-[4px] w-[calc(100%-6px)] rounded-full overflow-hidden"
-                  style={{
-                    backgroundColor: rgba(theme.text, 0.14),
-                  }}
+                  className="mt-1 h-[3px] w-full rounded-full overflow-hidden"
+                  style={{ backgroundColor: rgba(theme.text, 0.14) }}
                 >
                   <div
                     className="h-full rounded-full transition-all"
-                    style={{ width: `${volumePct}%`, backgroundColor: theme.accent }}
+                    style={{ width: `${sliderPct}%`, backgroundColor: theme.accent }}
                   />
                 </div>
               )}
@@ -325,7 +400,7 @@ export function GameTrainerHud({
 
       {/* KPlayer Footer Legend */}
       <div
-        className="px-3 py-2 text-[9px] leading-tight"
+        className="px-3 py-1.5 text-[8.5px] leading-tight"
         style={{
           backgroundColor: rgba(theme.bg, 0.72),
           borderTop: `1px solid ${themeHairline(theme)}`,
@@ -333,21 +408,15 @@ export function GameTrainerHud({
       >
         <div className="flex items-center justify-between font-medium" style={{ color: theme.muted }}>
           <span>↑↓ Menu</span>
-          <span>←→ Volume</span>
+          <span>←→ Vol/Brilho</span>
           <span>B Confirmar</span>
-          <span>L2/R2 Faixa</span>
-        </div>
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-[8.5px]" style={{ color: theme.muted }}>
-            KPlayer • L3 + R3 nativo
-          </span>
           <button
             type="button"
             onClick={onClose}
             className="font-bold hover:underline cursor-pointer"
             style={{ color: theme.accent }}
           >
-            A / L3+R3 Ocultar
+            A / L3+R3 Sair
           </button>
         </div>
       </div>
@@ -360,12 +429,20 @@ export interface GameTrainerDemoStageProps {
   trainerOpen: boolean;
   audio: TrainerAudioInfo;
   volumePct: number;
+  brightnessPct?: number;
+  shuffle?: boolean;
+  repeatMode?: 0 | 1 | 2;
+  autoDucking?: boolean;
   selectedRow: number;
   systemInjected?: boolean;
   onToggleTrainer: () => void;
   onSelectRow: (row: number) => void;
   onActivateRow: (row: number) => void;
   onVolumeDelta: (delta: number) => void;
+  onBrightnessDelta?: (delta: number) => void;
+  onToggleShuffle?: () => void;
+  onCycleRepeat?: () => void;
+  onToggleAutoDucking?: () => void;
   onExitDemo: () => void;
 }
 
@@ -378,12 +455,20 @@ export function GameTrainerDemoStage({
   trainerOpen,
   audio,
   volumePct,
+  brightnessPct = 100,
+  shuffle = false,
+  repeatMode = 0,
+  autoDucking = true,
   selectedRow,
   systemInjected = false,
   onToggleTrainer,
   onSelectRow,
   onActivateRow,
   onVolumeDelta,
+  onBrightnessDelta,
+  onToggleShuffle,
+  onCycleRepeat,
+  onToggleAutoDucking,
   onExitDemo,
 }: GameTrainerDemoStageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -677,15 +762,23 @@ export function GameTrainerDemoStage({
             theme={theme}
             audio={audio}
             volumePct={volumePct}
+            brightnessPct={brightnessPct}
+            shuffle={shuffle}
+            repeatMode={repeatMode}
+            autoDucking={autoDucking}
             selectedRow={selectedRow}
             modeSubtitle={
               scene === 'es'
-                ? 'Sistema injetado (ES mudo) • v2.1.7'
-                : 'Port nativo (L3 + R3) • v2.1.7'
+                ? 'Sistema injetado (ES mudo) · v2.1.7'
+                : 'Port nativo (L3 + R3) · v2.1.7'
             }
             onSelectRow={onSelectRow}
             onActivateRow={onActivateRow}
             onVolumeDelta={onVolumeDelta}
+            onBrightnessDelta={onBrightnessDelta}
+            onToggleShuffle={onToggleShuffle}
+            onCycleRepeat={onCycleRepeat}
+            onToggleAutoDucking={onToggleAutoDucking}
             onClose={onToggleTrainer}
           />
         </div>

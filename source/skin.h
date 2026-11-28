@@ -59,7 +59,15 @@ static void draw_header(const char *section) {
   rounded(262, 6, 134, 20, 10, elevated);
   centered(section, 262, 9, 134, 11, muted);
   char upd_ver[32] = "";
-  if (updater_is_available(upd_ver, sizeof(upd_ver))) {
+  if (sleep_choice > 0 && sleep_end > 0) {
+    uint32_t now_t = SDL_GetTicks();
+    uint32_t rem_ms = (int32_t)(sleep_end - now_t) > 0 ? (sleep_end - now_t) : 0;
+    unsigned rem_min = (rem_ms + 59999u) / 60000u;
+    char sbuf[24];
+    snprintf(sbuf, sizeof(sbuf), "ZZZ %um", rem_min);
+    rounded(404, 6, 74, 20, 10, alpha(accent, 42));
+    centered(sbuf, 404, 9, 74, 10, accent);
+  } else if (updater_is_available(upd_ver, sizeof(upd_ver))) {
     char badge[48];
     snprintf(badge, sizeof(badge), "v%.31s • SEL", upd_ver);
     rounded(404, 6, 112, 20, 10, alpha(accent, 44));
@@ -135,7 +143,7 @@ static void footer_hints(const FooterHint *hints, int count) {
     }
   }
 }
-static void progress(int x, int y, int w) {
+static __attribute__((unused)) void progress(int x, int y, int w) {
   long long len = duration_ms(), t = now_ms();
   double p = len > 0 ? fmax(0, fmin(1, (double)t / len)) : 0;
   rounded(x, y, w, 4, 2, track_color());
@@ -351,10 +359,25 @@ static void draw_menu(void) {
     else
       size_string(it->size, s, sizeof(s));
     label(s, 520, y + 14, 13, muted, 94);
-    label(it->dir                ? tr("Explorar pasta")
-          : audio_file(it->name) ? tr("Áudio")
-                                 : tr("Vídeo"),
-          64, y + 28, 12, dim, 400);
+    if (!it->dir && !audio_file(it->name)) {
+      char full_vp[PATH_MAX];
+      if (it->path && it->path[0]) snprintf(full_vp, sizeof(full_vp), "%s", it->path);
+      else snprintf(full_vp, sizeof(full_vp), "%.2047s/%.2047s", folder, it->name);
+      long long wh_pos = kp_wh_find_ms(full_vp, NULL);
+      if (wh_pos >= 5000) {
+        char wt[32], wlbl[64];
+        time_string(wh_pos, wt, sizeof(wt));
+        snprintf(wlbl, sizeof(wlbl), "Vídeo  •  Continuar em %s", wt);
+        label(wlbl, 64, y + 28, 12, accent, 420);
+      } else {
+        label(tr("Vídeo"), 64, y + 28, 12, dim, 400);
+      }
+    } else {
+      label(it->dir                ? tr("Explorar pasta")
+            : audio_file(it->name) ? tr("Áudio")
+                                   : tr("Vídeo"),
+            64, y + 28, 12, dim, 400);
+    }
   }
   if (!total) {
     centered(menu_search[0] ? "Nenhum item encontrado para a pesquisa"
@@ -527,9 +550,9 @@ static void draw_music(void) {
     if (audio_panel == 2)
       label(music_folder, 276, 101, 12, muted, 328);
     else {
-      char s[64];
-      snprintf(s, sizeof(s), tr("%d faixas na fila"), queue_count);
-      label(s, 276, 101, 12, muted, 328);
+      char s[96];
+      snprintf(s, sizeof(s), "%d faixas  •  Y Remover  •  L2/R2 Mover", queue_count);
+      label(s, 276, 101, 11, muted, 340);
     }
     draw_audio_rows(audio_panel == 2);
   }
@@ -570,34 +593,176 @@ static void draw_video(void) {
     SDL_RenderCopy(renderer, video_texture, NULL, &r);
   }
   begin_ui_pass();
+  uint32_t now_t = SDL_GetTicks();
   if (!video_texture) {
     centered(preview_mode ? tr("PRÉVIA DA INTERFACE")
-                          : tr("Carregando vídeo..."),
-             16, 210, 608, 22, (SDL_Color){220,220,220,255});
+                          : (playing_iptv ? "Conectando transmissão..." : tr("Carregando vídeo...")),
+             16, 210, 608, 22, (SDL_Color){225, 230, 240, 255});
+    if (!preview_mode) {
+      centered(media_name, 40, 246, 560, 14, muted);
+    }
   }
-  if (show_osd && (SDL_GetTicks() < osd_until || paused || preview_mode)) {
-    draw_header(tr("VÍDEOS"));
-    rounded(16, 46, 88, 28, 14, alpha(panel, 225));
-    rounded_outline(16, 46, 88, 28, 14, alpha(textc, 30));
-    label(tr("A  Voltar"), 29, 54, 13, textc, 66);
-    rounded(450, 46, 174, 28, 14, alpha(panel, 225));
-    rounded_outline(450, 46, 174, 28, 14, alpha(textc, 30));
-    label(tr("Controles ocultam em 3s"), 461, 54, 11, muted, 158);
-    rounded_gradient(16, 328, 608, 100, 18, alpha(elevated, 232), alpha(panel, 224));
-    rounded_outline(16, 328, 608, 100, 18, alpha(textc, 32));
-    label(media_name, 32, 340, 18, textc, 400);
-    char a[32], b[32], s[80];
-    time_string(now_ms(), a, sizeof(a));
-    time_string(duration_ms(), b, sizeof(b));
-    snprintf(s, sizeof(s), "%s / %s", a, b);
-    label(s, 480, 343, 12, muted, 130);
-    progress(32, 372, 576);
-    play_button(32, 387, 30);
-    label("-10s     +10s", 82, 397, 13, textc, 140);
-    snprintf(s, sizeof(s), "%s", tr("SELECT Opções"));
-    label(s, 420, 397, 13, muted, 190);
-    const FooterHint hints[] = {{"B", "Pausa"}, {"DIR", "10s"}, {"X", "Ocultar"},
-                                {"A", "Voltar"}, {"SELECT", "Opções"}};
-    footer_hints(hints, 5);
+
+  /* Center auto-fading HUD action toast (seek, speed, fit, brightness, A-B loop, lock) */
+  if (video_hud_toast[0] && now_t < video_hud_toast_until) {
+    uint32_t rem = video_hud_toast_until - now_t;
+    int a_val = rem < 300u ? (int)((rem * 235u) / 300u) : 235;
+    if (a_val > 12) {
+      rounded(180, 184, 280, 48, 16, (SDL_Color){10, 14, 22, (Uint8)a_val});
+      rounded_outline(180, 184, 280, 48, 16, alpha(accent, a_val));
+      centered(video_hud_toast, 192, 198, 264, 17, alpha(textc, a_val));
+    }
+  }
+
+  /* Control Lock minimal banner */
+  if (video_locked) {
+    if (now_t < osd_until) {
+      rounded(152, 22, 336, 34, 14, (SDL_Color){10, 14, 22, 220});
+      rounded_outline(152, 22, 336, 34, 14, accent);
+      centered("CONTROLES TRAVADOS  •  X ou SELECT destrava", 160, 31, 320, 12, accent);
+    }
+    return;
+  }
+
+  if (show_osd && (now_t < osd_until || paused || preview_mode)) {
+    update_status();
+    /* Top cinematic gradient scrim */
+    for (int s = 0; s < 14; s++) {
+      int sa = 215 - s * 15;
+      if (sa < 0) sa = 0;
+      rect(0, s * 6, 640, 6, (SDL_Color){4, 7, 12, (Uint8)sa});
+    }
+    /* Source badge + Title + Resolution + Clock/Battery/Sleep */
+    const char *src_tag = playing_news_video ? "NOTÍCIAS"
+                        : playing_iptv       ? "IPTV"
+                                             : "VÍDEO";
+    rounded(16, 12, 74, 22, 9, accent);
+    centered(src_tag, 16, 16, 74, 10, bg);
+    label(media_name[0] ? media_name : tr("Vídeo"), 100, 12, 17, textc, 332);
+
+    char meta_right[96];
+    if (texture_w > 0 && texture_h > 0) {
+      snprintf(meta_right, sizeof(meta_right), "%dx%d  •  %.2fx", texture_w, texture_h, rate);
+    } else {
+      snprintf(meta_right, sizeof(meta_right), "%.2fx  •  Brilho %d%%", rate, kp_hw_brightness_pct);
+    }
+    label(meta_right, 100, 36, 11, muted, 260);
+
+    if (sleep_choice > 0 && sleep_end > 0) {
+      uint32_t srem = (int32_t)(sleep_end - now_t) > 0 ? (sleep_end - now_t) : 0;
+      char sbuf[24];
+      snprintf(sbuf, sizeof(sbuf), "ZZZ %um", (srem + 59999u) / 60000u);
+      rounded(446, 12, 68, 22, 9, alpha(accent, 48));
+      centered(sbuf, 446, 16, 68, 10, accent);
+    }
+    label(clock_text, 524, 15, 13, textc, 50);
+    if (battery_percent >= 0) {
+      char bat_s[16];
+      snprintf(bat_s, sizeof(bat_s), "%d%%", battery_percent);
+      label(bat_s, 580, 15, 13, accent, 48);
+    }
+
+    /* Bottom cinematic gradient scrim */
+    for (int s = 0; s < 28; s++) {
+      int sa = (s * 230) / 27;
+      rect(0, 308 + s * 6, 640, 6, (SDL_Color){4, 7, 12, (Uint8)sa});
+    }
+
+    /* Timeline container (Row 0 focus) */
+    bool row0_focus = (video_osd_row == 0);
+    long long len = duration_ms();
+    long long cur = now_ms();
+    char cur_s[32], dur_s[32], rem_s[80];
+    time_string(cur, cur_s, sizeof(cur_s));
+    if (len > 0) {
+      time_string(len, dur_s, sizeof(dur_s));
+      long long left_ms = len > cur ? (len - cur) : 0;
+      char tmp_r[32];
+      time_string(left_ms, tmp_r, sizeof(tmp_r));
+      snprintf(rem_s, sizeof(rem_s), "-%s  /  %s", tmp_r, dur_s);
+    } else {
+      snprintf(rem_s, sizeof(rem_s), playing_iptv ? "AO VIVO" : "--:--");
+    }
+
+    label(cur_s, 22, 344, 13, row0_focus ? accent : textc, 96);
+    if (video_ab_a >= 0) {
+      char ab_info[64];
+      char ta[24], tb[24];
+      time_string(video_ab_a, ta, sizeof(ta));
+      if (video_ab_b > video_ab_a) {
+        time_string(video_ab_b, tb, sizeof(tb));
+        snprintf(ab_info, sizeof(ab_info), "LOOP A-B: %s → %s", ta, tb);
+      } else {
+        snprintf(ab_info, sizeof(ab_info), "PONTO A: %s (marque B)", ta);
+      }
+      rounded(204, 341, 232, 20, 8, alpha(accent, 42));
+      centered(ab_info, 208, 345, 224, 10, accent);
+    }
+    int rw = (int)measure(rem_s, 12);
+    label(rem_s, 618 - (rw < 180 ? rw : 180), 344, 12, muted, 180);
+
+    /* Enhanced progress bar with A-B markers */
+    int bx = 22, by = 368, bw = 596;
+    if (row0_focus) rounded_outline(bx - 4, by - 5, bw + 8, 16, 8, alpha(accent, 110));
+    rounded(bx, by, bw, 6, 3, (SDL_Color){255, 255, 255, 45});
+    if (len > 0 && video_ab_a >= 0) {
+      int ax = bx + (int)(bw * fmax(0.0, fmin(1.0, (double)video_ab_a / (double)len)));
+      if (video_ab_b > video_ab_a) {
+        int bpx = bx + (int)(bw * fmax(0.0, fmin(1.0, (double)video_ab_b / (double)len)));
+        rounded(ax, by - 1, (bpx - ax) > 4 ? (bpx - ax) : 4, 8, 3, alpha(accent, 120));
+        rect(bpx, by - 4, 2, 14, textc);
+      }
+      rect(ax, by - 4, 2, 14, accent);
+    }
+    double p = len > 0 ? fmax(0.0, fmin(1.0, (double)cur / (double)len)) : (playing_iptv ? 1.0 : 0.0);
+    int fill = (int)(bw * p);
+    if (fill > 0) rounded(bx, by, fill > 6 ? fill : 6, 6, 3, accent);
+    glow_circle(bx + fill, by + 3, 6, alpha(accent, 210), 4);
+    fill_circle(bx + fill, by + 3, 5, textc);
+
+    /* Interactive Quick-Action Dock (Row 1 focus, 8 buttons) */
+    const char *dock_top[8] = {
+        paused ? "Tocar" : "Pausa",
+        "Vel.",
+        "Tela",
+        "Áudio",
+        "Legenda",
+        "Brilho",
+        "Loop A-B",
+        "Travar",
+    };
+    char dock_sub[8][20];
+    snprintf(dock_sub[0], sizeof(dock_sub[0]), "%s", paused ? "PAUSADO" : "TOCANDO");
+    snprintf(dock_sub[1], sizeof(dock_sub[1]), "%.2fx", rate);
+    snprintf(dock_sub[2], sizeof(dock_sub[2]), "%s",
+             fit == 0 ? "Original" : fit == 1 ? "Cheia" : "Esticar");
+    snprintf(dock_sub[3], sizeof(dock_sub[3]), "Trocar");
+    snprintf(dock_sub[4], sizeof(dock_sub[4]), "Trocar");
+    snprintf(dock_sub[5], sizeof(dock_sub[5]), "%d%%", kp_hw_brightness_pct);
+    snprintf(dock_sub[6], sizeof(dock_sub[6]), "%s",
+             video_ab_b > video_ab_a ? "A-B ON" : (video_ab_a >= 0 ? "A ✓" : "Off"));
+    snprintf(dock_sub[7], sizeof(dock_sub[7]), "Lock");
+
+    int dock_w = 71;
+    int dock_gap = 4;
+    int dock_x0 = 22;
+    int dock_y = 390;
+    for (int i = 0; i < 8; i++) {
+      int dx = dock_x0 + i * (dock_w + dock_gap);
+      bool focus = (video_osd_row == 1 && video_dock_idx == i);
+      bool active_btn = (i == 6 && video_ab_a >= 0) || (i == 0 && paused);
+      rounded(dx, dock_y, dock_w, 48, 10,
+              focus ? alpha(accent, 52)
+                    : (active_btn ? alpha(elevated, 225) : (SDL_Color){16, 22, 34, 210}));
+      rounded_outline(dx, dock_y, dock_w, 48, 10,
+                      focus ? accent : (active_btn ? alpha(accent, 140) : (SDL_Color){255, 255, 255, 36}));
+      centered(dock_top[i], dx + 2, dock_y + 8, dock_w - 4, 12, focus ? accent : textc);
+      centered(dock_sub[i], dx + 2, dock_y + 27, dock_w - 4, 10, focus ? textc : muted);
+    }
+
+    centered(video_osd_row == 0
+                 ? "←/→ Buscar 10s  •  ↓ Ações rápidas  •  B Pausa  •  L1/R1 Próx  •  SELECT Opções"
+                 : "←/→ Escolher ação  •  B Aplicar  •  ↑ Voltar p/ linha do tempo  •  X Ocultar",
+             16, 452, 608, 11, muted);
   }
 }

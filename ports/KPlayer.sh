@@ -49,12 +49,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./system_inject.py ./pdf_ops.py ./7zzs 2>/dev/null || true
+chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./system_inject.py ./pdf_ops.py ./wifi_transfer.py ./system_tools.py ./7zzs 2>/dev/null || true
 ./kplayer --check || exit 1
 $GPTOKEYB "kplayer" -c "$GAMEDIR/kplayer.gptk" &
 mapper_pid=$!
 while true; do
-    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./system_inject.py ./pdf_ops.py ./7zzs 2>/dev/null || true
+    chmod +x ./kplayer ./updater.py ./iptv_fetch.py ./football_fetch.py ./weather_fetch.py ./news_fetch.py ./file_ops.py ./bg_audio.py ./system_inject.py ./pdf_ops.py ./wifi_transfer.py ./system_tools.py ./7zzs 2>/dev/null || true
     printf '%s\n' "$$" > "$MAIN_LOCK" 2>/dev/null || true
     ./kplayer
     result=$?

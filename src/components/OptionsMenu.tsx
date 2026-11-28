@@ -95,6 +95,10 @@ export interface OptionsMenuProps {
   uiSfxEnabled: boolean;
   bgAudioPreview: boolean;
   adultSectionUnlocked: boolean;
+  adultPinEnabled: boolean;
+  brightnessPct: number;
+  sleepAction: 'pause' | 'poweroff';
+  savedPlaylistsCount: number;
   onSetThemeIndex: (idx: number) => void;
   onSetLanguage: (lang: LanguageCode) => void;
   onSetDisplayMode: (mode: 'auto' | 'r36s' | 'square' | 'wide') => void;
@@ -102,6 +106,14 @@ export interface OptionsMenuProps {
   onToggleUiSfx: () => void;
   onToggleBgAudioPreview: () => void;
   onToggleAdultSection: () => void;
+  onConfigureAdultPin: () => void;
+  onStepBrightness: (delta: number) => void;
+  onToggleSleepAction: () => void;
+  onOpenWifiTransfer: () => void;
+  onOpenDiagnostics: () => void;
+  onOpenPlaylists: () => void;
+  onTriggerScreenOff: () => void;
+  onToggleVideoLock: () => void;
   onCycleScreensaverTimeout: () => void;
   onCycleScreensaverViz: () => void;
   onToggleScreensaverClock: () => void;
@@ -202,6 +214,10 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     uiSfxEnabled,
     bgAudioPreview,
     adultSectionUnlocked,
+    adultPinEnabled,
+    brightnessPct,
+    sleepAction,
+    savedPlaylistsCount,
     onSetThemeIndex,
     onSetLanguage,
     onSetDisplayMode,
@@ -209,6 +225,14 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     onToggleUiSfx,
     onToggleBgAudioPreview,
     onToggleAdultSection,
+    onConfigureAdultPin,
+    onStepBrightness,
+    onToggleSleepAction,
+    onOpenWifiTransfer,
+    onOpenDiagnostics,
+    onOpenPlaylists,
+    onTriggerScreenOff,
+    onToggleVideoLock,
     onCycleScreensaverTimeout,
     onCycleScreensaverViz,
     onToggleScreensaverClock,
@@ -389,6 +413,21 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           onSelect: () => goSection('playback_fit', 'video_opts'),
         },
         {
+          id: 'vid-bright',
+          label: 'Brilho da tela',
+          value: `${brightnessPct}%`,
+          onSelect: () => onStepBrightness(brightnessPct >= 100 ? -80 : 10),
+        },
+        {
+          id: 'vid-lock',
+          label: 'Travar controles do vídeo',
+          value: 'Alternar',
+          onSelect: () => {
+            onClose();
+            onToggleVideoLock();
+          },
+        },
+        {
           id: 'vid-repeat',
           label: tr('Modo de repetição', language),
           value: repeatLabel,
@@ -420,6 +459,21 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           onSelect: onToggleShuffle,
         },
         {
+          id: 'mus-screenoff',
+          label: 'Apagar tela (Modo Bolso)',
+          value: 'Áudio continua',
+          onSelect: () => {
+            onClose();
+            onTriggerScreenOff();
+          },
+        },
+        {
+          id: 'mus-bright',
+          label: 'Brilho da tela',
+          value: `${brightnessPct}%`,
+          onSelect: () => onStepBrightness(brightnessPct >= 100 ? -80 : 10),
+        },
+        {
           id: 'mus-eq',
           label: tr('Equalizador', language),
           value: eqIdx === 0 ? tr('Desativada', language) : eqPresets[eqIdx]?.name ?? 'Flat',
@@ -438,6 +492,15 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           label: tr('Minhas favoritas', language),
           value: `${favoriteTrackIds.length}`,
           onSelect: onOpenFavorites,
+        },
+        {
+          id: 'mus-playlists',
+          label: 'Playlists salvas (.m3u)',
+          value: `${savedPlaylistsCount} salvas`,
+          onSelect: () => {
+            onClose();
+            onOpenPlaylists();
+          },
         },
         {
           id: 'mus-repeat',
@@ -478,7 +541,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
       ];
     }
 
-    // 3. Contextual TV / IPTV Options ONLY
+    // 3. Contextual TV / IPTV Options ONLY (Seção +18 & PIN live EXCLUSIVELY here)
     if (section === 'iptv_opts') {
       return [
         {
@@ -527,6 +590,13 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           onSelect: onToggleAdultSection,
         },
         {
+          id: 'iptv-adult-pin',
+          label: 'PIN da Seção +18 (4 direções)',
+          value: adultPinEnabled ? 'Ativo (Alterar)' : 'Desativado (Ativar)',
+          selected: adultPinEnabled,
+          onSelect: onConfigureAdultPin,
+        },
+        {
           id: 'iptv-terms',
           label: tr('Termos de uso', language),
           value: tr('Abrir', language),
@@ -544,6 +614,21 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     // 4. Contextual Radio Options ONLY
     if (section === 'radio_opts') {
       return [
+        {
+          id: 'rad-screenoff',
+          label: 'Apagar tela (Modo Bolso)',
+          value: 'Rádio continua',
+          onSelect: () => {
+            onClose();
+            onTriggerScreenOff();
+          },
+        },
+        {
+          id: 'rad-bright',
+          label: 'Brilho da tela',
+          value: `${brightnessPct}%`,
+          onSelect: () => onStepBrightness(brightnessPct >= 100 ? -80 : 10),
+        },
         {
           id: 'rad-fav',
           label: 'Favoritar estação atual',
@@ -596,7 +681,7 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
       ];
     }
 
-    // 5. General Root Options (strictly A–Z, NO video/music/TV/radio playback clutter!)
+    // 5. General Root Options (strictly A–Z, NO video/music/TV/radio/adult clutter!)
     // Penultimate: ONLY [A] Verificar atualizações · Last: ONLY Sair
     if (section === 'root') {
       const updBadge = updateStatus?.updateAvailable
@@ -608,16 +693,40 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
 
       return [
         {
+          id: 'sleep-action',
+          label: 'Ação do timer de sono',
+          value: sleepAction === 'poweroff' ? 'Desligar console' : 'Pausar reprodução',
+          onSelect: onToggleSleepAction,
+        },
+        {
           id: 'displayMode',
           label: tr('Adaptação de tela', language),
           value: activeDisplayLabel,
           onSelect: () => goSection('displayMode', 'root'),
         },
         {
+          id: 'backup',
+          label: 'Backup e restauração',
+          value: 'Exportar / Importar dados',
+          onSelect: onOpenDiagnostics,
+        },
+        {
+          id: 'brightness',
+          label: 'Brilho da tela',
+          value: `${brightnessPct}%`,
+          onSelect: () => onStepBrightness(brightnessPct >= 100 ? -80 : 10),
+        },
+        {
           id: 'weather',
           label: 'Clima e Localização',
           value: weatherSummary,
           onSelect: () => goSection('weather', 'root'),
+        },
+        {
+          id: 'diagnostics',
+          label: 'Diagnóstico do sistema',
+          value: 'Áudio, Bateria, Som',
+          onSelect: onOpenDiagnostics,
         },
         {
           id: 'language',
@@ -676,6 +785,12 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
           label: tr('Timer de sono', language),
           value: sleepIdx === 0 ? tr('Desativada', language) : `${sleepOptions[sleepIdx]} min`,
           onSelect: () => goSection('sleep', 'root'),
+        },
+        {
+          id: 'wifi-transfer',
+          label: 'Transferir via Wi-Fi',
+          value: 'QR Code + PIN (LAN)',
+          onSelect: onOpenWifiTransfer,
         },
         // Penultimate: ONLY "A" marker + "Verificar atualizações"
         {
@@ -1004,9 +1119,21 @@ export const OptionsMenu = forwardRef<OptionsMenuHandle, OptionsMenuProps>(funct
     uiSfxEnabled,
     bgAudioPreview,
     adultSectionUnlocked,
+    adultPinEnabled,
+    brightnessPct,
+    sleepAction,
+    savedPlaylistsCount,
     onToggleUiSfx,
     onToggleBgAudioPreview,
     onToggleAdultSection,
+    onConfigureAdultPin,
+    onStepBrightness,
+    onToggleSleepAction,
+    onOpenWifiTransfer,
+    onOpenDiagnostics,
+    onOpenPlaylists,
+    onTriggerScreenOff,
+    onToggleVideoLock,
     goBack,
   ]);
 

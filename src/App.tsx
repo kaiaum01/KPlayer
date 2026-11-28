@@ -55,7 +55,7 @@ import {
   themeHairline,
 } from './components/R36SIcons';
 import { R36SControls, type R36SButton } from './components/R36SControls';
-import { VideoScreen } from './components/VideoScreen';
+import { VideoScreen, type VideoScreenHandle } from './components/VideoScreen';
 import { Newspaper } from 'lucide-react';
 import { PlacarDaBolaScreen, type PlacarDaBolaHandle } from './components/PlacarDaBolaScreen';
 import { NewsScreen, type NewsScreenHandle } from './components/NewsScreen';
@@ -64,6 +64,15 @@ import { GameTrainerDemoStage, TRAINER_ROW_COUNT } from './components/GameTraine
 import { IptvScreen, type IptvScreenHandle } from './components/IptvScreen';
 import { BootSplashScreen, type BootPreloadStatus } from './components/BootSplashScreen';
 import { AndroidPlayerApp } from './components/AndroidPlayerApp';
+import {
+  DEFAULT_ADULT_PIN_HASH,
+  DiagnosticsScreen,
+  GamepadPinModal,
+  SavedPlaylistsModal,
+  ScreenOffCurtain,
+  WifiTransferScreen,
+  type SavedM3uPlaylist,
+} from './components/SystemToolsModals';
 import { playSfxForButton, playUiSfx, setUiSfxEnabled } from './utils/sfx';
 import scraperCoverImg from './assets/images/kplayer_cover_transparent_v208.png';
 import scraperBoxartImg from './assets/images/kplayer_boxart_disc_v208_1795391407681.jpg';
@@ -95,7 +104,7 @@ const RADIO_CATEGORIES = [
   'Favoritas',
 ] as const;
 
-const SLEEP_OPTIONS = [0, 15, 30, 60, 90, 120] as const;
+const SLEEP_OPTIONS = [0, 15, 30, 45, 60, 90, 120] as const;
 
 const EQ_PRESETS: Array<{ name: EqPresetName; low: number; mid: number; high: number }> = [
   { name: 'Desativada', low: 0, mid: 0, high: 0 },
@@ -220,6 +229,32 @@ export default function App() {
   const [adultSectionUnlocked, setAdultSectionUnlocked] = useState<boolean>(() =>
     loadStorage('kp_adult_unlocked', false)
   );
+  const [adultPinEnabled, setAdultPinEnabled] = useState<boolean>(() =>
+    loadStorage('kp_adult_pin_on', false)
+  );
+  const [adultPinHash, setAdultPinHash] = useState<string>(() =>
+    loadStorage('kp_adult_pin_hash', DEFAULT_ADULT_PIN_HASH)
+  );
+  const [pinModalMode, setPinModalMode] = useState<'verify' | 'set' | null>(null);
+  const [brightnessPct, setBrightnessPct] = useState<number>(() =>
+    Math.max(20, Math.min(100, loadStorage('kp_brightness', 100)))
+  );
+  const [sleepAction, setSleepAction] = useState<'pause' | 'poweroff'>(() =>
+    loadStorage('kp_sleep_action', 'pause')
+  );
+  const [sleepRemainingMin, setSleepRemainingMin] = useState<number>(0);
+  const [autoDucking, setAutoDucking] = useState<boolean>(() =>
+    loadStorage('kp_auto_ducking', true)
+  );
+  const [screenOffActive, setScreenOffActive] = useState<boolean>(false);
+  const [watchHistory, setWatchHistory] = useState<Record<string, { sec: number; dur: number }>>(() =>
+    loadStorage('kp_watch_history', {})
+  );
+  const [savedPlaylists, setSavedPlaylists] = useState<SavedM3uPlaylist[]>(() =>
+    loadStorage('kp_saved_playlists', [])
+  );
+  const [playlistsModalOpen, setPlaylistsModalOpen] = useState<boolean>(false);
+  const [radioSearchQuery, setRadioSearchQuery] = useState<string>('');
   const [gameAudioDucked, setGameAudioDucked] = useState<boolean>(false);
   const [bgAudioVolume, setBgAudioVolume] = useState<number>(55);
   // Interactive Mini-Player Preview Demo state (L3 + R3)
@@ -240,10 +275,26 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem('kp_adult_unlocked', JSON.stringify(adultSectionUnlocked));
+      localStorage.setItem('kp_adult_pin_on', JSON.stringify(adultPinEnabled));
+      localStorage.setItem('kp_adult_pin_hash', JSON.stringify(adultPinHash));
+      localStorage.setItem('kp_brightness', JSON.stringify(brightnessPct));
+      localStorage.setItem('kp_sleep_action', JSON.stringify(sleepAction));
+      localStorage.setItem('kp_auto_ducking', JSON.stringify(autoDucking));
+      localStorage.setItem('kp_watch_history', JSON.stringify(watchHistory));
+      localStorage.setItem('kp_saved_playlists', JSON.stringify(savedPlaylists));
     } catch {
       // Ignore storage quota errors
     }
-  }, [adultSectionUnlocked]);
+  }, [
+    adultSectionUnlocked,
+    adultPinEnabled,
+    adultPinHash,
+    brightnessPct,
+    sleepAction,
+    autoDucking,
+    watchHistory,
+    savedPlaylists,
+  ]);
   const [screensaverActive, setScreensaverActive] = useState<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
   const [weatherMoodSeed] = useState<number>(() => Math.floor(Math.random() * 100000));
@@ -363,6 +414,7 @@ export default function App() {
   // Active Playback (Audio / Radio / Video)
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoScreenRef = useRef<VideoScreenHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const placarRef = useRef<PlacarDaBolaHandle | null>(null);
   const newsRef = useRef<NewsScreenHandle | null>(null);
@@ -973,20 +1025,182 @@ export default function App() {
     }
   }, [eqIdx]);
 
-  // Sleep timer
+  // Sleep timer with live remaining-minutes countdown + Pause / Poweroff action
   useEffect(() => {
     const mins = SLEEP_OPTIONS[sleepIdx];
-    if (!mins) return;
+    if (!mins) {
+      setSleepRemainingMin(0);
+      return;
+    }
+    const deadline = Date.now() + mins * 60_000;
+    setSleepRemainingMin(mins);
+    const tick = window.setInterval(() => {
+      const rem = Math.max(0, Math.ceil((deadline - Date.now()) / 60_000));
+      setSleepRemainingMin(rem);
+    }, 15_000);
     const id = window.setTimeout(() => {
       audioRef.current?.pause();
       videoRef.current?.pause();
       setIsPlaying(false);
       setIsPaused(true);
       setSleepIdx(0);
-      notify(tr('Timer de sono', language));
+      setSleepRemainingMin(0);
+      if (sleepAction === 'poweroff') {
+        setScreenOffActive(true);
+        notify('Timer de sono: console colocado em repouso');
+      } else {
+        notify(`${tr('Timer de sono', language)}: reprodução pausada`);
+      }
     }, mins * 60_000);
-    return () => window.clearTimeout(id);
-  }, [sleepIdx, language, notify]);
+    return () => {
+      window.clearInterval(tick);
+      window.clearTimeout(id);
+    };
+  }, [sleepIdx, sleepAction, language, notify]);
+
+  const stepBrightness = useCallback((delta: number) => {
+    setBrightnessPct((prev) => Math.max(20, Math.min(100, prev + delta)));
+  }, []);
+
+  const reportVideoProgress = useCallback((key: string, sec: number, dur: number) => {
+    if (!key || !Number.isFinite(dur) || dur <= 10) return;
+    setWatchHistory((prev) => {
+      const next = { ...prev };
+      if (sec / dur >= 0.94 || sec < 5) {
+        delete next[key];
+      } else {
+        next[key] = { sec: Math.floor(sec), dur: Math.floor(dur) };
+      }
+      return next;
+    });
+  }, []);
+
+  const removeQueueTrack = useCallback(
+    (trackId: string) => {
+      setTracks((prev) => prev.filter((t) => t.id !== trackId));
+      notify('Faixa removida da fila');
+    },
+    [notify]
+  );
+
+  const moveQueueTrack = useCallback((trackId: string, dir: -1 | 1) => {
+    setTracks((prev) => {
+      const audioIndices = prev
+        .map((t, i) => (t.kind === 'audio' ? i : -1))
+        .filter((i) => i >= 0);
+      const pos = audioIndices.findIndex((idx) => prev[idx].id === trackId);
+      const swapPos = pos + dir;
+      if (pos < 0 || swapPos < 0 || swapPos >= audioIndices.length) return prev;
+      const next = [...prev];
+      const a = audioIndices[pos];
+      const b = audioIndices[swapPos];
+      [next[a], next[b]] = [next[b], next[a]];
+      return next;
+    });
+  }, []);
+
+  const playSoundTest = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      [440, 554.37, 659.25].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.08, ctx.currentTime + i * 0.09);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.09 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.09);
+        osc.stop(ctx.currentTime + i * 0.09 + 0.36);
+      });
+      notify('Teste de som reproduzido (A4 · C#5 · E5)');
+    } catch {
+      notify('Áudio indisponível no navegador');
+    }
+  }, [notify]);
+
+  const exportSettingsBackup = useCallback(() => {
+    const payload = {
+      app: 'KPlayer',
+      version: APP_VERSION,
+      exportedAt: new Date().toISOString(),
+      data: {
+        language,
+        themeIndex,
+        repeatMode,
+        shuffle,
+        brightnessPct,
+        sleepAction,
+        autoDucking,
+        homeLayoutInverted,
+        uiSfxEnabled,
+        favoriteTrackIds,
+        favoriteRadios,
+        savedPlaylists,
+        watchHistory,
+        iptvFavs: loadStorage('kp_iptv_favs', {}),
+      },
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kplayer-backup-${APP_VERSION}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify('Backup exportado com sucesso');
+  }, [
+    language,
+    themeIndex,
+    repeatMode,
+    shuffle,
+    brightnessPct,
+    sleepAction,
+    autoDucking,
+    homeLayoutInverted,
+    uiSfxEnabled,
+    favoriteTrackIds,
+    favoriteRadios,
+    savedPlaylists,
+    watchHistory,
+    notify,
+  ]);
+
+  const importSettingsBackup = useCallback(
+    async (file: File) => {
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text) as { app?: string; data?: Record<string, unknown> };
+        if (parsed.app !== 'KPlayer' || !parsed.data || typeof parsed.data !== 'object') {
+          notify('Arquivo de backup inválido');
+          return;
+        }
+        const d = parsed.data;
+        if (typeof d.themeIndex === 'number' && d.themeIndex >= 0 && d.themeIndex < KP_THEMES.length) {
+          setThemeIndex(d.themeIndex);
+        }
+        if (d.language === 0 || d.language === 1 || d.language === 2) setLanguage(d.language);
+        if (typeof d.brightnessPct === 'number') setBrightnessPct(Math.max(20, Math.min(100, d.brightnessPct)));
+        if (d.sleepAction === 'pause' || d.sleepAction === 'poweroff') setSleepAction(d.sleepAction);
+        if (typeof d.autoDucking === 'boolean') setAutoDucking(d.autoDucking);
+        if (typeof d.homeLayoutInverted === 'boolean') setHomeLayoutInverted(d.homeLayoutInverted);
+        if (Array.isArray(d.favoriteTrackIds)) setFavoriteTrackIds(d.favoriteTrackIds as string[]);
+        if (Array.isArray(d.savedPlaylists)) setSavedPlaylists(d.savedPlaylists as SavedM3uPlaylist[]);
+        if (d.watchHistory && typeof d.watchHistory === 'object') {
+          setWatchHistory(d.watchHistory as Record<string, { sec: number; dur: number }>);
+        }
+        if (d.iptvFavs && typeof d.iptvFavs === 'object') {
+          localStorage.setItem('kp_iptv_favs', JSON.stringify(d.iptvFavs));
+        }
+        notify('Backup restaurado com sucesso');
+      } catch {
+        notify('Não foi possível restaurar o backup');
+      }
+    },
+    [notify]
+  );
 
   // Audio & video library partitions + Android shared helpers
   const audioTracks = useMemo(() => tracks.filter((t) => t.kind === 'audio'), [tracks]);
@@ -1603,17 +1817,52 @@ export default function App() {
       } else if (row === 3) {
         setBgAudioVolume((v) => (v >= 100 ? 20 : Math.min(100, v + 10)));
       } else if (row === 4) {
+        stepBrightness(brightnessPct >= 100 ? -80 : 10);
+      } else if (row === 5) {
+        setShuffle((s) => !s);
+      } else if (row === 6) {
+        setRepeatMode((r) => ((r + 1) % 3) as RepeatMode);
+      } else if (row === 7) {
+        setAutoDucking((d) => !d);
+      } else if (row === 8) {
         setTrainerDemoOpen(false);
       }
     },
-    [trainerDemoStepTrack, trainerDemoTogglePlay]
+    [trainerDemoStepTrack, trainerDemoTogglePlay, stepBrightness, brightnessPct]
   );
+
+  const visibleRadioStations = useMemo(() => {
+    const q = radioSearchQuery.trim().toLowerCase();
+    if (!q) return radioStations;
+    return radioStations.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.tags.toLowerCase().includes(q) ||
+        s.country.toLowerCase().includes(q)
+    );
+  }, [radioStations, radioSearchQuery]);
 
   // Unified R36S physical / keyboard / on-screen button handler
   const handleButton = useCallback(
     (btn: R36SButton) => {
       lastActivityRef.current = Date.now();
       playSfxForButton(btn);
+
+      if (screenOffActive) {
+        setScreenOffActive(false);
+        notify('Tela reativada');
+        return;
+      }
+
+      if (pinModalMode) {
+        if (btn === 'A') setPinModalMode(null);
+        return;
+      }
+
+      if (playlistsModalOpen) {
+        if (btn === 'A') setPlaylistsModalOpen(false);
+        return;
+      }
 
       if (trainerDemoActive) {
         if (btn === 'L3_R3') {
@@ -1644,6 +1893,14 @@ export default function App() {
           } else if (btn === 'LEFT') {
             if (trainerDemoRow === 3) {
               setBgAudioVolume((v) => Math.max(10, v - 10));
+            } else if (trainerDemoRow === 4) {
+              stepBrightness(-10);
+            } else if (trainerDemoRow === 5) {
+              setShuffle((s) => !s);
+            } else if (trainerDemoRow === 6) {
+              setRepeatMode((r) => ((r + 2) % 3) as RepeatMode);
+            } else if (trainerDemoRow === 7) {
+              setAutoDucking((d) => !d);
             } else if (trainerDemoRow === 1 || trainerDemoRow === 2) {
               trainerDemoStepTrack(-1);
             } else if (trainerDemoRow === 0) {
@@ -1652,6 +1909,14 @@ export default function App() {
           } else if (btn === 'RIGHT') {
             if (trainerDemoRow === 3) {
               setBgAudioVolume((v) => Math.min(100, v + 10));
+            } else if (trainerDemoRow === 4) {
+              stepBrightness(10);
+            } else if (trainerDemoRow === 5) {
+              setShuffle((s) => !s);
+            } else if (trainerDemoRow === 6) {
+              setRepeatMode((r) => ((r + 1) % 3) as RepeatMode);
+            } else if (trainerDemoRow === 7) {
+              setAutoDucking((d) => !d);
             } else if (trainerDemoRow === 1 || trainerDemoRow === 2) {
               trainerDemoStepTrack(1);
             } else if (trainerDemoRow === 0) {
@@ -1924,31 +2189,17 @@ export default function App() {
       }
 
       if (screen === 'video') {
-        if (btn === 'A') {
-          setIsPaused(true);
-          setScreen(
-            prevScreen === 'iptv'
-              ? 'iptv'
-              : prevScreen === 'filemanager'
-              ? 'filemanager'
-              : prevScreen === 'news'
-              ? 'news'
-              : 'library'
-          );
-        } else if (btn === 'B') {
-          setIsPaused((p) => !p);
-        } else if (btn === 'X') {
-          setShowVideoOsd((v) => !v);
-        } else if (btn === 'LEFT' && !activeVideoLive && videoRef.current) {
-          videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
-        } else if (btn === 'RIGHT' && !activeVideoLive && videoRef.current) {
-          videoRef.current.currentTime += 10;
-        }
+        videoScreenRef.current?.handleButton(btn);
+        return;
+      }
+
+      if (screen === 'wifi' || screen === 'diagnostics') {
+        if (btn === 'A') setScreen('options');
         return;
       }
 
       if (screen === 'radio') {
-        const len = radioStations.length;
+        const len = visibleRadioStations.length;
         if (btn === 'A') setScreen('home');
         else if (btn === 'LEFT')
           setRadioCategory((c) => (c + RADIO_CATEGORIES.length - 1) % RADIO_CATEGORIES.length);
@@ -1957,11 +2208,11 @@ export default function App() {
         else if (btn === 'UP' && len) setRadioSelected((i) => (i + len - 1) % len);
         else if (btn === 'DOWN' && len) setRadioSelected((i) => (i + 1) % len);
         else if (btn === 'B' && len) {
-          const st = radioStations[radioSelected];
+          const st = visibleRadioStations[Math.min(radioSelected, len - 1)];
           if (activeRadio?.url === st.url && isPlaying) togglePlayPause();
           else playRadioStation(st);
         } else if (btn === 'X' && len) {
-          toggleRadioFav(radioStations[radioSelected]);
+          toggleRadioFav(visibleRadioStations[Math.min(radioSelected, len - 1)]);
         } else if (btn === 'Y') {
           if (radioCategory === 5) fetchUserRadios().then(() => loadRadioCategory(5, true));
           else loadRadioCategory(radioCategory, true);
@@ -2017,7 +2268,7 @@ export default function App() {
       audioTracks,
       queueCursor,
       activeVideoLive,
-      radioStations,
+      visibleRadioStations,
       radioSelected,
       isPlaying,
       playRadioStation,
@@ -2040,6 +2291,10 @@ export default function App() {
       trainerDemoActivateRow,
       trainerDemoStepTrack,
       trainerDemoTogglePlay,
+      screenOffActive,
+      pinModalMode,
+      playlistsModalOpen,
+      stepBrightness,
     ]
   );
 
@@ -2114,12 +2369,13 @@ export default function App() {
       currentVersion: updateStatus?.currentVersion ?? APP_VERSION,
       updateAvailable: Boolean(updateStatus?.updateAvailable),
       latestVersion: updateStatus?.latestVersion ?? APP_VERSION,
+      sleepRemainingMin,
       onOpenUpdate: () => openOptionsScreen('update'),
     }),
-    [updateStatus, openOptionsScreen]
+    [updateStatus, sleepRemainingMin, openOptionsScreen]
   );
 
-  const selectedRadio = radioStations[radioSelected];
+  const selectedRadio = visibleRadioStations[radioSelected] ?? radioStations[radioSelected];
 
   return (
     <UpdateBannerContext.Provider value={updateBannerValue}>
@@ -3746,6 +4002,7 @@ export default function App() {
                     ) : (
                       filteredLibrary.map((item, realIdx) => {
                         const focus = realIdx === libSelected;
+                        const resumeInfo = item.kind === 'video' ? watchHistory[item.name] : undefined;
                         return (
                           <button
                             key={item.id}
@@ -3772,9 +4029,16 @@ export default function App() {
                                 <div style={{ color: theme.text }} className="text-[16px] font-bold truncate">
                                   {item.name}
                                 </div>
-                                <div style={{ color: theme.dim }} className="text-[11.5px]">
-                                  {item.kind === 'audio' ? tr('Áudio', language) : tr('Vídeo', language)}
-                                  {item.lyrics ? ' • LRC' : ''}
+                                <div style={{ color: theme.dim }} className="text-[11.5px] flex items-center gap-1.5 truncate">
+                                  <span>
+                                    {item.kind === 'audio' ? tr('Áudio', language) : tr('Vídeo', language)}
+                                    {item.lyrics ? ' · LRC' : ''}
+                                  </span>
+                                  {resumeInfo && (
+                                    <span style={{ color: theme.accent }} className="font-bold tabular-nums">
+                                      · Continuar em {formatTime(resumeInfo.sec * 1000)}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -3946,26 +4210,45 @@ export default function App() {
                         </div>
                       ) : (
                         <div className="flex-1 min-h-0 flex flex-col mt-2.5 overflow-hidden">
-                          <div style={{ color: theme.muted }} className="text-[11px] mb-2 truncate shrink-0">
-                            {audioPanel === 2
-                              ? '/roms/bgmusic  •  /roms2/bgmusic'
-                              : `${audioTracks.length} ${tr('Músicas', language).toLowerCase()}`}
+                          <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+                            <div style={{ color: theme.muted }} className="text-[11px] truncate">
+                              {audioPanel === 2
+                                ? '/roms/bgmusic  ·  /roms2/bgmusic'
+                                : `${audioTracks.length} ${tr('Músicas', language).toLowerCase()} · Reordenar / Remover`}
+                            </div>
+                            {audioPanel === 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setPlaylistsModalOpen(true)}
+                                style={{ color: theme.accent }}
+                                className="text-[10.5px] font-bold hover:underline cursor-pointer shrink-0 whitespace-nowrap"
+                              >
+                                Playlists (.m3u)
+                              </button>
+                            )}
                           </div>
                           <div className="flex-1 min-h-0 space-y-1.5 overflow-y-auto kp-scroll pr-1">
                             {audioTracks.map((t, idx) => {
                               const focus = idx === queueCursor;
                               const isCur = activeTrack?.id === t.id;
                               return (
-                                <button
+                                <div
                                   key={t.id}
-                                  type="button"
                                   onMouseEnter={() => setQueueCursor(idx)}
                                   onClick={() => playMediaTrack(t)}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      playMediaTrack(t);
+                                    }
+                                  }}
                                   style={{
                                     ...modernCardStyle(theme, focus, 8, theme.panel),
                                     height: 41,
                                   }}
-                                  className="w-full px-2.5 flex items-center gap-2.5 text-left cursor-pointer transition-all"
+                                  className="w-full px-2.5 flex items-center gap-2 text-left cursor-pointer transition-all"
                                 >
                                   <span
                                     style={{ color: isCur ? theme.accent : theme.muted }}
@@ -3994,7 +4277,37 @@ export default function App() {
                                       {isCur ? tr('Em reprodução', language) : tr('B  Reproduzir', language)}
                                     </div>
                                   </div>
-                                </button>
+                                  {audioPanel === 1 && (
+                                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        type="button"
+                                        onClick={() => moveQueueTrack(t.id, -1)}
+                                        style={{ color: theme.muted }}
+                                        className="px-1.5 py-0.5 text-[11px] font-bold hover:text-white cursor-pointer"
+                                        title="Mover para cima (L2)"
+                                      >
+                                        ↑
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => moveQueueTrack(t.id, 1)}
+                                        style={{ color: theme.muted }}
+                                        className="px-1.5 py-0.5 text-[11px] font-bold hover:text-white cursor-pointer"
+                                        title="Mover para baixo (R2)"
+                                      >
+                                        ↓
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeQueueTrack(t.id)}
+                                        className="px-1.5 py-0.5 text-[11px] font-bold text-rose-400 hover:text-rose-300 cursor-pointer"
+                                        title="Remover da fila (Y)"
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
@@ -4139,6 +4452,7 @@ export default function App() {
             {/* ==================== VIDEO & IPTV PLAYER ==================== */}
             {screen === 'video' && (
               <VideoScreen
+                ref={videoScreenRef}
                 theme={theme}
                 themeIndex={themeIndex}
                 lang={language}
@@ -4150,8 +4464,14 @@ export default function App() {
                 sectionLabel={activeVideoSection}
                 fit={videoFit}
                 rate={playbackRate}
+                brightnessPct={brightnessPct}
                 paused={isPaused}
                 showOsd={showVideoOsd}
+                initialPositionSec={!activeVideoLive ? (watchHistory[activeVideoTitle]?.sec ?? 0) : 0}
+                onProgressReport={(sec, dur) => reportVideoProgress(activeVideoTitle, sec, dur)}
+                onCycleRate={setPlaybackRate}
+                onCycleFit={setVideoFit}
+                onStepBrightness={stepBrightness}
                 onTogglePause={() => setIsPaused((p) => !p)}
                 onSeekDelta={(sec) => {
                   if (videoRef.current) {
@@ -4172,6 +4492,8 @@ export default function App() {
                   );
                 }}
                 onOpenOptions={() => {
+                  setOptionsContext('video');
+                  setOptionsInitialSection('video_opts');
                   setPrevScreen('video');
                   setScreen('options');
                 }}
@@ -4302,17 +4624,46 @@ export default function App() {
                       }}
                       className="p-3 flex flex-col min-h-0 overflow-hidden"
                     >
-                      <div className="flex items-baseline justify-between shrink-0">
-                        <div style={{ color: theme.text }} className="text-[15.5px] @min-[520px]:text-[16px] font-extrabold">
+                      <div className="flex items-center justify-between gap-2 shrink-0">
+                        <div style={{ color: theme.text }} className="text-[15.5px] @min-[520px]:text-[16px] font-extrabold truncate">
                           {tr(RADIO_CATEGORIES[radioCategory], language)}
                         </div>
-                        <div style={{ color: theme.muted }} className="text-[11px]">
-                          {radioStations.length} {tr('estações', language)}
+                        <div style={{ color: theme.muted }} className="text-[11px] tabular-nums shrink-0">
+                          {visibleRadioStations.length} {tr('estações', language)}
                         </div>
                       </div>
 
-                      {/* 7 Glowing Pill Category Tabs */}
-                      <div className="flex gap-1 mt-2 overflow-x-auto pb-1 shrink-0">
+                      {/* Quick Search Bar for Online Radio */}
+                      <div className="mt-1.5 flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="text"
+                          value={radioSearchQuery}
+                          onChange={(e) => {
+                            setRadioSearchQuery(e.target.value);
+                            setRadioSelected(0);
+                          }}
+                          placeholder="Buscar rádio por nome, gênero ou país..."
+                          style={{
+                            backgroundColor: rgbToRgba(theme.elevated, 0.85),
+                            color: theme.text,
+                            border: `1px solid ${themeHairline(theme)}`,
+                          }}
+                          className="flex-1 min-w-0 px-2.5 py-1 rounded-lg text-[11px] outline-none"
+                        />
+                        {radioSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setRadioSearchQuery('')}
+                            style={{ color: theme.accent }}
+                            className="text-[10.5px] font-bold px-2 py-1 cursor-pointer shrink-0"
+                          >
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+
+                      {/* 7 Category Tabs */}
+                      <div className="flex gap-1 mt-1.5 overflow-x-auto pb-1 shrink-0">
                         {RADIO_CATEGORIES.map((cat, idx) => {
                           const activeCat = idx === radioCategory;
                           return (
@@ -4338,10 +4689,12 @@ export default function App() {
                           >
                             {tr('Buscando estações...', language)}
                           </div>
-                        ) : radioStations.length === 0 ? (
+                        ) : visibleRadioStations.length === 0 ? (
                           <div className="h-full flex flex-col items-center justify-center text-center px-4">
                             <div style={{ color: theme.text }} className="text-[15px] font-bold">
-                              {radioCategory === 6
+                              {radioSearchQuery
+                                ? `Nenhuma estação para "${radioSearchQuery}"`
+                                : radioCategory === 6
                                 ? tr('Nenhuma rádio favorita', language)
                                 : radioError ?? tr('Nenhuma estação encontrada', language)}
                             </div>
@@ -4350,7 +4703,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          radioStations.map((st, realIdx) => {
+                          visibleRadioStations.map((st, realIdx) => {
                             const focus = realIdx === radioSelected;
                             const isFav = favoriteRadios.some((f) => f.url === st.url);
                             const isLiveNow = activeRadio?.url === st.url && !isPaused;
@@ -4602,6 +4955,34 @@ export default function App() {
               />
             )}
 
+            {/* ==================== WI-FI FILE TRANSFER & SYSTEM DIAGNOSTICS ==================== */}
+            {screen === 'wifi' && (
+              <WifiTransferScreen
+                theme={theme}
+                themeIndex={themeIndex}
+                locationLabel={locationLabel}
+                onUploadFiles={(files) => handleFilesSelected(files)}
+                onBack={() => setScreen('options')}
+              />
+            )}
+
+            {screen === 'diagnostics' && (
+              <DiagnosticsScreen
+                theme={theme}
+                themeIndex={themeIndex}
+                locationLabel={locationLabel}
+                systemMiniPlayerActive={bgAudioPreview}
+                brightnessPct={brightnessPct}
+                trackCount={tracks.length}
+                favCount={favoriteTrackIds.length + favoriteRadios.length}
+                playlistCount={savedPlaylists.length}
+                onExportBackup={exportSettingsBackup}
+                onImportBackup={(f) => void importSettingsBackup(f)}
+                onSoundTest={playSoundTest}
+                onBack={() => setScreen('options')}
+              />
+            )}
+
             {/* ==================== CONTEXTUAL SELECTION-FIRST OPTIONS MENU (OPENED VIA SELECT) ==================== */}
             {screen === 'options' && (
               <OptionsMenu
@@ -4645,6 +5026,10 @@ export default function App() {
                 uiSfxEnabled={uiSfxEnabled}
                 bgAudioPreview={bgAudioPreview}
                 adultSectionUnlocked={adultSectionUnlocked}
+                adultPinEnabled={adultPinEnabled}
+                brightnessPct={brightnessPct}
+                sleepAction={sleepAction}
+                savedPlaylistsCount={savedPlaylists.length}
                 onSetThemeIndex={setThemeIndex}
                 onSetLanguage={setLanguage}
                 onSetDisplayMode={setR36sDisplayMode}
@@ -4684,13 +5069,39 @@ export default function App() {
                 }}
                 onToggleAdultSection={() => {
                   if (!adultSectionUnlocked) {
-                    setPendingStreamTarget('adult18');
-                    setNoticeReturn('options');
-                    setScreen('notice');
+                    if (adultPinEnabled) {
+                      setPinModalMode('verify');
+                    } else {
+                      setPendingStreamTarget('adult18');
+                      setNoticeReturn('options');
+                      setScreen('notice');
+                    }
                   } else {
                     setAdultSectionUnlocked(false);
                     notify('Seção +18 bloqueada e oculta do IPTV');
                   }
+                }}
+                onConfigureAdultPin={() => {
+                  setPinModalMode('set');
+                }}
+                onStepBrightness={(delta) => {
+                  const next = Math.max(20, Math.min(100, brightnessPct + delta));
+                  setBrightnessPct(next);
+                  notify(`Brilho da tela: ${next}%`);
+                }}
+                onToggleSleepAction={() => {
+                  setSleepAction((prev) => {
+                    const next = prev === 'pause' ? 'poweroff' : 'pause';
+                    notify(`Ação do timer de sono: ${next === 'poweroff' ? 'Desligar console' : 'Pausar reprodução'}`);
+                    return next;
+                  });
+                }}
+                onOpenWifiTransfer={() => setScreen('wifi')}
+                onOpenDiagnostics={() => setScreen('diagnostics')}
+                onOpenPlaylists={() => setPlaylistsModalOpen(true)}
+                onTriggerScreenOff={() => setScreenOffActive(true)}
+                onToggleVideoLock={() => {
+                  window.setTimeout(() => videoScreenRef.current?.toggleLock(), 40);
                 }}
                 onCycleScreensaverTimeout={() => {
                   setScreensaverTimeoutSec((cur) => {
@@ -4817,15 +5228,110 @@ export default function App() {
               <GameTrainerDemoStage
                 theme={theme}
                 trainerOpen={trainerDemoOpen}
-                audio={trainerDemoAudio}
+                audio={{
+                  ...trainerDemoAudio,
+                  posSec: Math.floor(currentMs / 1000),
+                  durSec: Math.floor(durationMs / 1000) || 198,
+                }}
                 volumePct={bgAudioVolume}
+                brightnessPct={brightnessPct}
+                shuffle={shuffle}
+                repeatMode={repeatMode}
+                autoDucking={autoDucking}
                 selectedRow={trainerDemoRow}
                 systemInjected={bgAudioPreview}
                 onToggleTrainer={() => setTrainerDemoOpen((o) => !o)}
                 onSelectRow={setTrainerDemoRow}
                 onActivateRow={trainerDemoActivateRow}
                 onVolumeDelta={(d) => setBgAudioVolume((v) => Math.max(10, Math.min(100, v + d)))}
+                onBrightnessDelta={stepBrightness}
+                onToggleShuffle={() => setShuffle((s) => !s)}
+                onCycleRepeat={() => setRepeatMode((r) => ((r + 1) % 3) as RepeatMode)}
+                onToggleAutoDucking={() => setAutoDucking((d) => !d)}
                 onExitDemo={() => setTrainerDemoActive(false)}
+              />
+            )}
+
+            {/* ==================== MODAIS: PLAYLISTS (.M3U), PIN +18 & TELA APAGADA ==================== */}
+            {playlistsModalOpen && (
+              <SavedPlaylistsModal
+                theme={theme}
+                playlists={savedPlaylists}
+                currentQueue={audioTracks}
+                onSaveCurrent={(name) => {
+                  const pl: SavedM3uPlaylist = {
+                    id: `pl-${Date.now()}`,
+                    name,
+                    createdAt: Date.now(),
+                    trackIds: audioTracks.map((t) => t.id),
+                    trackTitles: audioTracks.map((t) => t.title || t.name),
+                  };
+                  setSavedPlaylists((prev) => [pl, ...prev]);
+                  notify(`Playlist "${name}.m3u" salva`);
+                }}
+                onLoadPlaylist={(pl) => {
+                  const byId = new Map(audioTracks.map((t) => [t.id, t]));
+                  const ordered = pl.trackIds
+                    .map((id) => byId.get(id))
+                    .filter((t): t is MediaTrack => Boolean(t));
+                  if (ordered.length > 0) {
+                    playMediaTrack(ordered[0]);
+                    setPlaylistsModalOpen(false);
+                    setScreen('music');
+                    notify(`Playlist "${pl.name}" carregada (${ordered.length} faixas)`);
+                  } else {
+                    notify('Nenhuma faixa da playlist está na biblioteca atual');
+                  }
+                }}
+                onDeletePlaylist={(id) => {
+                  setSavedPlaylists((prev) => prev.filter((p) => p.id !== id));
+                  notify('Playlist removida');
+                }}
+                onExportM3u={(pl) => {
+                  const lines = ['#EXTM3U', ...pl.trackTitles.map((t) => `#EXTINF:-1,${t}\n${t}`)];
+                  const blob = new Blob([lines.join('\n') + '\n'], { type: 'audio/x-mpegurl' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${pl.name}.m3u`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  notify(`Exportado ${pl.name}.m3u`);
+                }}
+                onClose={() => setPlaylistsModalOpen(false)}
+              />
+            )}
+
+            {pinModalMode && (
+              <GamepadPinModal
+                theme={theme}
+                mode={pinModalMode}
+                expectedHash={adultPinHash}
+                onSuccess={(newHash) => {
+                  if (pinModalMode === 'set' && newHash) {
+                    setAdultPinHash(newHash);
+                    setAdultPinEnabled(true);
+                    setPinModalMode(null);
+                    notify('PIN da Seção +18 definido e ativado');
+                  } else {
+                    setPinModalMode(null);
+                    setPendingStreamTarget('adult18');
+                    setNoticeReturn('options');
+                    setScreen('notice');
+                  }
+                }}
+                onCancel={() => setPinModalMode(null)}
+              />
+            )}
+
+            {screenOffActive && (
+              <ScreenOffCurtain
+                trackTitle={activeRadio?.name ?? activeTrack?.title ?? 'KPlayer'}
+                isPlaying={isPlaying && !isPaused}
+                onWake={() => {
+                  setScreenOffActive(false);
+                  notify('Tela reativada');
+                }}
               />
             )}
                 </div>

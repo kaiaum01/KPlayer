@@ -67,6 +67,14 @@ typedef struct {
   bool paused;
   bool started;
   bool overlay_open;
+  bool shuffle;
+  int repeat_mode; /* 0=off, 1=track, 2=queue */
+  int battery_pct; /* -1=N/A, 0..100 */
+  uint32_t pos_sec;
+  uint32_t dur_sec;
+  int64_t toast_until_ms;
+  char clock_hhmm[8];
+  char toast_text[128];
   uint8_t accent_r;
   uint8_t accent_g;
   uint8_t accent_b;
@@ -426,6 +434,7 @@ static bool bg_mp_parse_json_buf(const char *buf, BgMpState *st) {
   memset(st, 0, sizeof(*st));
   st->volume_pct = 55;
   st->auto_play = true;
+  st->battery_pct = -1;
   st->accent_r = 29;
   st->accent_g = 185;
   st->accent_b = 84;
@@ -622,6 +631,12 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
           st->paused = false;
           res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
         }
+      } else if (st->selected_row == 4) {
+        st->shuffle = !st->shuffle;
+        res |= BG_RES_REDRAW;
+      } else if (st->selected_row == 5) {
+        st->repeat_mode = (st->repeat_mode + 2) % 3;
+        res |= BG_RES_REDRAW;
       } else if (st->selected_row == 0 && st->track_count > 0) {
         if (!st->started) {
           st->started = true;
@@ -647,6 +662,12 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
           st->paused = false;
           res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
         }
+      } else if (st->selected_row == 4) {
+        st->shuffle = !st->shuffle;
+        res |= BG_RES_REDRAW;
+      } else if (st->selected_row == 5) {
+        st->repeat_mode = (st->repeat_mode + 1) % 3;
+        res |= BG_RES_REDRAW;
       } else if (st->selected_row == 0 && st->track_count > 0) {
         if (!st->started) {
           st->started = true;
@@ -672,7 +693,13 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
         }
       } else if (st->selected_row == 1) {
         if (st->track_count > 0) {
-          st->current_index = (st->current_index + 1) % st->track_count;
+          if (st->shuffle && st->track_count > 1) {
+            int nxt = rand() % st->track_count;
+            if (nxt == st->current_index) nxt = (nxt + 1) % st->track_count;
+            st->current_index = nxt;
+          } else {
+            st->current_index = (st->current_index + 1) % st->track_count;
+          }
           st->started = true;
           st->paused = false;
           res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
@@ -689,6 +716,12 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
         if (st->volume_pct > 100) st->volume_pct = 100;
         res |= BG_RES_VOLUME_CHANGED | BG_RES_REDRAW;
       } else if (st->selected_row == 4) {
+        st->shuffle = !st->shuffle;
+        res |= BG_RES_REDRAW;
+      } else if (st->selected_row == 5) {
+        st->repeat_mode = (st->repeat_mode + 1) % 3;
+        res |= BG_RES_REDRAW;
+      } else if (st->selected_row == 6) {
         st->overlay_open = false;
         res |= BG_RES_CLOSE_OVERLAY;
       }
@@ -696,7 +729,13 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
     case BG_ACT_R2:
       if (st->track_count > 0) {
         st->selected_row = 1;
-        st->current_index = (st->current_index + 1) % st->track_count;
+        if (st->shuffle && st->track_count > 1) {
+          int nxt = rand() % st->track_count;
+          if (nxt == st->current_index) nxt = (nxt + 1) % st->track_count;
+          st->current_index = nxt;
+        } else {
+          st->current_index = (st->current_index + 1) % st->track_count;
+        }
         st->started = true;
         st->paused = false;
         res |= BG_RES_TRACK_CHANGED | BG_RES_REDRAW;
@@ -725,6 +764,40 @@ static unsigned int bg_mp_handle_action(BgMpState *st, BgMpAction act) {
 
 /* ==================== SHARED MEMORY OVERLAY BRIDGE ==================== */
 
+static int bg_mp_read_battery_pct(void) {
+  static const char *const paths[] = {
+      "/sys/class/power_supply/battery/capacity",
+      "/sys/class/power_supply/BAT0/capacity",
+      "/sys/class/power_supply/rk817-battery/capacity",
+      "/sys/class/power_supply/axp20x-battery/capacity",
+  };
+  for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+    FILE *f = fopen(paths[i], "r");
+    if (!f) continue;
+    int val = -1;
+    int ok = fscanf(f, "%d", &val);
+    fclose(f);
+    if (ok == 1 && val >= 0 && val <= 100) return val;
+  }
+  return -1;
+}
+
+static void bg_mp_update_clock(BgMpState *st) {
+  if (!st) return;
+  time_t t = time(NULL);
+  struct tm tm_buf;
+  if (localtime_r(&t, &tm_buf)) {
+    snprintf(st->clock_hhmm, sizeof(st->clock_hhmm), "%02d:%02d",
+             tm_buf.tm_hour, tm_buf.tm_min);
+  }
+}
+
+static void bg_mp_trigger_toast(BgMpState *st, const char *text, int64_t now_ms) {
+  if (!st || !text || !text[0]) return;
+  snprintf(st->toast_text, sizeof(st->toast_text), "%.127s", text);
+  st->toast_until_ms = now_ms + 2400;
+}
+
 static void bg_mp_fill_shared(KpOverlayShared *dst, const BgMpState *st) {
   if (!dst || !st) return;
   const BgMpTrack *cur = (st->track_count > 0) ? &st->tracks[st->current_index] : NULL;
@@ -737,11 +810,19 @@ static void bg_mp_fill_shared(KpOverlayShared *dst, const BgMpState *st) {
   dst->selected_row = (uint32_t)(st->selected_row >= 0 && st->selected_row < KP_OV_ROW_COUNT
                                      ? st->selected_row
                                      : 0);
+  dst->shuffle = st->shuffle ? 1u : 0u;
+  dst->repeat_mode = (uint32_t)(st->repeat_mode >= 0 && st->repeat_mode <= 2 ? st->repeat_mode : 0);
+  dst->battery_pct = st->battery_pct;
+  dst->pos_sec = st->pos_sec;
+  dst->dur_sec = st->dur_sec;
+  dst->toast_until_ms = st->toast_until_ms;
   dst->accent_r = st->accent_r;
   dst->accent_g = st->accent_g;
   dst->accent_b = st->accent_b;
+  snprintf(dst->clock_hhmm, sizeof(dst->clock_hhmm), "%.7s", st->clock_hhmm);
   snprintf(dst->title, sizeof(dst->title), "%.159s",
            cur ? cur->title : "Nenhuma faixa disponivel");
+  snprintf(dst->toast_text, sizeof(dst->toast_text), "%.127s", st->toast_text);
   __atomic_add_fetch(&dst->seq, 1u, __ATOMIC_RELEASE);
 }
 
@@ -1503,13 +1584,19 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
   int64_t fb_open_prev_draw_ms = 0;
   int64_t fb_last_blit_ms = 0;
   int64_t last_err_retry_ms = 0;
+  int64_t last_telemetry_ms = 0;
+  int64_t last_bat_ms = 0;
   int err_retry_count = 0;
   int vol_sync_ticks = 0;
+
+  st.battery_pct = bg_mp_read_battery_pct();
+  bg_mp_update_clock(&st);
 
   if (st.auto_play && st.track_count > 0 && !(system_mode && bg_mp_main_lock_active())) {
     st.started = true;
     st.paused = false;
     bg_mp_play_current(inst, mp, &st, st.initial_pos_ms);
+    bg_mp_trigger_toast(&st, st.tracks[st.current_index].title, kp_ov_now_ms());
     vol_sync_ticks = 30;
     if (shm) bg_mp_fill_shared(shm, &st);
   }
@@ -1526,11 +1613,37 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
     if (!bg_mp_game_alive(game_pid)) break;
     int64_t loop_now = kp_ov_now_ms();
 
+    /* Periodic telemetry: battery every 15s, clock & VLC track progress every 1s */
+    if (loop_now - last_bat_ms >= 15000) {
+      last_bat_ms = loop_now;
+      st.battery_pct = bg_mp_read_battery_pct();
+    }
+    if (loop_now - last_telemetry_ms >= 1000) {
+      last_telemetry_ms = loop_now;
+      char prev_clock[8];
+      memcpy(prev_clock, st.clock_hhmm, sizeof(prev_clock));
+      uint32_t prev_pos = st.pos_sec;
+      uint32_t prev_dur = st.dur_sec;
+      bg_mp_update_clock(&st);
+      if (st.started && !st.paused) {
+        libvlc_time_t pt = libvlc_media_player_get_time(mp);
+        libvlc_time_t dt = libvlc_media_player_get_length(mp);
+        st.pos_sec = (pt > 0) ? (uint32_t)(pt / 1000) : 0u;
+        st.dur_sec = (dt > 0) ? (uint32_t)(dt / 1000) : 0u;
+      }
+      if (shm && st.overlay_open &&
+          (prev_pos != st.pos_sec || prev_dur != st.dur_sec ||
+           strcmp(prev_clock, st.clock_hhmm) != 0)) {
+        bg_mp_fill_shared(shm, &st);
+      }
+    }
+
     /* In system-wide mode, stop VLC completely while KPlayer UI or a port handoff owns the lock */
     if (system_mode) {
       bool lock_now = bg_mp_main_lock_active();
       if (lock_now && !yielded_to_kplayer) {
         yielded_to_kplayer = true;
+        st.toast_until_ms = 0;
         if (st.overlay_open) {
           st.overlay_open = false;
           fb_fallback_pending = false;
@@ -1558,6 +1671,8 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
         BgMpState reloaded;
         if (bg_mp_load_json_file(json_path, &reloaded)) {
           reloaded.overlay_open = false;
+          reloaded.battery_pct = st.battery_pct;
+          memcpy(reloaded.clock_hhmm, st.clock_hhmm, sizeof(reloaded.clock_hhmm));
           st = reloaded;
         }
         if (shm) {
@@ -1569,6 +1684,7 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
           st.started = true;
           st.paused = false;
           bg_mp_play_current(inst, mp, &st, st.initial_pos_ms);
+          bg_mp_trigger_toast(&st, st.tracks[st.current_index].title, kp_ov_now_ms());
           vol_sync_ticks = 30;
           if (shm) bg_mp_fill_shared(shm, &st);
         }
@@ -1633,15 +1749,28 @@ static int bg_miniplayer_main(const char *json_path, pid_t game_pid) {
     }
     (void)fb_last_blit_ms;
 
-    /* Auto-advance when a local track finishes, and recover cleanly from transient audio errors */
+    /* Auto-advance when a local track finishes, obeying repeat/shuffle + showing discreet toast */
     if (st.started && !st.paused && st.track_count > 0) {
       libvlc_state_t vstate = libvlc_media_player_get_state(mp);
       if (vstate == libvlc_Playing) {
         err_retry_count = 0;
       } else if (vstate == libvlc_Ended) {
         err_retry_count = 0;
-        st.current_index = (st.current_index + 1) % st.track_count;
+        if (st.repeat_mode == 1) {
+          /* Repeat current track */
+        } else if (st.shuffle && st.track_count > 1) {
+          int nxt = rand() % st.track_count;
+          if (nxt == st.current_index) nxt = (nxt + 1) % st.track_count;
+          st.current_index = nxt;
+        } else {
+          st.current_index = (st.current_index + 1) % st.track_count;
+        }
+        st.pos_sec = 0;
+        st.dur_sec = 0;
         bg_mp_play_current(inst, mp, &st, 0);
+        if (!st.overlay_open) {
+          bg_mp_trigger_toast(&st, st.tracks[st.current_index].title, loop_now);
+        }
         vol_sync_ticks = 30;
         if (shm) bg_mp_fill_shared(shm, &st);
         if (st.overlay_open && fb.map) {

@@ -20,8 +20,55 @@ static pthread_mutex_t radio_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int radio_count = 0, radio_selected = 0, radio_filter = 0;
 static bool radio_loading = false;
 static char radio_error[128];
+static char radio_search_query[64] = "";
+static bool radio_search_kb = false;
+static int radio_skb_row = 1, radio_skb_col = 0;
 static const char *radio_filter_names[] = {"Brasil", "Mais ouvidas", "Pop",
                                            "Rock", "Notícias", "Rádio do Usuário", "Favoritas"};
+
+static const char *radio_skb_rows[5][10] = {
+    {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
+    {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
+    {"a", "s", "d", "f", "g", "h", "j", "k", "l", "-"},
+    {"z", "x", "c", "v", "b", "n", "m", " ", NULL, NULL},
+    {"BUSCAR", "APAGAR", "LIMPAR", "VOLTAR", NULL, NULL, NULL, NULL, NULL, NULL},
+};
+
+static int radio_skb_row_len(int row) {
+  if (row < 0 || row >= 5) return 0;
+  int n = 0;
+  while (n < 10 && radio_skb_rows[row][n]) n++;
+  return n;
+}
+
+static bool radio_station_matches(const RadioStation *st) {
+  if (!radio_search_query[0]) return true;
+  if (!st) return false;
+  return str_contains_ci(st->name, radio_search_query) ||
+         str_contains_ci(st->tags, radio_search_query) ||
+         str_contains_ci(st->country, radio_search_query);
+}
+
+static int radio_filtered_count_locked(void) {
+  if (!radio_search_query[0]) return radio_count;
+  int n = 0;
+  for (int i = 0; i < radio_count; i++) {
+    if (radio_station_matches(&radio_stations[i])) n++;
+  }
+  return n;
+}
+
+static int radio_filtered_index_locked(int vis_pos) {
+  if (!radio_search_query[0]) return (vis_pos >= 0 && vis_pos < radio_count) ? vis_pos : -1;
+  int cur = 0;
+  for (int i = 0; i < radio_count; i++) {
+    if (radio_station_matches(&radio_stations[i])) {
+      if (cur == vis_pos) return i;
+      cur++;
+    }
+  }
+  return -1;
+}
 
 /* The favorites file is independent of user-created playlists. */
 static int radio_load_favorites(RadioStation *out, int max) {
@@ -705,11 +752,13 @@ static void radio_poll_play(void) {
 static void radio_play_selected(void) {
   RadioStation station;
   pthread_mutex_lock(&radio_mutex);
-  if (!radio_count) {
+  int vis_n = radio_filtered_count_locked();
+  int real_i = radio_filtered_index_locked(radio_selected);
+  if (!vis_n || real_i < 0) {
     pthread_mutex_unlock(&radio_mutex);
     return;
   }
-  station = radio_stations[radio_selected];
+  station = radio_stations[real_i];
   pthread_mutex_unlock(&radio_mutex);
   radio_cancel_retries();
   pthread_mutex_lock(&radio_play_mutex);
@@ -736,24 +785,68 @@ static void radio_retry_tick(void) {
   }
 }
 
+static void draw_radio_search_kb(void) {
+  backdrop();
+  draw_header(tr("PESQUISAR RÁDIO"));
+  label("Pesquisar estações de rádio", 24, 42, 22, textc, 420);
+  label("Digite o nome, gênero ou país da estação e selecione BUSCAR", 24, 70, 12, muted, 580);
+  card(24, 94, 592, 42, 10, true, elevated);
+  char shown[96];
+  snprintf(shown, sizeof(shown), "Busca: %.63s_", radio_search_query);
+  label(shown, 38, 105, 16, accent, 560);
+  for (int r = 0; r < 5; r++) {
+    int cols = radio_skb_row_len(r);
+    int y = 152 + r * 54;
+    if (r == 4) {
+      int w = 142;
+      for (int c = 0; c < cols; c++) {
+        int x = 24 + c * 150;
+        bool focus = (r == radio_skb_row && c == radio_skb_col);
+        card(x, y, w, 42, 10, focus, panel);
+        centered(radio_skb_rows[r][c], x + 4, y + 12, w - 8, 14, focus ? accent : textc);
+      }
+    } else {
+      int w = 55;
+      for (int c = 0; c < cols; c++) {
+        int x = 24 + c * 59;
+        bool focus = (r == radio_skb_row && c == radio_skb_col);
+        card(x, y, w, 42, 9, focus, panel);
+        const char *lbl = !strcmp(radio_skb_rows[r][c], " ") ? "ESP" : radio_skb_rows[r][c];
+        centered(lbl, x + 2, y + 11, w - 4, strlen(lbl) > 2 ? 12 : 16, focus ? accent : textc);
+      }
+    }
+  }
+  footer_hints(NULL, 0);
+}
+
 static void draw_radio(void) {
+  if (radio_search_kb) {
+    draw_radio_search_kb();
+    return;
+  }
   backdrop();
   draw_header(tr("RÁDIO ONLINE"));
   pthread_mutex_lock(&radio_mutex);
   bool loading = radio_loading;
-  int count = radio_count, selected_station = radio_selected;
+  int count = radio_filtered_count_locked();
+  if (count > 0 && radio_selected >= count) radio_selected = count - 1;
+  if (radio_selected < 0) radio_selected = 0;
+  int selected_station = radio_selected;
   char error[128];
   snprintf(error, sizeof(error), "%s", radio_error);
   RadioStation visible[6];
   int offset_station = selected_station >= 5 ? selected_station - 4 : 0;
   int visible_count = 0;
-  for (int i = offset_station; i < count && visible_count < 6; i++)
-    visible[visible_count++] = radio_stations[i];
+  for (int i = offset_station; i < count && visible_count < 6; i++) {
+    int ri = radio_filtered_index_locked(i);
+    if (ri >= 0) visible[visible_count++] = radio_stations[ri];
+  }
   RadioStation featured = {0};
   if (count) {
-    featured = radio_stations[selected_station];
+    int rsel = radio_filtered_index_locked(selected_station);
+    if (rsel >= 0) featured = radio_stations[rsel];
     if (playing_radio)
-      for (int i = 0; i < count; i++)
+      for (int i = 0; i < radio_count; i++)
         if (!strcmp(current_path, radio_stations[i].url)) {
           featured = radio_stations[i];
           break;
@@ -809,11 +902,12 @@ static void draw_radio(void) {
   centered(play_status, 48, 426, 160, 11, playing_radio ? accent : muted);
 
   panel_card(252, 42, 372, 424, 16);
-  label(tr(radio_filter == 5 ? "Rádio do Usuário" : radio_filter == 6 ? "Favoritas" : "Estações"), 264, 52, 18, textc, 235);
-  char station_count[48];
-  snprintf(station_count, sizeof(station_count), "%d %s", count,
-           tr("estações"));
-  label(station_count, 510, 57, 12, muted, 102);
+  label(tr(radio_filter == 5 ? "Rádio do Usuário" : radio_filter == 6 ? "Favoritas" : "Estações"), 264, 52, 18, textc, 180);
+  rounded(444, 49, 168, 22, 9, radio_search_query[0] ? alpha(accent, 42) : elevated);
+  char sbadge[72];
+  if (radio_search_query[0]) snprintf(sbadge, sizeof(sbadge), "Busca: %.10s (R1)", radio_search_query);
+  else snprintf(sbadge, sizeof(sbadge), "L1 • Buscar (%d)", count);
+  centered(sbadge, 448, 54, 160, 10, radio_search_query[0] ? accent : muted);
   for (int i = 0; i < 7; i++) {
     int x = 264 + i * 49;
     pill(x, 80, 46, 24, i == radio_filter);
@@ -864,11 +958,12 @@ static void radio_cycle_filter(int dir) {
 
 static void radio_toggle_current_favorite(void) {
   pthread_mutex_lock(&radio_mutex);
-  int count = radio_count;
+  int vis_n = radio_filtered_count_locked();
+  int real_i = radio_filtered_index_locked(radio_selected);
   RadioStation station = {0};
-  if (count > 0 && radio_selected < count) station = radio_stations[radio_selected];
+  if (vis_n > 0 && real_i >= 0) station = radio_stations[real_i];
   pthread_mutex_unlock(&radio_mutex);
-  if (!count || !station.url[0]) {
+  if (!vis_n || !station.url[0]) {
     notify("Selecione uma estação primeiro");
     return;
   }
@@ -881,19 +976,77 @@ static void radio_toggle_current_favorite(void) {
 }
 
 static void radio_key(SDL_Keycode key, bool repeat) {
+  if (radio_search_kb) {
+    int rlen = radio_skb_row_len(radio_skb_row);
+    if (key == SDLK_UP) {
+      radio_skb_row = (radio_skb_row + 4) % 5;
+      int nl = radio_skb_row_len(radio_skb_row);
+      if (radio_skb_col >= nl) radio_skb_col = nl - 1;
+    } else if (key == SDLK_DOWN) {
+      radio_skb_row = (radio_skb_row + 1) % 5;
+      int nl = radio_skb_row_len(radio_skb_row);
+      if (radio_skb_col >= nl) radio_skb_col = nl - 1;
+    } else if (key == SDLK_LEFT && rlen > 0) {
+      radio_skb_col = (radio_skb_col + rlen - 1) % rlen;
+    } else if (key == SDLK_RIGHT && rlen > 0) {
+      radio_skb_col = (radio_skb_col + 1) % rlen;
+    } else if (key == SDLK_SPACE) {
+      size_t len = strlen(radio_search_query);
+      if (len > 0) radio_search_query[len - 1] = 0;
+    } else if (key == SDLK_BACKSPACE && !repeat) {
+      radio_search_kb = false;
+    } else if (key == SDLK_RETURN && !repeat) {
+      const char *tok = radio_skb_rows[radio_skb_row][radio_skb_col];
+      if (!tok) return;
+      if (!strcmp(tok, "APAGAR")) {
+        size_t len = strlen(radio_search_query);
+        if (len > 0) radio_search_query[len - 1] = 0;
+      } else if (!strcmp(tok, "LIMPAR")) {
+        radio_search_query[0] = 0;
+      } else if (!strcmp(tok, "BUSCAR") || !strcmp(tok, "VOLTAR")) {
+        radio_selected = 0;
+        radio_search_kb = false;
+      } else {
+        size_t len = strlen(radio_search_query);
+        size_t add = strlen(tok);
+        if (len + add + 1 < sizeof(radio_search_query))
+          memcpy(radio_search_query + len, tok, add + 1);
+      }
+    }
+    return;
+  }
   if (key == SDLK_BACKSPACE && !repeat) {
+    if (radio_search_query[0]) {
+      radio_search_query[0] = 0;
+      radio_selected = 0;
+      notify("Pesquisa limpa");
+      return;
+    }
     radio_cancel_retries();
     mode = 3;
     return;
   }
+  if (key == SDLK_q && !repeat) {
+    radio_search_kb = true;
+    radio_skb_row = 1;
+    radio_skb_col = 0;
+    return;
+  }
+  if (key == SDLK_e && !repeat && radio_search_query[0]) {
+    radio_search_query[0] = 0;
+    radio_selected = 0;
+    notify("Pesquisa limpa");
+    return;
+  }
   pthread_mutex_lock(&radio_mutex);
-  int count = radio_count;
+  int count = radio_filtered_count_locked();
   if (key == SDLK_UP && count)
     radio_selected = (radio_selected + count - 1) % count;
   else if (key == SDLK_DOWN && count)
     radio_selected = (radio_selected + 1) % count;
   pthread_mutex_unlock(&radio_mutex);
   if ((key == SDLK_LEFT || key == SDLK_RIGHT) && !repeat) {
+    radio_search_query[0] = 0;
     radio_cycle_filter(key == SDLK_LEFT ? -1 : 1);
   } else if (key == SDLK_SPACE && !repeat && count) {
     radio_toggle_current_favorite();
@@ -901,9 +1054,9 @@ static void radio_key(SDL_Keycode key, bool repeat) {
     radio_play_selected();
   else if (key == SDLK_m && !repeat)
     radio_refresh();
-  else if ((key == SDLK_q || key == SDLK_e) && !repeat && count) {
+  else if ((key == SDLK_PAGEUP || key == SDLK_PAGEDOWN || key == SDLK_e) && !repeat && count) {
     pthread_mutex_lock(&radio_mutex);
-    radio_selected = (radio_selected + (key == SDLK_q ? count - 1 : 1)) % count;
+    radio_selected = (radio_selected + (key == SDLK_PAGEUP ? count - 1 : 1)) % count;
     pthread_mutex_unlock(&radio_mutex);
     radio_play_selected();
   }
